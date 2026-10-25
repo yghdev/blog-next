@@ -3,6 +3,7 @@ import { currentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Editor } from "@/components/admin/Editor";
+import { PageHeader } from "@/components/admin/ui";
 import { parseJsonArray } from "@/lib/posts";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
 
   return (
     <AdminShell active="posts" username={user.username}>
-      <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem", color: "var(--text-p0)", margin: "0 0 20px" }}>
-        编辑
-      </h1>
+      <PageHeader title="编辑" sub="改完之后点「更新」才会写库。URL 路径改动会自动为旧地址保留跳转。" />
       <Editor
         mode="edit"
         initial={{

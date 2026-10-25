@@ -3,6 +3,7 @@ import { currentUser } from "@/lib/auth";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { getDb, type MediaRow } from "@/lib/db";
 import { MediaGrid } from "@/components/admin/MediaGrid";
+import { PageHeader } from "@/components/admin/ui";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "图片" };
@@ -23,12 +24,11 @@ export default async function MediaPage() {
 
   return (
     <AdminShell active="media" username={user.username}>
-      <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem", color: "var(--text-p0)", margin: "0 0 6px" }}>
-        图片
-      </h1>
-      <p style={{ fontSize: ".82rem", color: "var(--text-p4)", margin: "0 0 20px" }}>
-        共 {total} 张，占用 {(totalBytes / 1024 / 1024).toFixed(1)} MB。删除前会检查是否仍被文章引用。
-      </p>
+      <PageHeader
+        title="图片"
+        sub={"共 " + total + " 张，占用 " + (totalBytes / 1024 / 1024).toFixed(1) +
+          " MB。仍被文章引用的图片不能删除，避免把线上正文里的图删成裂图。"}
+      />
       <MediaGrid items={items} />
     </AdminShell>
   );

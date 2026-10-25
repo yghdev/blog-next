@@ -213,7 +213,9 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         <span style={{ fontSize: ".74rem", color: "var(--text-p4)" }}>
           {chars} 字{uploading ? " · 上传中 " + uploading : ""}
         </span>
-        <button className="btn btn-sm" onClick={() => setSplit(!split)}>{split ? "单栏" : "分屏预览"}</button>
+        <button className="btn btn-sm editor-split-btn" onClick={() => setSplit(!split)}>
+          {split ? "单栏" : "分屏预览"}
+        </button>
       </div>
 
       {msg ? <div className="notice notice-ok">{msg}</div> : null}
@@ -249,11 +251,9 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         </div>
       ) : null}
 
-      {/* 工具栏 */}
-      <div style={{
-        display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8,
-        padding: 6, border: "1px solid var(--border)", borderRadius: 10, background: "var(--bg-subtle)",
-      }}>
+      {/* 工具栏。手机端每个按钮靠 .editor-toolbar 的断点规则顶到 44pt，
+          否则 3px 9px 内边距的按钮只有约 22×24px，手指基本点不中。 */}
+      <div className="editor-toolbar">
         {[
           { l: "H2", v: "## ", w: false },
           { l: "H3", v: "### ", w: false },
@@ -277,7 +277,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
                onChange={(e) => { const fs2 = Array.from(e.target.files ?? []); if (fs2.length) void uploadAndInsert(fs2); e.target.value = ""; }} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: split ? "1fr 1fr" : "1fr", gap: 12 }}>
+      <div className="editor-grid" style={{ gridTemplateColumns: split ? "1fr 1fr" : "1fr" }}>
         <textarea
           ref={taRef}
           className="textarea"
@@ -300,7 +300,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
       ) : null}
 
       {!isShuo ? (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+        <div className="editor-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", marginTop: 12 }}>
           <div className="field">
             <label>分类（逗号分隔）</label>
             <input className="input" value={cats} onChange={(e) => { setCats(e.target.value); mark(); }} placeholder="学习, AI" />
@@ -347,12 +347,8 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         </span>
       </label>
 
-      <div style={{
-        position: "sticky", bottom: 0, marginTop: 20, padding: "12px 0",
-        background: "var(--bg-subtle)", borderTop: "1px solid var(--border)",
-        display: "flex", gap: 10, justifyContent: "flex-end", alignItems: "center",
-      }}>
-        <span style={{ flex: 1, fontSize: ".74rem", color: "var(--text-p4)" }}>
+      <div className="editor-savebar">
+        <span className="editor-savebar-hint">
           {dirty ? "有未保存改动 · Cmd/Ctrl+S 保存" : ""}
         </span>
         <button className="btn" disabled={busy} onClick={() => save("draft")}>存草稿</button>

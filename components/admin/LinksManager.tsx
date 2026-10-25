@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Empty } from "./ui";
 import type { FriendLink } from "@/lib/friend-links";
 
 /**
@@ -28,6 +30,9 @@ export function LinksManager({ initial }: { initial: FriendLink[] }) {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  /* 待确认的删除对象。用真实弹窗而不是 window.confirm：
+     后者在手机上是个丑原生提示、不可样式化，也写不清不可逆后果。 */
+  const [pending, setPending] = useState<FriendLink | null>(null);
 
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setForm((f) => ({ ...f, [k]: v }));
 
@@ -51,8 +56,7 @@ export function LinksManager({ initial }: { initial: FriendLink[] }) {
   };
 
   const remove = async (l: FriendLink) => {
-    if (!confirm("删除「" + l.name + "」？")) return;
-    setBusy(true); setMsg(""); setErr("");
+    setBusy(true); setMsg(""); setErr(""); setPending(null);
     const res = await fetch("/api/admin/links?id=" + l.id, { method: "DELETE" });
     const d = await res.json().catch(() => ({}));
     setBusy(false);
@@ -152,7 +156,10 @@ export function LinksManager({ initial }: { initial: FriendLink[] }) {
         </h2>
 
         {initial.length === 0 ? (
-          <div className="empty">还没有外链</div>
+          <Empty
+            title="还没有外链"
+            hint="上方的表单填好名称和链接就能添加。友链出现在右栏列表，聚合站渲染成卡片。"
+          />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {initial.map((l) => (
@@ -179,12 +186,23 @@ export function LinksManager({ initial }: { initial: FriendLink[] }) {
                   {l.visible === 1 ? "隐藏" : "显示"}
                 </button>
                 <button className="btn btn-sm" disabled={busy} onClick={() => edit(l)}>编辑</button>
-                <button className="btn btn-sm" disabled={busy} onClick={() => remove(l)}>删除</button>
+                <button className="btn btn-sm btn-danger" disabled={busy} onClick={() => setPending(l)}>删除</button>
               </div>
             ))}
           </div>
         )}
       </section>
+
+      <ConfirmDialog
+        open={pending !== null}
+        title={"删除外链「" + (pending?.name ?? "") + "」？"}
+        description="删除后它立刻从右栏和手机抽屉里消失。只是暂时不想展示的话，用「隐藏」保留记录。"
+        confirmLabel="删除外链"
+        danger
+        busy={busy}
+        onCancel={() => setPending(null)}
+        onConfirm={() => { if (pending) void remove(pending); }}
+      />
     </>
   );
 }

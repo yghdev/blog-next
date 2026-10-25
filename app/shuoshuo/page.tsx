@@ -19,7 +19,15 @@ export default async function ShuoshuoPage() {
           <h1 className="page-title">说说</h1>
           <div>
             {items.length === 0 ? (
-              <div className="empty">还没有说说</div>
+              <div className="empty-block">
+                <div className="empty-title">还没有说说</div>
+                <div className="empty-hint">
+                  说说适合发短句和碎片想法。在后台新建内容时把类型选成「说说」就会出现在这里。
+                </div>
+                <div className="empty-actions">
+                  <a className="btn btn-sm" href="/admin/new">去写一条</a>
+                </div>
+              </div>
             ) : items.map((s) => (
               <div key={s.id} className="shuo-item slide-up">
                 <div className="shuo-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(s.content).html }} />

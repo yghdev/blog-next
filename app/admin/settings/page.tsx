@@ -7,6 +7,7 @@ import { listSessions } from "@/lib/session";
 import { readToken } from "@/lib/guards";
 import { SettingsForm } from "@/components/admin/SettingsForm";
 import { SecurityPanel } from "@/components/admin/SecurityPanel";
+import { PageHeader } from "@/components/admin/ui";
 import { formatIn } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
@@ -21,17 +22,16 @@ export default async function SettingsPage() {
   const sessions = listSessions(user.id, token).map((s) => ({
     ...s,
     createdAtLabel: formatIn(s.createdAt, "datetime"),
-    lastSeenLabel: s.lastSeenAt ? formatIn(s.lastSeenAt, "datetime") : "-",
+    lastSeenLabel: s.lastSeenAt ? formatIn(s.lastSeenAt, "datetime") : "—",
   }));
 
   return (
     <AdminShell active="settings" username={user.username}>
-      <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem", color: "var(--text-p0)", margin: "0 0 20px" }}>
-        设置
-      </h1>
-
+      <PageHeader
+        title="设置"
+        sub="站点文案、账号安全与已登录设备。站点信息保存后前台立即生效。"
+      />
       <SettingsForm initial={settings} />
-
       <SecurityPanel
         username={user.username}
         totpEnabled={!!user.totp_enabled}

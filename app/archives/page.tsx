@@ -21,7 +21,15 @@ export default async function ArchivesPage() {
         <Sidebar active="/archives" />
         <main className="content">
           <h1 className="page-title">归档</h1>
-          {groups.length === 0 ? <div className="empty">还没有文章</div> : null}
+          {groups.length === 0 ? (
+            <div className="empty-block">
+              <div className="empty-title">归档还是空的</div>
+              <div className="empty-hint">归档按月分组，只统计已发布的文章。草稿不会出现在这里。</div>
+              <div className="empty-actions">
+                <a className="btn btn-sm" href="/admin/new">写第一篇</a>
+              </div>
+            </div>
+          ) : null}
           {groups.map((g) => (
             <section key={g.year}>
               <h2 className="archive-year">

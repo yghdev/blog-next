@@ -114,7 +114,21 @@ export function sha256(buf: Buffer): string {
   return crypto.createHash("sha256").update(buf).digest("hex");
 }
 
+/**
+ * 把相对路径拼到根目录下，并挡住路径穿越。
+ *
+ * 单靠 path.resolve 对比前缀在 POSIX 上有个缺口：反斜杠不是分隔符，
+ * "..\\..\\windows\\system32\\x.dll" 会被当成一个合法的**文件名**，
+ * resolve 之后仍在 base 之内，于是检查通过。这条路径在 Windows 上就是穿越。
+ * 落盘相对路径由服务端 buildRelativePath 生成，永远不会含反斜杠，
+ * 所以这里直接拒绝：既挡住 Windows 风格的穿越串，也不会误伤正常调用。
+ *
+ * （这条是 CI 在 Linux 上暴露的：原来只有 Windows 会走进抛错分支，
+ *   同一份代码在 Linux runner 上测试直接失败。）
+ */
 export function safeJoin(root: string, rel: string): string {
+  if (rel.includes("\0")) throw new Error("path traversal blocked");
+  if (path.sep === "/" && rel.includes("\\")) throw new Error("path traversal blocked");
   const abs = path.resolve(root, rel);
   const base = path.resolve(root);
   if (!abs.startsWith(base + path.sep) && abs !== base) throw new Error("path traversal blocked");

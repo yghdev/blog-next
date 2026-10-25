@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useScrollLock } from "./ui/useScrollLock";
 
 /**
  * 侧栏的开合状态容器（2026-10-23）。
@@ -29,16 +30,18 @@ export function SidebarSheetProvider({ panel, children }: { panel: ReactNode; ch
   // Portal 需要真实 DOM
   useEffect(() => { setMounted(true); }, []);
 
+  /**
+   * 滚动锁走 useScrollLock（position:fixed + 记录 scrollY）。
+   * 之前这里只写 body.style.overflow = "hidden"，iOS Safari 直接忽略，
+   * 于是抽屉里上下滑会把底层文章列表带着一起滚 —— 典型的滚动穿透。
+   */
+  useScrollLock(open && mounted);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
     document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
+    return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
   const sheet = open && mounted ? createPortal(

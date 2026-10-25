@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { SidebarTrigger } from "./SidebarSheet";
 import { ThemeToggle } from "./ThemeToggle";
+import { useScrollLock } from "./ui/useScrollLock";
 
 const NAV = [
   { href: "/", label: "首页", icon: "🏠" },
@@ -29,11 +30,15 @@ export function MobileNav({ links = [] }: { links?: DrawerLink[] }) {
   // 切换路由时自动关闭
   useEffect(() => { setOpen(false); }, [pathname]);
 
-  // 打开时锁定背景滚动（侧栏面板由 SidebarSheetProvider 自己管）
-  useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [open]);
+  /**
+   * 打开时锁死背景滚动。
+   *
+   * 原来这里写的是 document.body.style.overflow = "hidden" —— iOS Safari
+   * 会直接忽略它，用户在抽屉里上下滑，底下的文章列表跟着滚（滚动穿透）。
+   * 现在走统一的 useScrollLock（position:fixed + 还原 scrollY），
+   * 并且与右侧栏抽屉共用同一把计数锁，两层浮层不会互相提前解锁。
+   */
+  useScrollLock(open);
 
   // 左抽屉：Esc 关闭（与右侧侧栏一致）
   useEffect(() => {
@@ -65,6 +70,7 @@ export function MobileNav({ links = [] }: { links?: DrawerLink[] }) {
             <input
               autoFocus
               type="search"
+              enterKeyHint="search"
               value={kw}
               onChange={(e) => setKw(e.target.value)}
               placeholder="搜索文章…"
@@ -107,7 +113,13 @@ export function MobileNav({ links = [] }: { links?: DrawerLink[] }) {
 
       {open ? (
         <div className="mobile-drawer-mask" onClick={() => setOpen(false)}>
-          <nav className="mobile-drawer" onClick={(e) => e.stopPropagation()}>
+          <nav
+            className="mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="导航菜单"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mobile-drawer-head">
               <span>导航</span>
               <button aria-label="关闭" onClick={() => setOpen(false)}>×</button>

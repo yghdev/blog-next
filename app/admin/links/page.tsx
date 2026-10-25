@@ -3,6 +3,7 @@ import { currentUser } from "@/lib/auth";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { listFriendLinks } from "@/lib/friend-links";
 import { LinksManager } from "@/components/admin/LinksManager";
+import { PageHeader } from "@/components/admin/ui";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "外链" };
@@ -15,13 +16,10 @@ export default async function LinksPage() {
 
   return (
     <AdminShell active="links" username={user.username}>
-      <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.25rem", color: "var(--text-p0)", margin: "0 0 6px" }}>
-        外链
-      </h1>
-      <p style={{ fontSize: ".82rem", color: "var(--text-p4)", margin: "0 0 20px" }}>
-        这里新增的条目会同时出现在桌面端右侧栏和手机端抽屉中，无需改代码或重新部署。
-        「聚合」类渲染为卡片（适合开往这类友链接力站），「友链」类渲染为紧凑列表。排序值小的靠前。
-      </p>
+      <PageHeader
+        title="外链"
+        sub="这里新增的条目会同时出现在桌面右栏和手机抽屉，保存即生效，不用重新部署。排序值小的靠前。"
+      />
       <LinksManager initial={links} />
     </AdminShell>
   );

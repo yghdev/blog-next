@@ -1,6 +1,8 @@
 "use client";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Empty } from "./ui";
 
 type Item = {
   id: number; path: string; filename: string; mime: string; size: number;
@@ -13,6 +15,7 @@ export function MediaGrid({ items }: { items: Item[] }) {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [orphans, setOrphans] = useState<string[] | null>(null);
+  const [pending, setPending] = useState<Item | null>(null);
   /* 铁律 10：复制反馈自熄——记录刚复制的那一项，2.5s 后自动淡出恢复 */
   const [copied, setCopied] = useState<string | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -35,7 +38,7 @@ export function MediaGrid({ items }: { items: Item[] }) {
   };
 
   const remove = async (item: Item) => {
-    setMsg(""); setErr(""); setBusy(true);
+    setMsg(""); setErr(""); setBusy(true); setPending(null);
     const res = await fetch("/api/admin/media/" + item.id, { method: "DELETE" });
     const d = await res.json().catch(() => ({}));
     setBusy(false);
@@ -77,7 +80,12 @@ export function MediaGrid({ items }: { items: Item[] }) {
         </section>
       ) : null}
 
-      {items.length === 0 ? <div className="empty">还没有图片</div> : (
+      {items.length === 0 ? (
+        <Empty
+          title="还没有图片"
+          hint="在编辑器里粘贴或拖入图片就会自动上传到这里。历史文章里引用过但没登记的图片，可以用上方「扫描孤儿文件」找出来。"
+        />
+      ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 12 }}>
           {items.map((m) => (
             <figure key={m.id} style={{
@@ -103,16 +111,32 @@ export function MediaGrid({ items }: { items: Item[] }) {
                     style={{ padding: "2px 8px", fontSize: ".72rem" }}
                     onClick={() => copy(m.path)}
                   >{copied === m.path ? "已复制" : "复制"}</button>
-                  <button className="btn btn-sm" disabled={busy || m.refs > 0}
+                  <button className="btn btn-sm btn-danger" disabled={busy || m.refs > 0}
                           title={m.refs > 0 ? "仍被文章引用，不能删除" : "删除"}
                           style={{ padding: "2px 8px", fontSize: ".72rem", opacity: m.refs > 0 ? .45 : 1 }}
-                          onClick={() => remove(m)}>删除</button>
+                          onClick={() => setPending(m)}>删除</button>
                 </div>
               </figcaption>
             </figure>
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pending !== null}
+        title={"删除图片「" + (pending?.filename ?? "") + "」？"}
+        description={
+          <>
+            文件会从磁盘和 media 表里一起移除，<strong>不可撤销</strong>。
+            若这张图仍被任何文章引用，按钮是禁用状态 —— 请先改掉正文里的引用。
+          </>
+        }
+        confirmLabel="删除图片"
+        danger
+        busy={busy}
+        onCancel={() => setPending(null)}
+        onConfirm={() => { if (pending) void remove(pending); }}
+      />
     </>
   );
 }

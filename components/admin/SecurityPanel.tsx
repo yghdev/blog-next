@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 type SessionInfo = {
   id: string; userAgent: string; ip: string; createdAt: string;
@@ -13,16 +14,24 @@ const box = {
   padding: 20, marginBottom: 18,
 } as const;
 
-function Btn({ children, onClick, busy, primary, danger }: {
-  children: React.ReactNode; onClick: () => void; busy?: boolean; primary?: boolean; danger?: boolean;
+/**
+ * 按钮变体三选一，互斥。
+ *
+ * 刻意不用 primary + danger 组合：一个按钮既是「主操作」又是「危险操作」，
+ * 等于用视觉重心把用户往破坏性动作上推（B 端门禁 06/11 明确禁止）。
+ * 这里用 variant 单值，从类型上就堵死同时成立的可能。
+ */
+function Btn({ children, onClick, busy, variant = "default" }: {
+  children: React.ReactNode;
+  onClick: () => void;
+  busy?: boolean;
+  variant?: "default" | "primary" | "danger";
 }) {
+  const cls = variant === "primary" ? "btn btn-sm btn-primary"
+    : variant === "danger" ? "btn btn-sm btn-danger"
+    : "btn btn-sm";
   return (
-    <button
-      className={"btn btn-sm" + (primary ? " btn-primary" : "")}
-      disabled={busy}
-      onClick={onClick}
-      style={danger ? { borderColor: "#e5484d", color: "#e5484d" } : undefined}
-    >{children}</button>
+    <button className={cls} disabled={busy} onClick={onClick}>{children}</button>
   );
 }
 
@@ -45,6 +54,10 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
   // 改密
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+
+  /* 两个高危动作要过确认弹窗：关掉 2FA 等于拆掉账号最后一道锁，
+     退出所有设备会把包括当前在内的会话全部作废。 */
+  const [confirming, setConfirming] = useState<null | "disable-totp" | "revoke-all">(null);
 
   const clear = () => { setMsg(""); setErr(""); };
 
@@ -132,8 +145,15 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
   const needStepUpHint = totpEnabled ? (
     <div className="field" style={{ maxWidth: 220 }}>
       <label>当前两步验证码（敏感操作需要）</label>
-      <input className="input" value={totpCode} onChange={(e) => setTotpCode(e.target.value)}
-             inputMode="numeric" maxLength={12} placeholder="6 位数字或恢复码" />
+      <input
+        className="input"
+        value={totpCode}
+        onChange={(e) => setTotpCode(e.target.value)}
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        maxLength={12}
+        placeholder="6 位数字或恢复码"
+      />
     </div>
   ) : null;
 
@@ -155,8 +175,10 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
             : "未启用。建议开启；开启后会生成 8 个恢复码，验证器丢失时可用来登录。"}
         </p>
 
-        {step === "idle" && !totpEnabled ? <Btn onClick={start} busy={busy} primary>启用</Btn> : null}
-        {step === "idle" && totpEnabled ? <Btn onClick={disable} busy={busy} danger>关闭两步验证</Btn> : null}
+        {step === "idle" && !totpEnabled ? <Btn onClick={start} busy={busy} variant="primary">启用</Btn> : null}
+        {step === "idle" && totpEnabled ? (
+          <Btn onClick={() => setConfirming("disable-totp")} busy={busy} variant="danger">关闭两步验证</Btn>
+        ) : null}
 
         {step === "verify" ? (
           <div>
@@ -171,9 +193,16 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
             <p style={{ fontSize: ".74rem", color: "var(--text-p4)", marginBottom: 12, wordBreak: "break-all" }}>{uri}</p>
             <p style={{ fontSize: ".85rem", color: "var(--text-p2)", marginBottom: 8 }}>2. 输入 App 显示的 6 位验证码</p>
             <div style={{ display: "flex", gap: 8 }}>
-              <input className="input" value={code} onChange={(e) => setCode(e.target.value)}
-                     inputMode="numeric" maxLength={6} style={{ maxWidth: 140 }} />
-              <Btn onClick={confirm} busy={busy} primary>确认</Btn>
+              <input
+                className="input"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                style={{ maxWidth: 140 }}
+              />
+              <Btn onClick={confirm} busy={busy} variant="primary">确认</Btn>
             </div>
           </div>
         ) : null}
@@ -221,7 +250,7 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
           </div>
         ))}
         <div style={{ marginTop: 12 }}>
-          <Btn onClick={() => revoke("", true)} busy={busy} danger>退出所有设备</Btn>
+          <Btn onClick={() => setConfirming("revoke-all")} busy={busy} variant="danger">退出所有设备</Btn>
         </div>
       </section>
 
@@ -238,8 +267,41 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
           <label>新密码</label>
           <input className="input" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
         </div>
-        <Btn onClick={changePw} busy={busy} primary>修改密码</Btn>
+        <Btn onClick={changePw} busy={busy} variant="primary">修改密码</Btn>
       </section>
+
+      <ConfirmDialog
+        open={confirming === "disable-totp"}
+        title="关闭两步验证？"
+        description={
+          <>
+            关闭后这个账号只剩密码一道防线，任何拿到密码的人都能直接进后台。
+            这是不可逆的安全降级 —— 重新开启需要重新绑定验证器并保存新恢复码。
+            <br />执行时会用到上方「当前两步验证码」。
+          </>
+        }
+        confirmLabel="关闭两步验证"
+        danger
+        busy={busy}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => { setConfirming(null); void disable(); }}
+      />
+
+      <ConfirmDialog
+        open={confirming === "revoke-all"}
+        title="退出所有设备？"
+        description={
+          <>
+            包括<strong>当前这台设备</strong>在内的全部会话会立即作废，你会被退回登录页。
+            如果是怀疑账号泄露，这正是你要做的；只是想让手机下线，请用列表里对应的「撤销」。
+          </>
+        }
+        confirmLabel="全部退出"
+        danger
+        busy={busy}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => { setConfirming(null); void revoke("", true); }}
+      />
     </>
   );
 }

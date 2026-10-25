@@ -29,7 +29,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </div>
           <div className="post-list">
             {posts.length === 0 ? (
-              <div className="empty">还没有文章</div>
+              <div className="empty-block">
+                <div className="empty-title">这里还没有文章</div>
+                <div className="empty-hint">
+                  如果后台已经有内容，检查一下是不是都还停留在草稿状态；草稿不会出现在前台。
+                </div>
+                <div className="empty-actions">
+                  <a className="btn btn-sm" href="/archives">看归档</a>
+                  <a className="btn btn-sm btn-ghost" href="/admin">进后台</a>
+                </div>
+              </div>
             ) : (
               posts.map((p) => (
                 <PostCard

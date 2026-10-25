@@ -4,6 +4,7 @@ import { ScrollReset } from "@/components/ScrollReset";
 import { MobileNav } from "@/components/MobileNav";
 import { Analytics } from "@/components/Analytics";
 import { PwaRegister } from "@/components/PwaRegister";
+import { MobileKeyboardGuard } from "@/components/MobileKeyboardGuard";
 import { getSettings } from "@/lib/settings";
 import { listFriendLinksCached } from "@/lib/cached";
 import { MobileSidebarContent } from "@/components/MobileSidebar";
@@ -83,6 +84,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </SidebarSheetProvider>
         <Analytics />
         <PwaRegister />
+        {/* 软键盘弹起时把聚焦的输入框滚到视口中部，防止手机上打字看不见 */}
+        <MobileKeyboardGuard />
       </body>
     </html>
   );

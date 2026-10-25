@@ -2,6 +2,16 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+/**
+ * 后台登录（移动端设计系统 · 参考 04 紧凑表单）。
+ *
+ * 手机端三处硬约束：
+ *   1) 两步验证码必须 inputMode="numeric" + autoComplete="one-time-code"，
+ *      否则 iOS 弹全键盘、也拿不到系统短信/验证器的一键填入；
+ *   2) 输入框字号 ≥16px（在 globals.css 里按断点钉死），否则 Safari 聚焦会
+ *      强制放大整页且不会缩回；
+ *   3) 主按钮全宽 + 48dp 高，落在拇指可控区，不在顶部 1/3 的够不着区。
+ */
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -31,33 +41,62 @@ export default function LoginPage() {
   };
 
   return (
-    <div style={{ maxWidth: 380, margin: "12vh auto", padding: "0 24px" }}>
-      <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "1.5rem", marginBottom: 8, color: "var(--text-p0)" }}>
-        后台登录
-      </h1>
-      <p style={{ color: "var(--text-p4)", fontSize: ".85rem", marginBottom: 28 }}>blog.yghsite.cn</p>
+    <div className="login-wrap">
+      <div className="login-card">
+        <h1 className="login-title">后台登录</h1>
+        <p className="login-sub">blog.yghsite.cn</p>
 
-      <form onSubmit={submit}>
-        {err ? <div className="notice notice-error">{err}</div> : null}
-        <div className="field">
-          <label>账号</label>
-          <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
-        </div>
-        <div className="field">
-          <label>密码</label>
-          <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-        </div>
-        {needTotp ? (
+        <form onSubmit={submit} noValidate>
+          {err ? <div className="notice notice-error" role="alert">{err}</div> : null}
           <div className="field">
-            <label>两步验证码</label>
-            <input className="input" value={totp} onChange={(e) => setTotp(e.target.value)}
-                   inputMode="numeric" maxLength={6} placeholder="6 位数字" autoFocus required />
+            <label htmlFor="login-user">账号</label>
+            <input
+              id="login-user"
+              className="input"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              required
+            />
           </div>
-        ) : null}
-        <button className="btn btn-primary" style={{ width: "100%" }} disabled={busy}>
-          {busy ? "登录中…" : "登录"}
-        </button>
-      </form>
+          <div className="field">
+            <label htmlFor="login-pass">密码</label>
+            <input
+              id="login-pass"
+              className="input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+          </div>
+          {needTotp ? (
+            <div className="field">
+              <label htmlFor="login-totp">两步验证码</label>
+              <input
+                id="login-totp"
+                className="input"
+                value={totp}
+                onChange={(e) => setTotp(e.target.value)}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                placeholder="6 位数字"
+                autoComplete="one-time-code"
+                autoFocus
+                required
+              />
+            </div>
+          ) : null}
+          <button className="btn btn-primary login-submit" disabled={busy} type="submit">
+            {busy ? "登录中…" : "登录"}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
