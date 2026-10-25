@@ -2033,6 +2033,15 @@ a.kpi-card:hover { border-color: var(--border-strong); transform: translateY(-1p
   .seg-tabs + .data-panel { margin-top: 2px; }
   /* 分页与列表内小按钮 */
   .pager .btn, .btn-sm { min-height: var(--tap); }
+  /* 页脚备案号链接：一行 14px 高的小字，手指点不中。
+     用 padding 扩热区但不改变行高观感（负 margin 抵消视觉位移）。 */
+  .site-footer-icp a, .site-footer-text a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--tap);
+    padding: 0 4px;
+    margin: 0 -4px;
+  }
   /* 主题切换：手机上也要 44 */
   .theme-toggle { width: var(--tap); height: var(--tap); }
   .side-sheet-btn { width: var(--tap); height: var(--tap); }
