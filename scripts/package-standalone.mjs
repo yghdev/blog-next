@@ -283,6 +283,18 @@ function pruneForeignPlatformArtifacts() {
   const ALWAYS_DROP = [
     "@next/swc-linux-x64-musl",
     "@img/sharp-wasm32",
+    /**
+     * next-swc-fallback（2026-10-26 补）。
+     *
+     * Windows 上跑 next build 时，Next 发现本地没有匹配的 swc 会去
+     * C:\Users\<user>\AppData\Local\next-swc 下载一份，然后
+     * **在 node_modules/next/next-swc-fallback/ 里留一份平台相关的 .node**。
+     * 实测这次留的是 swc-win32-x64-msvc（105MB，PE 格式），
+     * 服务器是 Linux/ELF，永远不会加载。
+     *
+     * 只在 Windows 构建机上出现，Linux 构建不会。所以要按"存在则删"处理。
+     */
+    "next/next-swc-fallback",
   ];
   for (const rel of ALWAYS_DROP) {
     const full = path.join(nm, rel);
