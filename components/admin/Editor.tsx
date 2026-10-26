@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, useDeferredValue } from "react";
 import { useRouter } from "next/navigation";
+import { prepareForUpload } from "@/lib/image-convert";
+import { isHeic, explainUploadFailure, formatBytes, MAX_UPLOAD_BYTES_ASSUMED } from "@/lib/image-plan";
 
 type Initial = {
   id?: number; type?: string; title?: string; slug?: string; content?: string;
@@ -109,15 +111,39 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
     });
   }, [content]);
 
-  const uploadFile = useCallback(async (file: File): Promise<string | null> => {
+  /**
+   * 上传单张图。
+   *
+   * 关键点：先把文件在浏览器里过一遍（lib/image-convert）——
+   *   · HEIC/HEIF（iPhone 默认格式）服务端认不出 magic bytes，必须转码
+   *   · 超过 8MB 或长边 2560px 的图会被缩 + 重编码，顺带剥掉 EXIF/GPS
+   * 服务端的安全校验完全不依赖这段逻辑（它只看 magic bytes），所以绕过也没用。
+   */
+  const uploadFile = useCallback(async (raw: File): Promise<string | null> => {
+    const { file, note } = await prepareForUpload(raw);
+    if (note) setMsg(note);
+    // 预处理后仍超限就别发请求了，直接说清楚（省一次 30s 的超时等待）
+    if (file.size > MAX_UPLOAD_BYTES_ASSUMED) {
+      setErr(
+        raw.name + " 压缩后仍有 " + formatBytes(file.size) +
+        "，超过 " + Math.round(MAX_UPLOAD_BYTES_ASSUMED / 1024 / 1024) + "MB 上限，请先自行导出为小一些的图片"
+      );
+      return null;
+    }
     const fd = new FormData();
     fd.append("file", file);
     setUploading((n) => n + 1);
     try {
       const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
       const d = await res.json().catch(() => ({}));
-      if (!res.ok) { setErr(d.error || "上传失败"); return null; }
+      if (!res.ok) {
+        setErr(explainUploadFailure(raw.name, res.status, d.error || ""));
+        return null;
+      }
       return d.url as string;
+    } catch {
+      setErr(raw.name + " 上传中断（网络问题？）");
+      return null;
     } finally {
       setUploading((n) => n - 1);
     }
@@ -125,14 +151,30 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
 
   const uploadAndInsert = useCallback(async (files: File[]) => {
     setErr("");
-    const images = files.filter((f) => f.type.startsWith("image/"));
-    if (!images.length) return;
+    // 不能只看 f.type：Windows/部分浏览器给 HEIC 的 type 是空串，
+    // 用 startsWith("image/") 会把它静默丢掉 —— 这正是"选了图没反应"的来源之一。
+    const isImageLike = (f: File) =>
+      (f.type || "").startsWith("image/") || isHeic(f.name, f.type);
+    const images = files.filter(isImageLike);
+    const skipped = files.length - images.length;
+    if (!images.length) {
+      setErr(
+        skipped
+          ? "这里只能上传图片；视频请用外链嵌入（B 站/YouTube 的分享代码可直接粘进正文）"
+          : "没有可上传的文件"
+      );
+      return;
+    }
+
+    let ok = 0;
     for (const f of images) {
       const url = await uploadFile(f);
-      if (url) insert("![](" + url + ")\n");
+      if (url) { insert("![](" + url + ")\n"); ok++; }
     }
-    setMsg("已插入 " + images.length + " 张图片");
-    setTimeout(() => setMsg(""), 2000);
+    if (ok) {
+      setMsg("已插入 " + ok + " 张图片" + (skipped ? "（跳过 " + skipped + " 个非图片文件）" : ""));
+      setTimeout(() => setMsg(""), 2500);
+    }
   }, [insert, uploadFile]);
 
   const onPaste = async (e: React.ClipboardEvent) => {
@@ -273,7 +315,8 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         ))}
         <button type="button" className="btn btn-sm" onClick={() => fileRef.current?.click()}
                 style={{ padding: "3px 9px", fontSize: ".78rem" }}>图片</button>
-        <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }}
+        <input ref={fileRef} type="file" multiple style={{ display: "none" }}
+               accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif"
                onChange={(e) => { const fs2 = Array.from(e.target.files ?? []); if (fs2.length) void uploadAndInsert(fs2); e.target.value = ""; }} />
       </div>
 
@@ -284,7 +327,9 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
           value={content}
           onChange={(e) => { setContent(e.target.value); mark(); }}
           onPaste={onPaste}
-          placeholder={isShuo ? "写点什么…（可直接粘贴图片）" : "支持 Markdown，可直接粘贴或拖入图片"}
+          placeholder={isShuo
+            ? "写点什么…（可直接粘贴图片）"
+            : "支持 Markdown。可直接粘贴或拖入图片；iPhone 的 HEIC 会自动转成 JPEG，大图自动压缩"}
           style={{ minHeight: isShuo ? 140 : 420, fontFamily: "var(--font-mono)", fontSize: ".9rem", lineHeight: 1.7 }}
         />
         {split ? (
@@ -317,7 +362,8 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
           <label>封面图（可选，用于分享卡片 og:image）</label>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <button type="button" className="btn btn-sm" onClick={() => coverRef.current?.click()}>选择图片</button>
-            <input ref={coverRef} type="file" accept="image/*" style={{ display: "none" }}
+            <input ref={coverRef} type="file" style={{ display: "none" }}
+                   accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif"
                    onChange={async (e) => {
                      const f = e.target.files?.[0];
                      if (f) { const url = await uploadFile(f); if (url) { setCover(url); mark(); } }
