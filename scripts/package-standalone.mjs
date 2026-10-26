@@ -41,6 +41,19 @@ function forceRemove(target) {
 forceRemove(OUT);
 fs.mkdirSync(OUT, { recursive: true });
 
+/**
+ * 收集"源树里的坏软链"。
+ *
+ * 为什么不再静默 skip：Windows 上 .next/standalone/.next/node_modules/<pkg>-<hash>
+ * 是一条指向不存在目标的软链，静默跳过后产物里就少了这个包，
+ * 线上启动直接 Cannot find module —— 2026-10-26 那次部署失败就是这么来的。
+ *
+ * 这里只记录不抛出（pnpm 风格的依赖树里可能本来就有无害的坏链），
+ * 真正的正确性由 patchNestedNativeDeps() 末尾对 .nft.json 的硬校验兜住，
+ * 这里负责把问题**打印出来**，不再让它消失在一条 warn 里。
+ */
+const danglingLinks = [];
+
 function copyDir(src, dst) {
   fs.mkdirSync(dst, { recursive: true });
   for (const e of fs.readdirSync(src, { withFileTypes: true })) {
@@ -53,7 +66,11 @@ function copyDir(src, dst) {
     if (stat.isSymbolicLink()) {
       // 解析链接目标，实体化复制
       let target;
-      try { target = fs.realpathSync(s); } catch { console.warn("dangling link, skip:", s); continue; }
+      try { target = fs.realpathSync(s); } catch {
+        danglingLinks.push(s);
+        console.warn("dangling link, skip:", s);
+        continue;
+      }
       const tstat = fs.statSync(target);
       if (tstat.isDirectory()) copyDir(target, d);
       else fs.copyFileSync(target, d);
@@ -146,22 +163,81 @@ copyRuntimeDeps();
 function patchNestedNativeDeps() {
   const srcRoot = path.join(OUT, "node_modules");
   const nestedRoot = path.join(OUT, ".next", "node_modules");
-  if (!fs.existsSync(nestedRoot)) return;
 
-  for (const entry of fs.readdirSync(nestedRoot)) {
-    // better-sqlite3-<hash> -> 取包名
-    const pkgName = entry.replace(/-[0-9a-f]{16}$/, "");
-    const realSrc = path.join(srcRoot, pkgName);
-    if (!fs.existsSync(realSrc)) continue;
+  /**
+   * 2026-10-26 重写：改成**由 .nft.json 反查**，不再遍历目录项。
+   *
+   * 上一版是 `for (const entry of readdirSync(nestedRoot))` —— 只修补"已经存在的条目"。
+   * 而 Windows 上 .next/standalone/.next/node_modules 里那个软链是**坏的**
+   * （readlink 得到 /better-sqlite3-<hash>，目标不存在），copyDir 会
+   * "dangling link, skip" 之后一个都不留 —— 目录是空的，于是这段修补
+   * 什么也没做，产物里就缺 better-sqlite3-<hash>。
+   *
+   * 线上表现：启动即
+   *   Failed to load external module better-sqlite3-90e2652d1716b047
+   *   Cannot find module 'better-sqlite3-90e2652d1716b047'
+   * 探活失败 -> deploy.sh 自动回滚（2026-10-26 19:56 那次）。
+   *
+   * 现在：直接从构建产物里的 *.nft.json 抓出所有 "包名-<hash>" 引用，
+   * 以它为唯一事实来源逐个实体化。目录里有没有条目都不影响。
+   */
+  const wanted = new Map(); // nestedName -> real package name
 
-    const target = path.join(nestedRoot, entry);
-    const st = fs.lstatSync(target);
-    // Linux: 软链；Windows: 已被实体化的目录。两种都重建
-    if (st.isSymbolicLink() || st.isDirectory()) {
-      forceRemove(target);
-      copyDir(realSrc, target);
-      console.log("已修补嵌套 native 依赖：", entry);
+  function scanNft(dir, depth = 0) {
+    if (depth > 10) return;
+    let ents;
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      if (e.name === "node_modules") continue; // 别钻到依赖里
+      const q = path.join(dir, e.name);
+      if (e.isDirectory()) { scanNft(q, depth + 1); continue; }
+      if (!e.name.endsWith(".nft.json")) continue;
+      let data;
+      try { data = JSON.parse(fs.readFileSync(q, "utf8")); } catch { continue; }
+      for (const f of data.files || []) {
+        // files 里是相对该 .nft.json 的路径，形如
+        //   ../../../../.next/node_modules/better-sqlite3-<hash>/lib/index.js
+        // 只关心 node_modules 下"包名-16位hex"这种 Next 改写过的名字
+        // 注意结尾：nft 里的条目可能**不带**尾随斜杠，例如
+        //   ../../../../../../node_modules/better-sqlite3-90e2652d1716b047
+        // 上一版正则强制要求后面还有 /，于是全都匹配不到（实测踩过）。
+        const m = f.match(/node_modules[\\/]([^\\/]+-[0-9a-f]{16})(?:[\\/]|$)/);
+        if (m) wanted.set(m[1], m[1].replace(/-[0-9a-f]{16}$/, ""));
+      }
     }
+  }
+  scanNft(path.join(OUT, ".next"));
+
+  if (wanted.size === 0) {
+    console.log("未在 .nft.json 中发现嵌套 native 依赖（无需修补）");
+    return;
+  }
+
+  fs.mkdirSync(nestedRoot, { recursive: true });
+
+  const missing = [];
+  for (const [nestedName, pkgName] of wanted) {
+    const realSrc = path.join(srcRoot, pkgName);
+    if (!fs.existsSync(realSrc)) { missing.push(pkgName + "（源包不存在）"); continue; }
+    const target = path.join(nestedRoot, nestedName);
+    forceRemove(target);
+    copyDir(realSrc, target);
+    console.log("已实体化嵌套 native 依赖：", nestedName, "<-", pkgName);
+  }
+
+  /**
+   * 这里是硬校验，不再是 warning。
+   * 这个目录空了就等于服务起不来，必须在打包阶段炸掉，
+   * 而不是等到线上探活失败再回滚。
+   */
+  for (const [nestedName] of wanted) {
+    const idx = path.join(nestedRoot, nestedName, "package.json");
+    if (!fs.existsSync(idx)) missing.push(nestedName + "（实体化后仍缺 package.json）");
+  }
+  if (missing.length) {
+    console.error("!! 嵌套 native 依赖缺失：", missing.join(", "));
+    console.error("!! 产物不可部署 —— 运行时会报 Cannot find module '<pkg>-<hash>'");
+    process.exit(1);
   }
 }
 
@@ -192,6 +268,30 @@ function pruneForeignPlatformArtifacts() {
   };
   // 服务器是 linux x64；darwin/freebsd/win32/musl/arm 等一律清理
   const FOREIGN = /-(darwin|freebsd|win32|linuxmusl|linux-arm|linux-ppc64|linux-riscv64|linux-s390x|webcontainers)-/;
+
+  /**
+   * 明确剔除的包（2026-10-26 补）。
+   *
+   * @next/swc-* 是 **构建期** 用的 Rust 编译器，运行期 SSR 完全不需要：
+   * 实测 .next 下 0 个文件 require("@next/swc")，server.js 里出现的
+   * "swc*" 只是 config 里的键名（swcTraceProfiling 之类）。
+   * 服务器是 Ubuntu/glibc，musl 那份（93.9MB）永远不可能被加载。
+   *
+   * @img/sharp-wasm32 同理：wasm 兜底包，x64 上不会走这条路。
+   * 注意保留 @img/sharp-linux-x64（Next 的图像优化真的会用它）。
+   */
+  const ALWAYS_DROP = [
+    "@next/swc-linux-x64-musl",
+    "@img/sharp-wasm32",
+  ];
+  for (const rel of ALWAYS_DROP) {
+    const full = path.join(nm, rel);
+    if (!fs.existsSync(full)) continue;
+    const size = dirSize(full);
+    forceRemove(full);
+    reclaimed += size;
+    console.log("已剔除运行期不需要的包：", rel, "（" + (size / 1048576).toFixed(1) + " MB）");
+  }
   const scopes = ["@next", "@img"];
   for (const scope of scopes) {
     const dir = path.join(nm, scope);
@@ -233,6 +333,17 @@ try {
   });
 } catch {
   console.warn("!! 版本戳写入失败，healthz 的 commit 将为 null");
+}
+
+/**
+ * 收尾自检：把坏软链一次性列出来。
+ * 它们未必都是致命的（前面 patchNestedNativeDeps 已对 .nft.json 要求的包做了硬校验），
+ * 但"静默跳过"这个行为必须留下痕迹，否则下次又要靠线上 500 来发现。
+ */
+if (danglingLinks.length > 0) {
+  console.warn("!! 跳过 " + danglingLinks.length + " 条坏软链（目标不存在）：");
+  for (const l of danglingLinks.slice(0, 20)) console.warn("   -", l.replace(ROOT, "."));
+  if (danglingLinks.length > 20) console.warn("   ... 其余 " + (danglingLinks.length - 20) + " 条略");
 }
 
 console.log("dist ready:", OUT);

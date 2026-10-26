@@ -14,6 +14,7 @@ _*
 .probe/
 tsconfig.tsbuildinfo
 dist.tar.gz
+dist-upload.tar.gz
 *.tgz
 
 # 数据库文件一律不进仓库（2026-10-23 公开仓库前收紧）
