@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, useDeferredValue } from "reac
 import { useRouter } from "next/navigation";
 import { prepareForUpload } from "@/lib/image-convert";
 import { isHeic, explainUploadFailure, formatBytes, MAX_UPLOAD_BYTES_ASSUMED } from "@/lib/image-plan";
+import { videoToEmbed, normalizePastedIframe, SUPPORTED_HINT } from "@/lib/video-embed";
 
 type Initial = {
   id?: number; type?: string; title?: string; slug?: string; content?: string;
@@ -41,6 +42,9 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
   const [dirty, setDirty] = useState(false);
   const [restorable, setRestorable] = useState<{ title: string; content: string; at: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  /* 视频外链：点工具栏「视频」展开的输入面板（不做自托管，见 lib/video-embed.ts 的说明） */
+  const [videoOpen, setVideoOpen] = useState(false);
+  const [videoInput, setVideoInput] = useState("");
 
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -188,6 +192,44 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
     if (files.length) await uploadAndInsert(files);
   };
 
+  /**
+   * 插入视频。
+   *
+   * 走外链而非上传 —— 这台机器出口带宽只有 400~700KB/s 且并行不叠加，
+   * 自托管视频会让每个访客等几十秒。视频由平台托管，本站零带宽零磁盘。
+   *
+   * 两种输入：平台链接/编号（重新拼出 embed 地址），或直接粘贴的 <iframe>
+   * （只取 src 并校验白名单域名，其余属性一律丢弃）。
+   */
+  const insertVideo = useCallback(() => {
+    setErr("");
+    const raw = videoInput.trim();
+    if (!raw) { setErr("请先粘贴视频链接或嵌入代码"); return; }
+
+    const parsed = videoToEmbed(raw);
+    if (parsed) {
+      insert("\n\n" + parsed.embed + "\n\n");
+      setVideoInput("");
+      setVideoOpen(false);
+      setMsg("已插入 " + parsed.video.label + " 视频");
+      setTimeout(() => setMsg(""), 2500);
+      return;
+    }
+
+    // 不是可识别的链接，再试"直接粘贴的 iframe"
+    const normalized = normalizePastedIframe(raw);
+    if (normalized) {
+      insert("\n\n" + normalized + "\n\n");
+      setVideoInput("");
+      setVideoOpen(false);
+      setMsg("已插入嵌入视频");
+      setTimeout(() => setMsg(""), 2500);
+      return;
+    }
+
+    setErr("识别不了这个链接。" + SUPPORTED_HINT);
+  }, [videoInput, insert]);
+
   /* ---------------- 保存 ---------------- */
   const save = useCallback(async (nextStatus?: string) => {
     const st = nextStatus || status;
@@ -315,6 +357,9 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         ))}
         <button type="button" className="btn btn-sm" onClick={() => fileRef.current?.click()}
                 style={{ padding: "3px 9px", fontSize: ".78rem" }}>图片</button>
+        <button type="button" className="btn btn-sm" onClick={() => { setVideoOpen((v) => !v); setErr(""); }}
+                aria-expanded={videoOpen}
+                style={{ padding: "3px 9px", fontSize: ".78rem" }}>视频</button>
         <input ref={fileRef} type="file" multiple style={{ display: "none" }}
                accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif"
                onChange={(e) => { const fs2 = Array.from(e.target.files ?? []); if (fs2.length) void uploadAndInsert(fs2); e.target.value = ""; }} />
@@ -339,6 +384,42 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
           }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
         ) : null}
       </div>
+
+      {/* 视频外链面板：不做自托管视频（带宽与备份链都不允许），
+          这里只把平台链接转成 iframe 嵌入代码插入正文。 */}
+      {videoOpen ? (
+        <div
+          style={{
+            marginTop: 10, padding: "12px 14px", border: "1px solid var(--border)",
+            borderRadius: 12, background: "var(--bg-tint)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            <label style={{ fontSize: ".84rem", fontWeight: 600 }}>视频链接</label>
+            <span style={{ fontSize: ".74rem", color: "var(--text-p4)", flex: 1, minWidth: 200 }}>
+              贴链接即可，视频留在原平台播放，本站不存文件
+            </span>
+            <button type="button" className="btn btn-sm" onClick={() => { setVideoOpen(false); setVideoInput(""); }}
+                    style={{ padding: "3px 9px", fontSize: ".78rem" }}>关闭</button>
+          </div>
+          <input
+            className="input"
+            value={videoInput}
+            onChange={(e) => setVideoInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); insertVideo(); } }}
+            placeholder="BV1rAdTBfEEn / youtube.com/watch?v=... / 直接粘贴 <iframe> 代码"
+            style={{ fontFamily: "var(--font-mono)", fontSize: ".84rem" }}
+            autoFocus
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+            <button type="button" className="btn btn-sm btn-primary" onClick={insertVideo}
+                    style={{ padding: "5px 14px", fontSize: ".8rem" }}>插入视频</button>
+            <span style={{ fontSize: ".72rem", color: "var(--text-p4)", flex: 1, minWidth: 180 }}>
+              {SUPPORTED_HINT}
+            </span>
+          </div>
+        </div>
+      ) : null}
 
       {dragOver ? (
         <div className="notice" style={{ marginTop: 8 }}>松开即可上传图片</div>
