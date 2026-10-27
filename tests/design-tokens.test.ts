@@ -22,7 +22,14 @@ import path from "node:path";
  */
 
 const ROOT = process.cwd();
-const GLOBALS = path.join(ROOT, "app", "globals.css");
+
+/** All stylesheets that ship with the app: globals + route-level admin.css. */
+function cssFiles(): string[] {
+  return walk(path.join(ROOT, "app")).filter((p) => p.endsWith(".css"));
+}
+function allCss(): string {
+  return cssFiles().map((p) => fs.readFileSync(p, "utf8")).join("\n");
+}
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -40,7 +47,7 @@ function definedTokens(cssText: string): Set<string> {
 }
 
 test("所有被引用的 CSS 令牌都有定义（防止 fallback 静默接管）", () => {
-  const defined = definedTokens(fs.readFileSync(GLOBALS, "utf8"));
+  const defined = definedTokens(allCss());
   const files = [...walk(path.join(ROOT, "app")), ...walk(path.join(ROOT, "components"))];
 
   // 运行时由 JS 注入的局部变量，不属于设计令牌
@@ -87,7 +94,7 @@ test("状态徽章不再回退到硬编码的浅色主题色值", () => {
  * 那类引用在这里会被跳过，属于已知覆盖边界）。
  */
 test("静态 className 用到的类都有对应样式", () => {
-  const cssText = fs.readFileSync(GLOBALS, "utf8");
+  const cssText = allCss();
   const definedClasses = new Set([...cssText.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]));
 
   /**

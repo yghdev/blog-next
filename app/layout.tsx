@@ -12,6 +12,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { ThemeScript } from "@/components/ThemeScript";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SidebarSheetProvider } from "@/components/SidebarSheet";
+import { FrontOnly } from "@/components/FrontOnly";
 
 /**
  * C4：站名/描述此前硬编码在这里，改一个字要重新构建。
@@ -77,10 +78,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* 侧栏开合状态提到 provider：顶栏（手机）与左栏（平板）各有一个入口，
             内容在服务端渲染好作为 panel 传入 */}
         <SidebarSheetProvider panel={<MobileSidebarContent />}>
-          <MobileNav links={drawerLinks} />
+          <FrontOnly><MobileNav links={drawerLinks} /></FrontOnly>
           {children}
           {/* 全站页脚：备案号与页脚文字此前只有后台能填、前台没渲染 */}
-          <SiteFooter />
+          <FrontOnly><SiteFooter /></FrontOnly>
         </SidebarSheetProvider>
         <Analytics />
         <PwaRegister />

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { LogoutButton } from "./LogoutButton";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 /**
  * 后台导航（方案 §9.1：四组任务导航，「写文章」常驻）。
@@ -30,12 +31,13 @@ type NavItem = { href: string; label: string; key: string };
 const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: "工作",
-    items: [{ href: "/admin/overview", label: "概览", key: "overview" }],
+    items: [{ href: "/admin/overview", label: "概览", key: "overview" },
+      { href: "/admin", label: "内容", key: "posts" }],
   },
   {
     title: "内容",
     items: [
-      { href: "/admin", label: "文章", key: "posts" },
+
       { href: "/admin/comments", label: "评论", key: "comments" },
       { href: "/admin?trash=1", label: "回收站", key: "trash" },
     ],
@@ -89,7 +91,10 @@ export function AdminShell({ children, active, username }: {
         </nav>
 
         <div className="admin-sidebar-foot">
-          <LogoutButton username={username} />
+          <div className="admin-foot-cluster">
+            <ThemeToggle />
+            <LogoutButton username={username} />
+          </div>
         </div>
       </aside>
 
@@ -99,6 +104,7 @@ export function AdminShell({ children, active, username }: {
           <div className="admin-topbar-inner">
             <Link href="/" className="admin-brand">flechazo</Link>
             <span className="admin-topbar-fill" />
+            <ThemeToggle />
             <button
               className="admin-menu-btn"
               aria-label="打开后台菜单"

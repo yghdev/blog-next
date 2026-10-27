@@ -14,11 +14,11 @@ export function PageHeader({ title, sub, actions }: {
   return (
     <div className="page-head">
       <div className="page-head-row">
-        <div style={{ minWidth: 0 }}>
+        <div className="page-head-copy">
           <h1>{title}</h1>
           {sub ? <p className="page-head-sub">{sub}</p> : null}
         </div>
-        {actions ? <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>{actions}</div> : null}
+        {actions ? <div className="page-head-actions">{actions}</div> : null}
       </div>
     </div>
   );
@@ -26,12 +26,9 @@ export function PageHeader({ title, sub, actions }: {
 
 export function Card({ title, desc, children }: { title?: string; desc?: string; children: ReactNode }) {
   return (
-    <section style={{
-      border: "1px solid var(--border)", borderRadius: 14, background: "var(--card-bg)",
-      padding: 20, marginBottom: 18,
-    }}>
-      {title ? <h2 style={{ fontSize: ".95rem", color: "var(--text-p0)", margin: "0 0 4px", fontWeight: 600 }}>{title}</h2> : null}
-      {desc ? <p style={{ fontSize: ".82rem", color: "var(--text-p3)", margin: "0 0 14px", textWrap: "pretty" }}>{desc}</p> : null}
+    <section className="admin-card">
+      {title ? <h2 className="admin-card-title">{title}</h2> : null}
+      {desc ? <p className="admin-card-desc">{desc}</p> : null}
       {children}
     </section>
   );
