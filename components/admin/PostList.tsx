@@ -127,41 +127,34 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
         </div>
       ) : null}
 
-      {/* 批量操作条：只在有选择时出现，避免一排灰按钮常年占位 */}
-      <div className="filter-bar" style={{ marginBottom: 10 }}>
-        <label style={{ display: "flex", gap: 7, alignItems: "center", fontSize: ".8rem", color: "var(--text-p3)", minHeight: 32 }}>
-          <input
-            type="checkbox"
-            checked={allOn}
-            onChange={() => setSelected(allOn ? [] : items.map((i) => i.id))}
-          />
-          全选
-        </label>
-        {selected.length > 0 ? <Badge tone="info">已选 {selected.length}</Badge> : null}
-        <span style={{ flex: 1 }} />
-        {trash ? (
-          <button className="btn btn-sm" disabled={busy || !selected.length} onClick={() => bulk("restore")}>
-            批量恢复
-          </button>
-        ) : (
-          <>
-            <button className="btn btn-sm" disabled={busy || !selected.length} onClick={() => bulk("publish")}>发布</button>
-            <button className="btn btn-sm" disabled={busy || !selected.length} onClick={() => bulk("unpublish")}>转草稿</button>
-            <button
-              className="btn btn-sm btn-danger"
-              disabled={busy || !selected.length}
-              onClick={() => setPending({ kind: "bulk-delete" })}
-            >移入回收站</button>
-          </>
-        )}
-        {selected.length > 0 ? (
+      {selected.length > 0 ? (
+        <div className="bulk-bar" aria-label="批量操作">
+          <Badge tone="info">已选 {selected.length}</Badge>
+          <span className="bulk-bar-fill" />
+          {trash ? (
+            <button className="btn btn-sm" disabled={busy} onClick={() => bulk("restore")}>批量恢复</button>
+          ) : (
+            <>
+              <button className="btn btn-sm" disabled={busy} onClick={() => bulk("publish")}>发布</button>
+              <button className="btn btn-sm" disabled={busy} onClick={() => bulk("unpublish")}>转草稿</button>
+              <button className="btn btn-sm btn-danger" disabled={busy} onClick={() => setPending({ kind: "bulk-delete" })}>移入回收站</button>
+            </>
+          )}
           <button className="btn btn-sm btn-ghost" onClick={clearSel}>取消选择</button>
-        ) : null}
+        </div>
+      ) : null}
+
+      <div className="content-list-meta">
+        <label className="select-all">
+          <input type="checkbox" checked={allOn} onChange={() => setSelected(allOn ? [] : items.map((i) => i.id))} />
+          <span>全选</span>
+        </label>
+        <span>{items.length} 条内容</span>
       </div>
 
       <div className="data-panel">
         {items.map((p) => (
-          <div key={p.id} className="data-row">
+          <div key={p.id} className="data-row content-row">
             <input
               type="checkbox"
               checked={selected.includes(p.id)}
@@ -170,7 +163,7 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
               style={{ flexShrink: 0 }}
             />
 
-            <Badge>{TYPE_LABEL[p.type] ?? p.type}</Badge>
+            <span className="content-type">{TYPE_LABEL[p.type] ?? p.type}</span>
 
             {/* 状态：不再是一串灰字，而是有语义的徽标 */}
             {p.status === "published"
