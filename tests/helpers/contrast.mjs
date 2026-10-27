@@ -81,9 +81,26 @@ export function contrastFromLayers(fgColor, bgLayers) {
   const layers = bgLayers.map(parseColor).filter((c) => c && c.a > 0);
   if (!layers.length) return null;
 
+  const bottom = layers[layers.length - 1];
+
+  /**
+   * 最底层必须不透明，否则**没有唯一答案** —— 半透明色叠在什么上面，
+   * 结果就不同。这里曾经默默按白底兜底，于是暗色页面上把
+   * rgba(224,176,98,.12) 当成"叠在白纸上"，算出 1.84:1 的错误结论，
+   * 差点让人去改本来没问题的样式。
+   *
+   * 现在直接抛错：调用方必须把页面真实底色（body/html 的解析结果）
+   * 作为最后一层传进来。宁可测试失败，也不要一个猜测的基准。
+   */
+  if (bottom.a < 1) {
+    throw new Error(
+      "contrastFromLayers: 最底层背景必须不透明（收到 alpha=" + bottom.a + "）。" +
+      "请把页面真实底色作为最后一层传入，不要依赖默认兜底。"
+    );
+  }
+
   // 由底向上合成，得到真正显示的背景
-  let acc = layers[layers.length - 1];
-  if (acc.a < 1) acc = compositeOver(acc, { r: 255, g: 255, b: 255, a: 1 });
+  let acc = bottom;
   for (let i = layers.length - 2; i >= 0; i--) acc = compositeOver(layers[i], acc);
 
   return contrastRatio(fg, acc);
