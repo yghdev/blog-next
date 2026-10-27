@@ -194,7 +194,10 @@ export async function deleteFromStorage(key: string): Promise<void> {
  * 新图是 https://cdn.yghsite.cn/2026/10/x.png → 2026/10/x.png
  * 老图是 /images/2026/10/x.png（本机磁盘）→ 返回 null，表示不归七牛管
  */
-export function keyFromUrl(url: string, cfg = readStorageConfig()): string | null {
+export function keyFromUrl(
+  url: string,
+  cfg: { cdnDomain: string } = readStorageConfig()
+): string | null {
   if (!url) return null;
   const domain = (cfg.cdnDomain || "").replace(/\/+$/, "");
   if (domain && url.startsWith(domain + "/")) {

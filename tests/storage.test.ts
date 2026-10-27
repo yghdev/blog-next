@@ -75,7 +75,7 @@ test("buildKey 两次不重名", () => {
 const cfg = {
   accessKeyId: "AK", secretAccessKey: "SK", bucket: "b",
   endpoint: "https://s3.cn-south-1.qiniucs.com", region: "cn-south-1",
-  cdnDomain: "https://cdn.yghsite.cn",
+  pathStyle: false, cdnDomain: "https://cdn.yghsite.cn",
 };
 
 test("CDN 直链能反解出 key", () => {
