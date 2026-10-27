@@ -58,3 +58,6 @@ jobs:
 
       - name: 组件对照页走查（双主题 / 窄屏 / 对比度 / 热区）
         run: npm run test:ui
+
+      - name: 暗色缺陷回归（PostList / MediaGrid / StoragePanel）
+        run: npm run test:dark

@@ -547,9 +547,53 @@ rebuild/migrate-wp 采用维护窗口：
 
 回滚：删除新增文件与 `globals.css` 末尾追加块即可，无既有文件改动需回退。
 
-### 阶段 01-B：暗色缺陷独立修复
+### 阶段 01-B：暗色缺陷独立修复（已完成，2026-10-27）
 
-仅处理已确认的 PostList、MediaGrid、StoragePanel 颜色字面量与 token 映射，双主题走查，独立 revert。
+**根因不是"配色不好看"，而是 token 名字写错、fallback 静默接管。**
+
+MediaGrid 与 StoragePanel 的状态徽章写的是：
+
+```
+background: var(--ok-bg, #e7f7ee);  color: var(--ok-fg, #1a7f4b);
+border: 1px solid var(--ok-bd, #b8e6cc);
+```
+
+其中 `--ok-fg`、`--warn-fg`、`--err-bg`、`--err-fg`、`--ok-bd`、`--err-bd`
+**全部从未定义**（规范里叫 `--ok` / `--ok-bg` / `--ok-border`，错误态用
+`--danger` 一族，没有 `err` 这一层）。于是每一次渲染都走 fallback ——
+硬编码的浅色主题色值：浅绿底 `#e7f7ee` 配深绿字 `#1a7f4b`。
+代码读起来像"已经用了 token、应该主题安全"，实际在暗色下是一整块亮斑。
+
+这与 docs/design-system.md 记录的历史坑（`--lift-1/--lift-2/--surface-2`
+曾被引用但从未定义）是**同一类问题**，说明"引用了未定义 token"会反复发生。
+
+改动（仅这三处颜色，行为与布局零改动）：
+
+| 文件 | 改动 |
+| --- | --- |
+| `MediaGrid.tsx` | `--ok-fg/--warn-fg` → `--ok/--warn`；去掉全部 hex fallback |
+| `StoragePanel.tsx` | `toneStyle()` 与状态徽章的 `ok/err` 映射改 `--ok*/--danger*`；`err` 归一到 `danger` |
+| `PostList.tsx` | 复核：`#e5484d` 已在既有轮次改为 `.btn-danger`，无残留字面量 |
+
+防回归（两道，都验证过"能抓到原 bug"）：
+
+1. `tests/design-tokens.test.ts`（Node 层，快）
+   - 全仓扫描 `var(--x)`，凡引用了但从未定义的令牌直接失败。
+     把原写法放回去会得到 `MediaGrid.tsx -> --ok-fg` 这样的精确指认。
+   - 单独盯住"带 hex fallback 的 `var()`"，禁止状态徽章再退回硬编码色值。
+   - 豁免：`--mx/--my` 是运行时由 JS 注入的坐标变量，不是设计令牌。
+2. `tests/dark-mode.mjs`（真实浏览器，慢但可信）
+   - 切主题后这些元素**颜色必须变化**（证明 token 真的生效，而非恰好同色）
+   - 暗色下不得出现浅底亮块（背景相对亮度 > 0.5 即失败）
+   - 文字在各自背景上对比度 ≥ 3（避免"修成暗底暗字"的反向错误）
+   - `.btn-danger` 不得回到 `rgb(229,72,77)` 实色
+
+测量方法学（本轮又修了一次同类错误）：`contrastFromLayers` 现在**拒绝**
+最底层背景半透明的输入并直接抛错。原先它在底层半透明时默默按白底兜底，
+于是暗色页面上把 `rgba(224,176,98,.12)` 当成"叠在白纸上"，算出 1.84:1 的
+假结论，差点让人去改本来没问题的样式。宁可测试失败，也不要一个猜测的基准。
+
+回滚：这三个文件的颜色改动可独立 revert，不涉及结构、逻辑与数据。
 
 ### 阶段 02：逐页后台重构
 
