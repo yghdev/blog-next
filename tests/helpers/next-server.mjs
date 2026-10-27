@@ -18,7 +18,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { createServer } from "node:net";
 import fs from "node:fs";
 import path from "node:path";
-import { assertNativeDepsReady, forceRemove } from "../../scripts/materialize-native-deps.mjs";
+import { assertNativeDepsReady, forceRemove, copyDir as copyRaw } from "../../scripts/materialize-native-deps.mjs";
 
 const root = process.cwd();
 const tempRoot = path.join(root, ".tmp-tests");
@@ -39,7 +39,7 @@ async function freePort() {
  * 起一个隔离的 standalone 服务。
  * @returns {Promise<{base:string,dataDir:string,fixture:{username:string,password:string,token:string},close:()=>Promise<void>}>}
  */
-export async function startIsolatedServer({ label = "next-integration" } = {}) {
+export async function startIsolatedServer({ label = "next-integration", env: extraEnv = {} } = {}) {
   fs.mkdirSync(tempRoot, { recursive: true });
   const dataDir = fs.mkdtempSync(path.join(tempRoot, label + "-"));
   if (dataDir === path.join(root, "data")) throw new Error("Refusing development database");
@@ -68,6 +68,32 @@ export async function startIsolatedServer({ label = "next-integration" } = {}) {
    * 删的是纯缓存产物（可重建），不是构建产物本体，也不碰 DATA_DIR。
    * 返回 clearedCachePaths 供测试断言，把"隔离"这件事变成可验证的事实而不是口头承诺。
    */
+  /**
+   * 把 .next/static 与 public 复制进 standalone（**不能省**）。
+   *
+   * next build 产出的 .next/standalone 只包含 server 代码，静态资源留在
+   * 项目的 .next/static 与 public/；standalone 的 server.js 以自身目录为根
+   * 去找 .next/static，找不到就**一个样式表都不返回**。
+   *
+   * 这不是"样式难看"级别的问题：2026-10-27 阶段 01-A 走查时
+   * document.styleSheets.length === 0，所有组件计算样式全是初始值，
+   * 于是"暗色主题切换"之类的断言读到 rgba(0,0,0,0) 与 rgb(0,0,0)，
+   * 看起来像组件坏了，实际是测试环境缺资源。部署走 build:dist 会复制，
+   * 测试直连 standalone 就必须自己补。
+   */
+  const staticSrc = path.join(root, ".next", "static");
+  const staticDst = path.join(standaloneDir, ".next", "static");
+  if (fs.existsSync(staticSrc)) {
+    forceRemove(staticDst);
+    copyRaw(staticSrc, staticDst);
+  }
+  const publicSrc = path.join(root, "public");
+  const publicDst = path.join(standaloneDir, "public");
+  if (fs.existsSync(publicSrc)) {
+    forceRemove(publicDst);
+    copyRaw(publicSrc, publicDst);
+  }
+
   const clearedCachePaths = [];
   for (const dir of [path.join(standaloneDir, ".next", "cache"), path.join(standaloneDir, ".next", "server", "route-cache")]) {
     // 必须用 forceRemove 而不是 fs.rmSync：后者在 Windows 上会跟进 junction
@@ -88,7 +114,7 @@ export async function startIsolatedServer({ label = "next-integration" } = {}) {
   const base = "http://127.0.0.1:" + port;
   const child = spawn(process.execPath, [serverEntry], {
     cwd: path.dirname(serverEntry),
-    env: { ...process.env, DATA_DIR: dataDir, PORT: String(port), HOSTNAME: "127.0.0.1", NODE_ENV: "production" },
+    env: { ...process.env, DATA_DIR: dataDir, PORT: String(port), HOSTNAME: "127.0.0.1", NODE_ENV: "production", ...extraEnv },
     stdio: ["ignore", "pipe", "pipe"],
   });
 
