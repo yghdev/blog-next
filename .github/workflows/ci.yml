@@ -70,3 +70,6 @@ jobs:
 
       - name: 评论管理页（空状态出口 / 脏 URL / 超长内容）
         run: npm run test:comments
+
+      - name: 媒体库（分页 / 筛选口径 / 裂图分块 / 竖图比例）
+        run: npm run test:media

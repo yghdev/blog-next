@@ -2817,6 +2817,187 @@ a.kpi-card:hover { border-color: var(--border-strong); transform: translateY(-1p
   margin-bottom: var(--space-7);
 }
 
+/* ── 媒体库（阶段 02-4）───────────────────────────────
+   这一页原来每个 tile 有约 12 个行内魔法数字，且图片一律 height:110px
+   object-fit:cover —— 竖图被裁掉大半，等于看不到自己传的是什么。
+   现在按真实宽高比预览（aspect-ratio 由数据给出），并把版式收进类名。
+   卡片的取值与 .card / .kpi-card 同一族（radius + border + card-bg），
+   避免同一后台里出现第三种"卡片长相"。 */
+.media-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.media-toolbar .seg-tabs { margin-bottom: 0; }
+
+.media-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+.media-search input { min-width: 12em; }
+.media-clear {
+  font-size: var(--fs-xs);
+  color: var(--text-p4);
+  text-decoration: none;
+}
+.media-clear:hover { color: var(--text-p1); text-decoration: underline; }
+
+/* 扫描结果：裂图（真会让文章掉图）与孤儿（可清理）分块，不再挤在一行文案里 */
+.media-scan {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+  padding: var(--space-5) var(--space-6);
+  margin-bottom: var(--space-5);
+}
+.media-scan-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+.media-scan-head strong { font-size: var(--fs-sm); color: var(--text-p1); }
+.media-scan-stat {
+  flex: 1;
+  font-size: var(--fs-xs);
+  color: var(--text-p4);
+  font-variant-numeric: tabular-nums;
+}
+.media-scan-block { margin-bottom: var(--space-4); }
+.media-scan-block:last-child { margin-bottom: 0; }
+/* 裂图块用危险色左侧条：它在视觉层级上比孤儿高一级 */
+.media-scan-block.is-missing { border-left: 2px solid var(--danger-border); padding-left: var(--space-4); }
+.media-scan-title {
+  font-size: var(--fs-sm);
+  font-weight: 560;
+  color: var(--text-p2);
+  margin-bottom: var(--space-2);
+}
+.media-scan-block.is-missing .media-scan-title { color: var(--danger); }
+.media-scan-hint {
+  font-size: var(--fs-xs);
+  color: var(--text-p4);
+  line-height: var(--lh-normal);
+  margin-bottom: var(--space-2);
+  text-wrap: pretty;
+}
+.media-scan-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 168px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-p3);
+  line-height: 1.75;
+  /* 路径是超长无空格串，必须能断，否则窄屏横向溢出 */
+  overflow-wrap: anywhere;
+}
+.media-scan-more { font-size: var(--fs-2xs); color: var(--text-p4); margin-top: var(--space-2); }
+
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--space-4);
+}
+.media-card {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  overflow: hidden;
+  /* 悬停只提边框与一点阴影，不做位移：网格里整体位移会显得抖 */
+  transition: border-color .16s, box-shadow .16s;
+}
+.media-card:hover { border-color: var(--border-strong); }
+.media-card:focus-within { border-color: var(--border-strong); }
+
+.media-thumb {
+  position: relative;
+  width: 100%;
+  background: var(--bg-subtle);
+  /* 上限防止超长竖图把一行撑到很高，破坏网格节奏 */
+  max-height: 260px;
+  overflow: hidden;
+  display: block;
+}
+.media-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.media-refs {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: var(--fs-2xs);
+  color: var(--text-p3);
+  font-variant-numeric: tabular-nums;
+}
+
+.media-meta { padding: var(--space-3) var(--space-4) var(--space-4); }
+.media-name {
+  font-size: var(--fs-xs);
+  color: var(--text-p2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.media-sub {
+  font-size: var(--fs-2xs);
+  color: var(--text-p4);
+  margin: 2px 0 var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+.media-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+/* 复制按钮：复制成功后文案变「已复制」，用 ok 色给一次确认，
+   不弹 toast —— 单条操作在按钮原地反馈更省注意力 */
+.media-copy[aria-live] { min-width: 4.2em; }
+.media-actions { display: flex; gap: var(--space-2); }
+.media-actions .btn { padding: 3px 10px; font-size: var(--fs-xs); }
+.media-actions .btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+.media-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-top: var(--space-6);
+}
+.media-count {
+  font-size: var(--fs-xs);
+  color: var(--text-p4);
+  font-variant-numeric: tabular-nums;
+}
+.media-foot .pager { margin-left: auto; }
+
+@media (max-width: 640px) {
+  .media-search { margin-left: 0; width: 100%; }
+  .media-search input { flex: 1; min-width: 0; }
+  .media-grid { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: var(--space-3); }
+  .media-thumb { max-height: 190px; }
+  /* 手机上触摸热区不小于 44dp（与侧栏同一标准） */
+  .media-actions .btn { padding: 10px 12px; font-size: var(--fs-sm); flex: 1; }
+}
+
 /* ── 评论列表项（阶段 02-3）─────────────────────────────
    一段评论由四层构成：元信息 / 引文 / 正文 / 操作。
    用固定垂直节奏而不是每处行内 margin，长列表扫读时对齐才稳定。 */
