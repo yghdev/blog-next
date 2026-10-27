@@ -11,6 +11,10 @@ _*
 
 # 测试临时目录
 .tmp-tests/
+# Playwright 产物（阶段 00 引入双页测试）
+playwright-report/
+test-results/
+.playwright/
 .probe/
 tsconfig.tsbuildinfo
 dist.tar.gz

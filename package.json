@@ -17,28 +17,32 @@
     "build:dist": "node scripts/package-standalone.mjs",
     "verify:deploy": "node scripts/verify-deploy.mjs",
     "stamp": "node scripts/stamp-version.mjs",
-    "verify:assets": "node scripts/verify-assets.mjs"
+    "verify:assets": "node scripts/verify-assets.mjs",
+    "test:next": "node tests/next-integration.mjs",
+    "test:browser": "node tests/browser-split.mjs",
+    "test:integration": "npm run test:next && npm run test:browser"
   },
   "dependencies": {
-    "next": "^16.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "better-sqlite3": "^12.0.0",
-    "marked": "^15.0.0",
-    "gray-matter": "^4.0.3",
-    "otpauth": "^9.3.0",
     "bcryptjs": "^2.4.3",
-    "heic2any": "^0.0.4"
+    "better-sqlite3": "^12.0.0",
+    "gray-matter": "^4.0.3",
+    "heic2any": "^0.0.4",
+    "marked": "^15.0.0",
+    "next": "^16.0.0",
+    "otpauth": "^9.3.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@types/better-sqlite3": "^7.6.0",
-    "@types/bcryptjs": "^2.4.6",
+    "postcss": "^8.4.0",
     "tailwindcss": "^4.0.0",
-    "@tailwindcss/postcss": "^4.0.0",
-    "postcss": "^8.4.0"
+    "typescript": "^5.7.0"
   }
 }

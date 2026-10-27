@@ -38,3 +38,20 @@ jobs:
 
       - name: 构建
         run: npm run build
+
+      # 真实 Next 集成测试跑在 .next/standalone/server.js 上。
+      # 注意：**不能**在 npm run build 之后直接跑 —— Next 对 serverExternalPackages
+      # （本项目是 better-sqlite3）只产出 package.json 空壳 + 指向空壳的软链，
+      # 实体会在 build:dist 里才补进产物。所以这里二选一：
+      #   a) 先 build:dist 再跑测试；b) 让测试自己实体化。
+      # 这里采用 b（tests/helpers/next-server.mjs 启动前调用共享的
+      # scripts/materialize-native-deps.mjs），因为它同时让 test:next 在本地
+      # 只跑 npm run build 后也能用；而 build:dist 复用同一个函数，不会漂移。
+      - name: 安装 Playwright 浏览器（双页隔离测试用）
+        run: npx playwright install --with-deps chromium
+
+      - name: 真实 Next HTTP 集成测试（隔离数据库）
+        run: npm run test:next
+
+      - name: 浏览器双页隔离基础测试
+        run: npm run test:browser
