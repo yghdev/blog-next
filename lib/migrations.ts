@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import crypto from "node:crypto";
+import { safeStringArray, snapshotIdentity } from "./snapshot";
 
 /**
  * 迁移的唯一事实来源（方案 C13）。
@@ -54,7 +55,12 @@ const BASELINE_SQL: string[] = [
   "CREATE INDEX IF NOT EXISTS idx_posts_type ON posts(type, status)",
 ];
 
-const MIGRATIONS: Migration[] = [
+/**
+ * 迁移定义。导出是为了让测试能**只应用到指定版本**，
+ * 从而构造出"0012 之前的老库"来验证基线与脏数据降级 ——
+ * 否则基线测试只能在一个已经是新结构的库上跑，等于什么都没验证。
+ */
+export const MIGRATIONS: Migration[] = [
   {
     name: "0001_baseline",
     up: (db) => {
@@ -271,6 +277,120 @@ const MIGRATIONS: Migration[] = [
           10
         );
       }
+    },
+  },
+
+  {
+    name: "0012_revision_drafts_history",
+    up: (db) => {
+      /**
+       * 阶段 03.1 数据协议（方案 §3）。
+       *
+       * 解决的核心问题：自动保存若直接写 posts，未发布的修改会立刻暴露到前台。
+       * 因此引入三层分离：
+       *   posts            —— 公开内容的事实来源，只有显式发布/元数据操作才改
+       *   post_drafts      —— 服务端当前草稿，每篇最多一条
+       *   post_revisions   —— 不可变的发布/基线历史
+       *
+       * revision 是**行版本**，不是发布次数：新文章壳为 1，第一次发布通常为 2。
+       * 它只用于"检测别人改过没有"，不承担"这是第几次发布"的语义 ——
+       * 那个语义由 post_revisions.reason 表达。
+       */
+
+      // ---- posts.revision ----
+      addColumn(db, "posts", "revision", "INTEGER NOT NULL DEFAULT 1");
+      // 已有行默认 revision=1（SQLite 的 ADD COLUMN DEFAULT 会补齐存量行）。
+
+      // ---- post_drafts：每篇最多一个当前服务端草稿 ----
+      db.exec(
+        "CREATE TABLE IF NOT EXISTS post_drafts (" +
+        "  post_id          INTEGER PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE," +
+        "  client_draft_id  TEXT NOT NULL UNIQUE," +
+        "  owner_user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL," +
+        "  base_revision    INTEGER NOT NULL," +
+        "  draft_revision   INTEGER NOT NULL DEFAULT 1," +
+        "  snapshot_json    TEXT NOT NULL," +
+        "  snapshot_hash    TEXT NOT NULL," +
+        "  created_at       TEXT NOT NULL," +
+        "  updated_at       TEXT NOT NULL," +
+        "  updated_by       INTEGER REFERENCES users(id) ON DELETE SET NULL" +
+        ")"
+      );
+      // PRIMARY KEY(post_id) 同时是"每篇一个草稿"的约束与防并发重复创建的闸门：
+      // 两个会话同时发现"无草稿"并各自插入时，后到的那个会撞主键而失败，
+      // 不会出现两条草稿互相覆盖。
+      db.exec("CREATE INDEX IF NOT EXISTS idx_drafts_owner ON post_drafts(owner_user_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_drafts_updated ON post_drafts(updated_at DESC)");
+
+      // ---- post_revisions：发布/基线历史（不可变） ----
+      db.exec(
+        "CREATE TABLE IF NOT EXISTS post_revisions (" +
+        "  id                 INTEGER PRIMARY KEY AUTOINCREMENT," +
+        "  post_id            INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE," +
+        "  revision           INTEGER NOT NULL," +
+        "  snapshot_json      TEXT NOT NULL," +
+        "  snapshot_hash      TEXT NOT NULL," +
+        "  reason             TEXT NOT NULL CHECK (reason IN ('baseline','publish'))," +
+        "  publish_request_id TEXT," +
+        "  created_by         INTEGER REFERENCES users(id) ON DELETE SET NULL," +
+        "  created_at         TEXT NOT NULL," +
+        "  UNIQUE(post_id, revision)" +
+        ")"
+      );
+      // 发布幂等：同一 publishRequestId 只能对应一次成功发布。
+      // 用部分索引（WHERE ... IS NOT NULL）而不是普通 UNIQUE，
+      // 因为 baseline 的 publish_request_id 全是 NULL，普通 UNIQUE 在 SQLite 里
+      // 允许多个 NULL，但语义上强调"只对真实发布请求去重"更清楚。
+      db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_revisions_request " +
+        "ON post_revisions(publish_request_id) WHERE publish_request_id IS NOT NULL"
+      );
+      db.exec("CREATE INDEX IF NOT EXISTS idx_revisions_post ON post_revisions(post_id, revision DESC)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_revisions_created ON post_revisions(post_id, created_at DESC)");
+
+      // ---- 为所有未删除的现有文章创建 baseline 快照 ----
+      //
+      // 方案 §3.4 明确禁止在 SQL 里对 categories/tags 调 json()：
+      // 现有数据可能含脏 JSON，且 SQL 另写一套格式容易与哈希口径漂移。
+      // 所以这里先读出整行，再用共享的 TS 函数（与接口、脚本同一份）
+      // 做安全解析 -> canonicalize -> hash -> INSERT。
+      const rows = db.prepare(
+        "SELECT id, type, title, slug, content, cover, categories, tags, comments_enabled " +
+        "FROM posts WHERE deleted_at IS NULL ORDER BY id"
+      ).all() as {
+        id: number; type: string; title: string; slug: string; content: string;
+        cover: string | null; categories: string; tags: string; comments_enabled: number;
+      }[];
+
+      const insert = db.prepare(
+        "INSERT OR IGNORE INTO post_revisions " +
+        "(post_id, revision, snapshot_json, snapshot_hash, reason, publish_request_id, created_by, created_at) " +
+        "VALUES (?, ?, ?, ?, 'baseline', NULL, NULL, ?)"
+      );
+
+      for (const r of rows) {
+        // baseline 快照描述的是"这一版线上内容长什么样"，
+        // 因此 revision 取当前 posts.revision（存量行都是 1）。
+        const snapshot = {
+          type: r.type as "post" | "page" | "shuoshuo",
+          title: r.title,
+          slug: r.slug,
+          content: r.content,
+          // cover 允许为 null，且必须显式保留 null —— 不能写成 undefined
+          cover: r.cover === null ? null : String(r.cover),
+          // 脏 JSON 按既有降级规则处理（解析失败即 []），不抛错、不中断迁移
+          categories: safeStringArray(r.categories),
+          tags: safeStringArray(r.tags),
+          comments_enabled: (r.comments_enabled ? 1 : 0) as 0 | 1,
+        };
+        const { snapshotJson, snapshotHash } = snapshotIdentity(snapshot);
+        // baseline 不伪造原发布时间：created_at 用实际迁移时间，
+        // 排序展示按 id/created_at，不能把 revision 当连续发布序号。
+        insert.run(r.id, 1, snapshotJson, snapshotHash, new Date().toISOString());
+      }
+      // 注意：不修改 posts 正文、slug、状态或时间；回收站文章（deleted_at 非空）不建基线。
+      // 任一行失败都会抛错，由 migrate() 的事务整体回滚 —— 不接受
+      // "部分文章有基线"的启动状态。
     },
   },
 ];

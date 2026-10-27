@@ -36,19 +36,36 @@ export default async function AdminPage({ searchParams }: {
     draft: count("SELECT COUNT(*) c FROM posts WHERE deleted_at IS NULL AND status='draft'" + typeCond, ...typeArgs),
   };
 
-  const where: string[] = [trash ? "deleted_at IS NOT NULL" : "deleted_at IS NULL"];
+  /**
+   * 列表要带出草稿快照里的标题（方案 §4.2）。
+   *
+   * 为什么不能只显示 posts.title：新文章建的是**壳**，posts.title 是空串，
+   * 用户在快照里写的标题还没发布。若列表只读 posts.title，后台会显示一排
+   * "(无标题)" —— 用户看不到自己刚写的东西，会以为草稿丢了。
+   *
+   * 同时把搜索也扩到草稿标题：否则"搜草稿标题搜不到"同样像丢数据。
+   */
+  const draftTitle = "json_extract(d.snapshot_json, '$.title')";
+  const from = "FROM posts LEFT JOIN post_drafts d ON d.post_id = posts.id";
+  const where: string[] = [trash ? "posts.deleted_at IS NOT NULL" : "posts.deleted_at IS NULL"];
   const args: unknown[] = [];
-  if (typeCond) { where.push("type = ?"); args.push(type); }
-  if (["draft", "published"].includes(status)) { where.push("status = ?"); args.push(status); }
-  if (q) { where.push("(title LIKE ? OR slug LIKE ?)"); const like = "%" + q + "%"; args.push(like, like); }
+  if (typeCond) { where.push("posts.type = ?"); args.push(type); }
+  if (["draft", "published"].includes(status)) { where.push("posts.status = ?"); args.push(status); }
+  if (q) {
+    where.push("(posts.title LIKE ? OR posts.slug LIKE ? OR " + draftTitle + " LIKE ?)");
+    const like = "%" + q + "%"; args.push(like, like, like);
+  }
   const whereSql = "WHERE " + where.join(" AND ");
-  const total = count("SELECT COUNT(*) c FROM posts " + whereSql, ...args);
+  const total = (db.prepare("SELECT COUNT(*) c " + from + " " + whereSql).get(...args) as { c: number }).c;
   const rows = db.prepare(
-    "SELECT id, type, title, slug, status, published_at, updated_at FROM posts " + whereSql +
-    " ORDER BY COALESCE(published_at, updated_at) DESC LIMIT ? OFFSET ?"
+    "SELECT posts.id, posts.type, posts.title, posts.slug, posts.status, posts.published_at, posts.updated_at, " +
+    "posts.revision, " + draftTitle + " AS draft_title " +
+    from + " " + whereSql +
+    " ORDER BY COALESCE(posts.published_at, posts.updated_at) DESC LIMIT ? OFFSET ?"
   ).all(...args, PAGE_SIZE, (page - 1) * PAGE_SIZE) as {
     id: number; type: string; title: string; slug: string; status: string;
-    published_at: string | null; updated_at: string;
+    published_at: string | null; updated_at: string; revision: number;
+    draft_title: string | null;
   }[];
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -120,8 +137,12 @@ export default async function AdminPage({ searchParams }: {
       ) : (
         <PostList
           items={rows.map((r) => ({
-            id: r.id, type: r.type, title: r.title, status: r.status,
+            id: r.id, type: r.type,
+            // 有草稿时优先显示草稿标题（壳的 posts.title 通常是空的）
+            title: (r.draft_title && r.draft_title.trim()) ? r.draft_title : r.title,
+            status: r.status,
             dateLabel: r.status === "published" && r.published_at ? dateKeyIn(r.published_at) : "未发布",
+            revision: r.revision ?? 1,
           }))}
           trash={trash}
           stepUpRequired={!!user.totp_enabled}

@@ -14,12 +14,26 @@ export default async function OverviewPage() {
   if (!user) redirect("/admin/login");
 
   const db = getDb();
+  /**
+   * 标题取草稿快照优先（方案 §4.2）。
+   *
+   * 新文章建的是壳，posts.title 为空串，用户写的标题在 post_drafts.snapshot_json 里。
+   * 概览若只读 posts.title，用户看到自己刚写的草稿显示成"(未命名草稿)" ——
+   * 那会让人以为内容没存上。这里用 COALESCE 把草稿标题顶上来。
+   */
+  const titleExpr = "COALESCE(NULLIF(json_extract(d.snapshot_json,'$.title'),''), NULLIF(posts.title,''))";
+  const joinDraft = "FROM posts LEFT JOIN post_drafts d ON d.post_id = posts.id";
+
   const recent = db.prepare(
-    "SELECT id, title, status, updated_at FROM posts WHERE deleted_at IS NULL ORDER BY updated_at DESC LIMIT 5"
+    "SELECT posts.id, " + titleExpr + " AS title, posts.status, posts.updated_at " + joinDraft +
+    " WHERE posts.deleted_at IS NULL ORDER BY posts.updated_at DESC LIMIT 5"
   ).all() as { id: number; title: string; status: string; updated_at: string }[];
+
   const drafts = db.prepare(
-    "SELECT id, title, updated_at FROM posts WHERE status='draft' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 4"
+    "SELECT posts.id, " + titleExpr + " AS title, posts.updated_at " + joinDraft +
+    " WHERE posts.status='draft' AND posts.deleted_at IS NULL ORDER BY posts.updated_at DESC LIMIT 4"
   ).all() as { id: number; title: string; updated_at: string }[];
+
   const pending = (db.prepare("SELECT COUNT(*) c FROM comments WHERE status='pending'").get() as { c: number }).c;
   const trash = (db.prepare("SELECT COUNT(*) c FROM posts WHERE deleted_at IS NOT NULL").get() as { c: number }).c;
   const primary = drafts[0] ?? recent[0];

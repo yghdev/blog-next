@@ -907,12 +907,81 @@ URL 保持不变。
 > （早期此处曾写"只剩外链、日志、设置三处版式工作"，那三处已由 02-5 交付，
 > 该备注已作废。）数据侧的草稿/快照/批量发布仍在阶段 03，尚未开始。
 
-### 阶段 03.1：数据协议与旧编辑器适配
+### 阶段 03.1：数据协议与旧编辑器适配（已完成，2026-10-28）
 
 - 0012、快照规范化、严格审计、统一写入、草稿/发布/恢复/rebase 接口。
 - 基线快照、发布幂等、逐项批量版本、脚本写入改造。
 - 旧编辑器增加薄数据适配层：能读草稿、手动存草稿、发布；新旧 UI 共用它。
 - 此时可不开自动保存，但手动草稿与发布隔离必须完整可用。
+
+#### 交付与落点
+
+| 交付                 | 落点                                          | 说明                                                                 |
+| -------------------- | --------------------------------------------- | -------------------------------------------------------------------- |
+| 快照规范化与哈希     | `lib/snapshot.ts`                             | 同步纯函数；`canonicalize()` 固定字段序、保留数组序、不 trim、不丢 null |
+| 迁移 0012            | `lib/migrations.ts` 的 `0012_revision_drafts_history` | `posts.revision`、`post_drafts`、`post_revisions`、baseline 快照 |
+| 严格审计             | `lib/audit.ts` 的 `logAuditStrict(db, input)`  | 收当前事务的同一 db 句柄、不吞异常；吞异常的 `logAudit` 保留作诊断     |
+| 统一写入核心         | `lib/post-writes.ts`                          | 草稿/发布/恢复/rebase/元数据补丁/软删恢复，全部事务内                  |
+| 路由公用件           | `lib/admin-route.ts`                          | WriteError→HTTP(带 code)、actor 提取、版本必填校验                     |
+| 草稿接口             | `app/api/admin/posts/[id]/draft/route.ts`（+`/rebase`） | GET/PUT/DELETE + rebase                                    |
+| 新文章首次保存       | `app/api/admin/drafts/[clientDraftId]/route.ts` | PUT 建壳+挂草稿（幂等）；GET 供超时后自查                             |
+| 发布与结果核对       | `app/api/admin/posts/[id]/publish[-result]/route.ts` | 幂等发布 + `?requestId=` 核对                                  |
+| 恢复历史             | `app/api/admin/posts/[id]/restore-version/route.ts` | POST 恢复为草稿；GET 版本列表                                  |
+| 元数据 PATCH         | `app/api/admin/posts/[id]/route.ts`           | 三态补丁 + `expectedRevision` 原子更新                                |
+| 逐项批量             | `app/api/admin/posts/bulk/route.ts`           | `items:[{id,expectedRevision}]`，逐项结果                            |
+| 客户端适配层         | `lib/draft-client.ts`                         | 协议适配与错误分类（不碰 UI）                                         |
+| 编辑器改造           | `components/admin/Editor.tsx`                 | 存草稿走草稿接口、发布走 publish；打开时加载服务端草稿                |
+| 列表/概览显示草稿标题 | `app/admin/page.tsx`、`app/admin/overview/page.tsx` | 壳的 `posts.title` 为空，标题须取自草稿快照（§4.2）           |
+
+#### 关键实现决定（都有明确理由，不要改）
+
+1. **快照哈希与保存内容必须同源**：`canonicalize()` 返回的字符串**就是**入库的
+   `snapshot_json`，`snapshot_hash = sha256(同一字符串)`。任何"顺手清理"都会让哈希口径
+   与真实内容漂移，而那种偏差往往在 10 次自动保存之后才暴露。
+2. **客户端 hash 只核对、不采信**：不一致直接 400 `CLIENT_HASH_MISMATCH`。
+3. **`expectedRevision` 没有默认值**。曾经想把"删除时缺版本"默认成当前版本，但那等于
+   留了一个隐式跳过并发检查的后门 —— 列表页刷新后可能删掉别人刚改过的文章。
+   现在缺版本一律 400 `REVISION_REQUIRED`。
+4. **发布幂等核对在"有没有草稿"之前**。发布成功后草稿会被删除，若先检查草稿，
+   同一 `publishRequestId` 的重试会得到 `PUBLISH_REQUIRES_DRAFT`，客户端会把
+   "其实已成功"误判为失败。
+5. **新建 = 建壳 + 挂草稿（+ 需要时发布）**，`status:"published"` 也走同一条通路，
+   不另写一条 INSERT —— 否则就是方案 §6.1 禁止的"第二套语义"。
+6. **批量 publish 对有草稿的条目跳过**（`HAS_UNPUBLISHED_DRAFT`），不隐式选快照。
+
+#### 阶段 00 遗留的 4 个缺陷已全部修复（pin 转为正向契约）
+
+`tests/posts-api.test.ts` 的 4 条 `KNOWN-DEFECT`（todo 标记）按原约定改写为正向断言，
+`npm test` 的 `todo` 从 4 归 **0**：
+
+| 原缺陷                        | 现状                                                        |
+| ----------------------------- | ----------------------------------------------------------- |
+| trim 改写正文首尾空白         | 草稿快照与发布结果均逐字节保留（`pin#1 转正向`）             |
+| `cover:null` 清不掉（COALESCE）| 三态语义，显式 null 真正清除（`pin#2 转正向`）               |
+| PATCH 全字段覆盖              | 只改传入字段，未传的保留（`pin#3 转正向`）                   |
+| slug 别名写入不在事务内        | 别名与 posts 同事务，失败一起回滚（`pin#4 转正向`，触发器取证）|
+
+#### 顺带修掉的一个真实脚本缺陷
+
+`scripts/materialize-native-deps.mjs` 的 `forceRemove()` 对**目录**也执行
+`chmod 0o666`，把执行位剥掉，目录变成 `drw-rw-rw-`，之后连 `readdirSync`/`rmdirSync`
+都进不去。表现是**下一次 `next build` 报**
+`EACCES: permission denied, unlink .../.next/standalone/node_modules/better-sqlite3/package.json`，
+而报错完全指不回"是这个脚本把权限改坏的"。更麻烦的是 `scripts/package-standalone.mjs`
+里还有一份**复制出来的同名函数**，同样错法 —— 同一函数写两遍必然这样漂移。
+
+已修：目录用 `0o777`、文件用 `0o666`（语义不同，不能共用一个常量），
+并删掉 `package-standalone.mjs` 的副本改为从共享模块导入。
+验证方式：连续两次 `npm run build` 后 `find .next -type d ! -perm -u+x` 计数为 0。
+
+#### 验证
+
+- `npm test`：**172 项全过、0 失败、0 todo**（其中 `tests/migrations.test.ts` 新增 3 条
+  覆盖 0012：约束/索引/外键、脏 JSON 降级与回收站不建基线、重复迁移不重复插基线）。
+- `test:next`（真实 Next + 隔离库）：8/8 通过。
+- 浏览器套件：`browser` 3 / `ui` 7 / `dark` 3 / `admin` 8 / `content` 5 / `comments` 5 /
+  `media` 11 / `settings` 8，全部通过。
+- `npm run build` 与 `npm run build:dist` 均成功。
 
 退出：公开隔离四层测试、冲突、回滚、发布幂等、基线迁移、脚本冒烟全通过。
 
@@ -1037,12 +1106,15 @@ URL 保持不变。
 
 ## 14. 下一步
 
-**当前进度（2026-10-27 验收核对）**：阶段 00、01-A、01-B 已完成；
+**当前进度（2026-10-28）**：阶段 00、01-A、01-B 已完成；
 **阶段 02 全部完成**（02-1 导航与概览含一次返工、02-2 内容列表含一次返工、
-02-3 评论管理、02-4 媒体库、02-5 设置拆页/外链/日志）。
-下一步进入 **阶段 03.1：数据协议与旧编辑器适配** —— 这是本项目真正的大头，
-涉及 migration 0012、草稿/快照/版本表、统一写入与严格审计、
-批量发布与冲突处理。02 全程未碰数据协议，03 需要先按第 3～8 节核对现状再动手。
+02-3 评论管理、02-4 媒体库、02-5 设置拆页/外链/日志）；
+**阶段 03.1 已完成**（migration 0012、快照规范化、严格审计、统一写入核心、
+草稿/发布/恢复/rebase 接口、发布幂等与结果核对、逐项批量、旧编辑器薄适配层，
+阶段 00 遗留的 4 个缺陷已全部转正向契约）。
+下一步进入 **阶段 03.2：自动保存与本地恢复** —— 单飞状态机、超时核对、
+本地键与恢复界面。数据协议与编辑器适配层已就位（`lib/draft-client.ts` 已把
+identity 演进与错误分类准备好），03.2 在它之上叠加状态机，不再改数据协议。
 
 ### 00～02 验收结论（2026-10-27，全部本地实跑）
 
@@ -1091,5 +1163,6 @@ README 补充"跑浏览器测试的前置条件"。详见阶段 00 小节末尾�
 03 施工严格按第 3～8 节执行；若实测发现协议缺口，先修订本文并记录原因，再改实现。
 本文已合并最终审阅结论，不需要交叉查阅 v5.2/v5.3/v5.4 补丁。
 
-阶段 00 遗留、需在 03 一并解决的已知缺陷（已在测试里 pin 住，不会悄悄漂移）：
-trim 改写正文首尾空白、`cover:null` 无法清除、PATCH 全字段覆盖、slug 别名写入不在事务内。
+阶段 00 遗留的 4 个已知缺陷（trim 改写正文、`cover:null` 无法清除、PATCH 全字段覆盖、
+slug 别名写入不在事务内）**已在 03.1 全部修复**，对应 4 条 `KNOWN-DEFECT` pin 已改写为
+正向契约测试，`npm test` 的 todo 归零。详见阶段 03.1 小节。

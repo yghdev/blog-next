@@ -41,6 +41,53 @@ async function create(payload) {
   return JSON.parse(text);
 }
 
+/**
+ * 读一篇当前 posts.revision（PATCH / 草稿保存都要它做并发校验）。
+ * 直接走 admin API 而不是读库：集成测试要验证的是"应用对外暴露的能力"，
+ * 绕过应用直读库只应用在"证明缓存确实生效"那类取证上。
+ */
+async function revisionOf(id) {
+  const res = await api("/api/admin/posts/" + id);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  return JSON.parse(text).post.revision;
+}
+
+/**
+ * 存草稿 -> 发布（阶段 03.1 的标准改正文通路）。
+ * PATCH 现在只管元数据三态，正文改动必须走完整快照，否则
+ * "改正文"和"改标题"会共用一套字段覆盖语义 —— 那正是被修掉的旧缺陷。
+ */
+async function saveAndPublish(id, snapshot) {
+  const revision = await revisionOf(id);
+  const draftId = "cid-int-" + Math.random().toString(36).slice(2, 10);
+  const saved = await api("/api/admin/posts/" + id + "/draft", {
+    method: "PUT",
+    body: {
+      clientDraftId: draftId,
+      snapshot,
+      expectedPostRevision: revision,
+      expectedDraftRevision: 0,
+    },
+  });
+  const savedText = await saved.text();
+  assert.equal(saved.status, 200, savedText);
+  const identity = JSON.parse(savedText).identity;
+
+  const pub = await api("/api/admin/posts/" + id + "/publish", {
+    method: "POST",
+    body: {
+      publishRequestId: "req-int-" + Math.random().toString(36).slice(2, 12),
+      expectedPostRevision: identity.baseRevision,
+      expectedDraftRevision: identity.draftRevision,
+      slug: snapshot.slug,
+    },
+  });
+  const pubText = await pub.text();
+  assert.equal(pub.status, 200, pubText);
+  return JSON.parse(pubText);
+}
+
 async function login() {
   const response = await fetch(server.base + "/api/auth/login", {
     method: "POST",
@@ -109,9 +156,12 @@ try {
   const redirectPost = await create({ type: "post", slug: "redirect-old", title: "REDIRECT_TITLE", content: "REDIRECT_BODY", status: "published" });
   // 先把它抓进 unstable_cache，再改 slug —— 这样 308 不会被"根本没缓存过"掩盖
   await fetchText(server.base, "/redirect-old");
+  // 阶段 03.1 起 PATCH 必须带 expectedRevision（方案 §5.1：无通用 skipRevisionCheck）。
+  // 新建并发布后 revision 为 2（壳 1 -> 发布 +1），这里先读当前值再改。
+  const redirectRev = await revisionOf(redirectPost.id);
   const redirected = await api("/api/admin/posts/" + redirectPost.id, {
     method: "PATCH",
-    body: { type: "post", slug: "redirect-new", title: "REDIRECT_TITLE", content: "REDIRECT_BODY", status: "published", categories: [], tags: [] },
+    body: { slug: "redirect-new", expectedRevision: redirectRev },
   });
   assert.equal(redirected.status, 200, await redirected.text());
   // 注意：revalidateTag(tag, "max") 是 stale-while-revalidate，失效后第一次请求
@@ -155,10 +205,13 @@ try {
   console.log("PASS cache is genuinely in play: DB changed, page unchanged");
 
   // 5) 走正常 PATCH（触发 revalidateTag）后，页面必须立刻反映数据库
-  const patched = await api("/api/admin/posts/" + cachedPost.id, {
-    method: "PATCH",
-    body: { type: "post", slug: cachedSlug, title: "CACHE_AFTER_TITLE", content: "CACHE_AFTER_BODY", status: "published", categories: [], tags: [] },
+  // 只改标题与正文需要走完整快照（草稿 -> 发布）通路，因为 PATCH 现在只管元数据。
+  // 这里正好顺带验证新协议：存草稿（不影响线上）-> 发布（才影响线上）。
+  await saveAndPublish(cachedPost.id, {
+    type: "post", slug: cachedSlug, title: "CACHE_AFTER_TITLE", content: "CACHE_AFTER_BODY",
+    cover: null, categories: [], tags: [], comments_enabled: 1,
   });
+  const patched = { status: 200, text: async () => "ok" };
   assert.equal(patched.status, 200, await patched.text());
   // 注意：不要把 ok 判定用的文本裁掉再拿去断言 —— 上一版返回了 text.slice(0,400)，
   // 结果断言在一个没有正文的 HTML 前缀上，失败信息还看不出是"截断"造成的。

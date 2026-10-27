@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import { getDb, type AuditRow } from "./db";
 import { nowIso } from "./time";
 
@@ -6,6 +7,7 @@ export type AuditAction =
   | "logout"
   | "post.create" | "post.update" | "post.delete" | "post.restore" | "post.purge"
   | "post.publish" | "post.unpublish" | "post.bulk"
+  | "post.draft.save" | "post.draft.discard" | "post.draft.rebase" | "post.restore_version"
   | "comment.approve" | "comment.spam" | "comment.delete" | "comment.bulk" | "comment.reply"
   | "upload.create" | "media.delete" | "media.orphans"
   | "settings.update"
@@ -56,8 +58,40 @@ export function logAudit(input: AuditInput): void {
   }
 }
 
-export type AuditQuery = {
-  action?: string;
+/**
+ * 严格审计（方案 §5.2）—— 用于发布、恢复历史等**必须留痕**的写操作。
+ *
+ * 与 logAudit 的三个关键区别，每一条都是刻意的：
+ *
+ *  1. **显式接收当前业务事务的同一个 db 句柄**。
+ *     绝不调用 getDb() 单例 —— 那会拿到另一个连接/另一段事务，
+ *     于是"业务回滚了但审计还在"或反之，审计与数据对不上。
+ *
+ *  2. **函数内部不吞异常**。插入失败就让异常冒泡，
+ *     由外层业务事务整体回滚。宁可整个发布失败，也不要"发布成功但没留痕"。
+ *
+ *  3. 审计只存摘要与身份，不复制完整正文（避免日志膨胀与二次泄露）。
+ *
+ * 对应地，logAudit（吞异常）仍可用于非关键诊断，两者用途不同、不互相替代。
+ */
+export function logAuditStrict(db: Database.Database, input: AuditInput): void {
+  db.prepare(
+    "INSERT INTO audit_log (actor_user_id, actor_name, action, target_type, target_id, meta_json, ip, user_agent, created_at) " +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(
+    input.userId ?? null,
+    (input.userName ?? "").slice(0, 60),
+    input.action,
+    input.targetType ?? null,
+    input.targetId === undefined ? null : String(input.targetId),
+    JSON.stringify(input.meta ?? {}).slice(0, 4000),
+    (input.ip ?? "").slice(0, 64),
+    (input.userAgent ?? "").slice(0, 300),
+    nowIso()
+  );
+}
+
+export type AuditQuery = {  action?: string;
   targetType?: string;
   targetId?: string;
   q?: string;
