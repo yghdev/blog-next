@@ -5,15 +5,22 @@ import { useRouter } from "next/navigation";
 /**
  * 图片存储配置面板（自建，不依赖任何第三方图床平台）。
  *
- * 设计取舍：
- *   · SK 永不回填到前端 —— 只显示「已保存」标记，改动时才输入新值
- *   · 「测试连接」用当前表单值，不需要先保存就能验证参数是否正确
- *   · 错误信息按七牛错误码翻译成人话（在 lib/qiniu.ts 里）
+ * 反馈设计（2026-10-27 重做）：
+ *   上一版保存成功后只 setMsg 一句话，又立刻 router.refresh()，
+ *   用户看到的是"页面闪一下、什么都没发生"。而且状态徽章只写"已启用"，
+ *   不告诉人配置到底存了什么、什么时候存的。
+ *
+ *   现在：
+ *   · 保存 / 测试的结果**常驻**在按钮旁，不自动消失
+ *   · 顶部显示「已启用 · 空间名 · 最后保存时间」
+ *   · 测试成功给出实际对象数，失败给出七牛错误码翻的中文
+ *   · 保存成功后提示下一步怎么做（去传一张图）
  */
 type Status = {
   configured: boolean;
   bucket: string; endpoint: string; region: string;
   cdnDomain: string; pathStyle: boolean; hasSecret: boolean;
+  savedAt?: string | null;
 };
 
 const REGIONS = [
@@ -22,6 +29,8 @@ const REGIONS = [
   { label: "华东-浙江2（cn-east-2）", value: "cn-east-2", endpoint: "https://s3.cn-east-2.qiniucs.com" },
   { label: "华北-河北（cn-north-1）", value: "cn-north-1", endpoint: "https://s3.cn-north-1.qiniucs.com" },
 ];
+
+type Tone = "ok" | "err" | "info";
 
 export function StoragePanel() {
   const router = useRouter();
@@ -34,19 +43,21 @@ export function StoragePanel() {
   const [sk, setSk] = useState("");
   const [pathStyle, setPathStyle] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [err, setErr] = useState("");
+  /** 常驻结果条：tone 决定颜色，text 是正文 */
+  const [result, setResult] = useState<{ tone: Tone; text: string; at: string } | null>(null);
 
-  useEffect(() => {
-    fetch("/api/admin/storage").then((r) => r.json()).then((d: Status) => {
-      setSt(d);
-      setBucket(d.bucket ?? "");
-      setEndpoint(d.endpoint ?? "");
-      setRegion(d.region || "cn-south-1");
-      setCdnDomain(d.cdnDomain ?? "");
-      setPathStyle(!!d.pathStyle);
-    }).catch(() => setErr("读取配置失败"));
-  }, []);
+  const load = async () => {
+    const d = await fetch("/api/admin/storage").then((r) => r.json()).catch(() => null);
+    if (!d) return;
+    setSt(d);
+    setBucket(d.bucket ?? "");
+    setEndpoint(d.endpoint ?? "");
+    setRegion(d.region || "cn-south-1");
+    setCdnDomain(d.cdnDomain ?? "");
+    setPathStyle(!!d.pathStyle);
+  };
+
+  useEffect(() => { void load(); }, []);
 
   const payload = () => ({
     accessKeyId: ak || undefined,
@@ -54,29 +65,35 @@ export function StoragePanel() {
     bucket, endpoint, region, cdnDomain, pathStyle,
   });
 
-  // 换区域时自动带出对应 endpoint（用户少填一个易错项）
   const onRegion = (v: string) => {
     setRegion(v);
     const hit = REGIONS.find((r) => r.value === v);
     if (hit) setEndpoint(hit.endpoint);
   };
 
+  const say = (tone: Tone, text: string) =>
+    setResult({ tone, text, at: new Date().toLocaleTimeString("zh-CN") });
+
   const test = async () => {
-    setMsg(""); setErr(""); setBusy(true);
+    setBusy(true);
     try {
       const r = await fetch("/api/admin/storage", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload()),
       });
       const d = await r.json().catch(() => ({}));
-      if (r.ok && d.ok) setMsg("连接成功，空间可读（当前 " + (d.sampleObjects ?? 0) + " 个对象样本）");
-      else setErr(d.error || "连接失败");
-    } catch { setErr("网络错误，测试请求没发出去"); }
-    finally { setBusy(false); }
+      if (r.ok && d.ok) {
+        say("ok", "连接成功。空间「" + bucket + "」可读，当前有 " + (d.sampleObjects ?? 0) + " 个对象样本。");
+      } else {
+        say("err", d.error || "连接失败");
+      }
+    } catch {
+      say("err", "网络错误，测试请求没发出去");
+    } finally { setBusy(false); }
   };
 
   const save = async () => {
-    setMsg(""); setErr(""); setBusy(true);
+    setBusy(true);
     try {
       const r = await fetch("/api/admin/storage", {
         method: "PUT", headers: { "Content-Type": "application/json" },
@@ -84,32 +101,67 @@ export function StoragePanel() {
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
-        setMsg("已保存。之后上传的图片会直接写入七牛并返回 CDN 直链");
         setAk(""); setSk("");
-        const s = await fetch("/api/admin/storage").then((x) => x.json()).catch(() => null);
-        if (s) setSt(s);
+        // 先刷新本地状态再提示，保证徽章与表单一致
+        await load();
+        say("ok", "配置已保存。之后上传的图片会直接写入七牛，正文里插入的是 CDN 直链（" +
+          cdnDomain + "/…）。建议现在去「写文章」传一张图确认。");
         router.refresh();
-      } else setErr(d.error || "保存失败");
-    } catch { setErr("网络错误，保存请求没发出去"); }
-    finally { setBusy(false); }
+      } else {
+        say("err", d.error || "保存失败");
+      }
+    } catch {
+      say("err", "网络错误，保存请求没发出去");
+    } finally { setBusy(false); }
   };
+
+  const toneStyle = (t: Tone) => ({
+    background: t === "ok" ? "var(--ok-bg, #e7f7ee)" : t === "err" ? "var(--err-bg, #fdecec)" : "var(--bg-tint)",
+    color: t === "ok" ? "var(--ok-fg, #1a7f4b)" : t === "err" ? "var(--err-fg, #a12626)" : "var(--text-p3)",
+    border: "1px solid " + (t === "ok" ? "var(--ok-bd, #b8e6cc)" : t === "err" ? "var(--err-bd, #f3c4c4)" : "var(--border)"),
+  });
 
   return (
     <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+      {/* 标题行：状态徽章直接写出「空间名」，不让人再去表单里找 */}
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
         <h3 style={{ margin: 0, fontSize: "1rem" }}>图片存储（七牛云）</h3>
         <span style={{
-          fontSize: ".72rem", padding: "2px 8px", borderRadius: 20,
-          background: st?.configured ? "var(--ok-bg, #e7f7ee)" : "var(--warn-bg, #fff4e5)",
-          color: st?.configured ? "var(--ok-fg, #1a7f4b)" : "var(--warn-fg, #a15c00)",
-        }}>{st?.configured ? "已启用" : "未配置"}</span>
+          fontSize: ".72rem", padding: "2px 10px", borderRadius: 20, fontWeight: 500,
+          ...(st?.configured
+            ? { background: "var(--ok-bg, #e7f7ee)", color: "var(--ok-fg, #1a7f4b)" }
+            : { background: "var(--warn-bg, #fff4e5)", color: "var(--warn-fg, #a15c00)" }),
+        }}>
+          {st?.configured
+            ? "已启用 · " + st.bucket + (st.cdnDomain ? " · " + st.cdnDomain.replace(/^https?:\/\//, "") : "")
+            : "未配置"}
+        </span>
+        {st?.hasSecret ? (
+          <span style={{ fontSize: ".7rem", color: "var(--text-p4)" }}>密钥已保存</span>
+        ) : null}
       </div>
       <p style={{ fontSize: ".8rem", color: "var(--text-p4)", margin: "0 0 16px" }}>
         上传的图片直接写入七牛空间，正文里插入的是 CDN 直链。未配置时自动退回本机磁盘（老方式）。
       </p>
 
-      {msg ? <div className="notice notice-ok" style={{ marginBottom: 12 }}>{msg}</div> : null}
-      {err ? <div className="notice notice-error" style={{ marginBottom: 12 }}>{err}</div> : null}
+      {/* 常驻结果条：不自动消失，方便对照表单排查 */}
+      {result ? (
+        <div style={{
+          ...toneStyle(result.tone),
+          padding: "10px 14px", borderRadius: 10, marginBottom: 16,
+          fontSize: ".84rem", lineHeight: 1.6,
+          display: "flex", gap: 10, alignItems: "flex-start",
+        }}>
+          <span style={{ flex: 1 }}>{result.text}</span>
+          <span style={{ fontSize: ".7rem", opacity: .65, whiteSpace: "nowrap" }}>{result.at}</span>
+          <button
+            type="button"
+            onClick={() => setResult(null)}
+            aria-label="关闭提示"
+            style={{ background: "none", border: 0, cursor: "pointer", color: "inherit", opacity: .6, fontSize: ".9rem", padding: 0 }}
+          >×</button>
+        </div>
+      ) : null}
 
       <div className="editor-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
         <div className="field">
@@ -151,12 +203,12 @@ export function StoragePanel() {
         路径式访问（Path Style）—— 七牛一般不需要勾选；若提示 NoSuchBucket 可尝试打开
       </label>
 
-      <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap", alignItems: "center" }}>
         <button className="btn btn-sm btn-primary" onClick={save} disabled={busy}
                 style={{ padding: "6px 16px" }}>{busy ? "处理中…" : "保存配置"}</button>
         <button className="btn btn-sm" onClick={test} disabled={busy}
-                style={{ padding: "6px 16px" }}>测试连接</button>
-        <span style={{ fontSize: ".72rem", color: "var(--text-p4)", alignSelf: "center", flex: 1, minWidth: 200 }}>
+                style={{ padding: "6px 16px" }}>{busy ? "…" : "测试连接"}</button>
+        <span style={{ fontSize: ".72rem", color: "var(--text-p4)", flex: 1, minWidth: 180 }}>
           密钥用 AES-256-GCM 加密后落库，不会随备份明文外流
         </span>
       </div>

@@ -52,6 +52,28 @@ export function MediaGrid({ items, storageConfigured, cdnDomain }: {
     else setErr(d.error || "删除失败");
   };
 
+  /**
+   * 把七牛空间里未被登记的对象导入 media 表。
+   * 历史遗留：这些图是别的客户端传的，图库看不见也管不了。
+   */
+  const importQiniu = async () => {
+    setMsg(""); setErr(""); setBusy(true);
+    try {
+      const res = await fetch("/api/admin/media", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "import-qiniu" }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMsg(d.inserted > 0
+          ? "已扫描 " + d.scanned + " 个七牛对象，新登记 " + d.inserted + " 个到媒体库"
+          : "已扫描 " + d.scanned + " 个七牛对象，全部已在库中，无需登记");
+        router.refresh();
+      } else setErr(d.error || "登记失败");
+    } catch { setErr("网络错误"); }
+    finally { setBusy(false); }
+  };
+
   const scan = async () => {
     setMsg(""); setErr(""); setBusy(true);
     const res = await fetch("/api/admin/media", {
@@ -77,6 +99,12 @@ export function MediaGrid({ items, storageConfigured, cdnDomain }: {
         alignItems: "center",
       }}>
         <button className="btn btn-sm" onClick={scan} disabled={busy}>扫描孤儿文件</button>
+        {storageConfigured ? (
+          <button className="btn btn-sm" onClick={importQiniu} disabled={busy}
+                  title="把七牛空间里已有、但媒体库还没登记的对象导入进来">
+            登记七牛对象
+          </button>
+        ) : null}
         <span style={{
           fontSize: ".72rem", padding: "3px 10px", borderRadius: 20,
           background: storageConfigured ? "var(--ok-bg, #e7f7ee)" : "var(--warn-bg, #fff4e5)",

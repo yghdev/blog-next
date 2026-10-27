@@ -11,6 +11,17 @@ export const dynamic = "force-dynamic";
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(process.cwd(), "public/images");
 
+/** 按扩展名猜 MIME —— 七牛 List 不返回 Content-Type，登记时够用即可 */
+function guessMime(key: string): string {
+  const ext = key.toLowerCase().slice(key.lastIndexOf("."));
+  const map: Record<string, string> = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".avif": "image/avif",
+    ".svg": "image/svg+xml", ".mp4": "video/mp4", ".webm": "video/webm",
+  };
+  return map[ext] ?? "application/octet-stream";
+}
+
 /** 媒体库列表 + 存储概览 */
 export const GET = handle(async (req: NextRequest) => {
   await requireAdmin(req);
@@ -57,11 +68,60 @@ export const POST = handle(async (req: NextRequest) => {
   const ctx = await requireAdmin(req);
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const action = typeof body.action === "string" ? body.action : "";
+  const db = getDb();
+
+  if (action === "import-qiniu") {
+    /**
+     * 把七牛空间里「库中没有」的对象登记进 media 表。
+     *
+     * 场景：这些对象是历史上用别的客户端（第三方图床、PicGo 等）传的，
+     * 从来没经过博客的 media 表，于是媒体库里看不见、也没法删。
+     * 只登记、不动对象本身；判断"已在库里"用 CDN 域名 + key 拼出的完整 URL。
+     */
+    const cfg = readStorageConfig();
+    if (!isConfigured(cfg)) {
+      return noStore(NextResponse.json({ error: "七牛尚未配置" }, { status: 400 }));
+    }
+    const domain = cfg.cdnDomain.replace(/\/+$/, "");
+    const known = new Set((db.prepare("SELECT path FROM media").all() as { path: string }[]).map((r) => r.path));
+    const inserted: string[] = [];
+    const ins = db.prepare(
+      "INSERT OR IGNORE INTO media (path, filename, mime, size, width, height, sha256) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    );
+
+    let token: string | null = null;
+    let scanned = 0;
+    for (let page = 0; page < 20; page++) {
+      const r = await listObjects(cfg, { maxKeys: 1000, continuationToken: token ?? undefined });
+      for (const o of r.objects) {
+        scanned++;
+        const url = domain + "/" + o.key;
+        if (known.has(url)) continue;
+        const mime = guessMime(o.key);
+        ins.run(url, o.key.split("/").pop() ?? o.key, mime, o.size, null, null, null);
+        inserted.push(url);
+        known.add(url);
+      }
+      token = r.nextToken;
+      if (!token || r.objects.length === 0) break;
+    }
+
+    logAudit({
+      action: "media.orphans", userId: ctx.user.id, userName: ctx.user.username,
+      meta: { action: "import-qiniu", scanned, inserted: inserted.length },
+      ip: ctx.ip, userAgent: ctx.userAgent,
+    });
+
+    return noStore(NextResponse.json({
+      ok: true, scanned, inserted: inserted.length,
+      sample: inserted.slice(0, 20),
+    }));
+  }
+
   if (action !== "scan-orphans") {
     return noStore(NextResponse.json({ error: "未知操作" }, { status: 400 }));
   }
 
-  const db = getDb();
   const rows = db.prepare("SELECT path FROM media").all() as { path: string }[];
   const knownLocal = new Set<string>();
   const knownQiniu = new Set<string>();
