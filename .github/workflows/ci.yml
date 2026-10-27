@@ -64,3 +64,6 @@ jobs:
 
       - name: 后台分组导航与概览页
         run: npm run test:admin
+
+      - name: 内容列表页（筛选语义 / 计数联动 / 窄屏）
+        run: npm run test:content

@@ -74,3 +74,40 @@ test("状态徽章不再回退到硬编码的浅色主题色值", () => {
     assert.deepEqual(bad, [], rel + " 仍有带硬编码色值的 var() 回退：" + bad.join(", "));
   }
 });
+
+/**
+ * 类名完整性：className 里用到的类必须在 CSS 里真的定义过。
+ *
+ * 与上面令牌那条同源：StoragePanel 一直写着 className="card"，
+ * 而 .card 从未定义，且没有行内 border/background 兜底 ——
+ * 结果这个面板渲染成一块没有边框的裸内容，和旁边用 Card 组件的区块不齐。
+ * 类名写错不会报错，只会"看起来差点意思"，所以更值得上锁。
+ *
+ * 只检查**静态** className（模板串与三元拼接的结果无法静态判定，
+ * 那类引用在这里会被跳过，属于已知覆盖边界）。
+ */
+test("静态 className 用到的类都有对应样式", () => {
+  const cssText = fs.readFileSync(GLOBALS, "utf8");
+  const definedClasses = new Set([...cssText.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]));
+
+  /**
+   * 已知不属于本仓 CSS 的类：
+   *   - prev / brand-avatar 属前台既有问题（.prev 在 app/[slug]，.brand-avatar
+   *     在 Avatar），不在后台重构范围内，先登记在这里而不是让测试长期红着
+   *     （长期红的测试等于没有测试）。
+   */
+  const KNOWN_FRONTEND = new Set(["prev", "brand-avatar"]);
+
+  const files = [...walk(path.join(ROOT, "app")), ...walk(path.join(ROOT, "components"))];
+  const missing: string[] = [];
+  for (const file of files) {
+    const text = fs.readFileSync(file, "utf8");
+    for (const m of text.matchAll(/className="([^"{}]+)"/g)) {
+      for (const cls of m[1].split(/\s+/).filter(Boolean)) {
+        if (definedClasses.has(cls) || KNOWN_FRONTEND.has(cls)) continue;
+        missing.push(path.relative(ROOT, file).replace(/\\/g, "/") + " -> ." + cls);
+      }
+    }
+  }
+  assert.deepEqual([...new Set(missing)], [], "以下类名没有对应样式：\n" + [...new Set(missing)].join("\n"));
+});
