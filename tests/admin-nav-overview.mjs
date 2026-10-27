@@ -2,7 +2,7 @@
  * 阶段 02-1 · 侧栏分组导航与概览页。
  *
  * 断言的是"结构和可达性"，不做审美判断。核心几条：
- *   1. **桌面是侧栏**：.admin-sidebar 可见，四组标题常驻可见，9 项齐全
+ *   1. **桌面是侧栏**：.admin-sidebar 可见，四组标题常驻可见，8 项齐全（存储已并入设置）
  *   2. 顶栏在桌面隐藏（只服务手机）
  *   3. 「写文章」常驻：桌面侧栏顶部可见，手机移进抽屉顶部
  *   4. 抽屉里分组有层次，分组标题 aria-hidden，每项热区 >= 48
@@ -49,7 +49,7 @@ try {
   assert.ok(topbarHidden, "桌面不应显示手机顶栏 .admin-topbar");
   console.log("PASS phase02: 桌面为左侧栏（宽 " + Math.round(geo.sideWidth) + "px），顶栏隐藏");
 
-  /* ---------------- 2. 四组标题常驻可见 + 9 项齐全 ---------------- */
+  /* ---------------- 2. 四组标题常驻可见 + 8 项齐全 ---------------- */
   const sideTitles = await page.locator(".admin-side-title").evaluateAll((els) =>
     els.map((e) => ({ text: (e.textContent || "").trim(), ariaHidden: e.getAttribute("aria-hidden") }))
   );
@@ -61,10 +61,12 @@ try {
   const sideLabels = await page.locator(".admin-side-nav a").evaluateAll((els) =>
     els.map((e) => (e.textContent || "").trim())
   );
-  for (const want of ["概览", "内容", "评论", "回收站", "媒体", "外链", "存储", "日志", "设置"]) {
+  for (const want of ["概览", "内容", "评论", "回收站", "媒体", "外链", "日志", "设置"]) {
     assert.ok(sideLabels.includes(want), "侧栏缺少导航项：" + want + " 实际=" + JSON.stringify(sideLabels));
   }
-  console.log("PASS phase02: 侧栏四组标题常驻可见 + " + sideLabels.length + " 个导航项");
+  assert.ok(!sideLabels.includes("存储"),
+    "「存储」已并入设置区，不应再是独立导航项（实际=" + JSON.stringify(sideLabels) + "）");
+  console.log("PASS phase02: 侧栏四组标题常驻可见 + " + sideLabels.length + " 个导航项（存储已并入设置）");
 
   /* ---------------- 3. 写文章常驻在侧栏 ---------------- */
   const composeVisible = await page.locator(".admin-side-compose").isVisible();

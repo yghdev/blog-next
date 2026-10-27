@@ -1,4 +1,5 @@
 import { getDb } from "./db";
+import { isSafeUrl, KIND_LABEL, type FriendLink, type FriendLinkKind, type FriendLinkView } from "./friend-links-shared";
 
 /**
  * 友链 / 聚合外链（2026-10-23）。
@@ -10,40 +11,13 @@ import { getDb } from "./db";
  *   friend —— 友链（个人博客互链）
  *   hub    —— 聚合站（如「开往」这类友链接力/聚合导航）
  * 两者在侧栏分区展示，互不混淆。
+ *
+ * 2026-10-27（阶段 02-5）：类型与 isSafeUrl/KIND_LABEL 搬到了
+ * ./friend-links-shared —— 本文件 import 了 ./db（better-sqlite3 → node:fs），
+ * 客户端组件不能引它。这里保留 re-export，避免改动既有调用方。
  */
-
-export type FriendLinkKind = "friend" | "hub";
-
-/** 前台展示用的最小字段集（可安全序列化传给客户端组件） */
-export type FriendLinkView = Pick<FriendLink, "id" | "name" | "url" | "desc" | "kind">;
-
-export type FriendLink = {
-  id: number;
-  name: string;
-  url: string;
-  desc: string;
-  kind: FriendLinkKind;
-  sort_order: number;
-  visible: number;
-  created_at: string;
-  updated_at: string;
-};
-
-export const KIND_LABEL: Record<FriendLinkKind, string> = {
-  friend: "友链",
-  hub: "聚合",
-};
-
-/** 只允许 http/https：外链会被直接渲染成 <a href>，放行 javascript: 等于存储型 XSS */
-const SAFE_PROTOCOLS = new Set(["http:", "https:"]);
-
-export function isSafeUrl(url: string): boolean {
-  try {
-    return SAFE_PROTOCOLS.has(new URL(url).protocol);
-  } catch {
-    return false;
-  }
-}
+export type { FriendLink, FriendLinkKind, FriendLinkView };
+export { isSafeUrl, KIND_LABEL };
 
 /**
  * 全量列表（后台用，含隐藏项）。

@@ -47,12 +47,13 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/admin/media", label: "媒体", key: "media" },
       { href: "/admin/links", label: "外链", key: "links" },
-      { href: "/admin/storage", label: "存储", key: "storage" },
       { href: "/admin/audit", label: "日志", key: "audit" },
     ],
   },
   {
     title: "系统",
+    /* 阶段 02-5：图片存储原为独立导航项，现收进设置区（/admin/settings/storage）。
+       配置类事务集中在一处，避免"资源里有存储、系统里有设置"这种同类两入口。 */
     items: [{ href: "/admin/settings", label: "设置", key: "settings" }],
   },
 ];

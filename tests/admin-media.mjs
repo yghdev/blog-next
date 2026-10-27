@@ -23,7 +23,23 @@ try {
   controller = await startBrowser();
   const { page } = await controller.newLoggedInContext(server.base, server.fixture);
 
-  /* ---------- 造数据：55 条 media（跨越旧 LIMIT 之外）+ 一篇文章引用其中一张 ---------- */
+  /* ---------- 造数据 ----------
+     注意顺序：**先把真实文件写到磁盘，再插库记录**。
+     媒体页会把每条记录渲染成 <img src=path>，路径不存在时图永远加载失败，
+     Playwright 的 networkidle 就等不到 —— 实测会 30s 超时。
+     （裂纹本身是"库里有、存储里没有"，那是扫描结果要报的问题，
+       不该出现在测试的初始数据里。） */
+  const uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), "public/images");
+  const webRoot = path.join(server.standaloneDir, "public");
+  const dir = path.join(webRoot, "images", "2026", "10");
+  fs.mkdirSync(dir, { recursive: true });
+  // 1x1 PNG：内容无所谓，只要 200 且体积小
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64"
+  );
+  void uploadDir;
+
   const D = (await import("better-sqlite3")).default;
   db = new D(path.join(server.dataDir, "blog.db"));
   db.pragma("busy_timeout = 5000");
@@ -32,22 +48,27 @@ try {
     "INSERT INTO media (path, filename, mime, size, width, height, sha256) VALUES (?, ?, 'image/png', ?, ?, ?, NULL)"
   );
   const now = Date.now();
-  // 40 张七牛（竖图 800x1200）+ 15 张本机
+  // 40 张七牛（竖图 800x1200）。
+  // 路径用 /cdn/... 而不是 https://cdn.test/...：分类只要求"不以 /images/ 开头"，
+  // 用同源路径就能被 standalone 的 public 真读出来。<img> 指向一个真实存在于
+  // 外网 DNS 不解析的域名时，请求会一直 pending，networkidle 永远不成立。
+  const cdnDir = path.join(webRoot, "cdn");
+  fs.mkdirSync(cdnDir, { recursive: true });
   for (let i = 0; i < 40; i++) {
-    insMedia.run("https://cdn.test/media_q" + i + ".png", "q" + i + ".png", 1000 + i, 800, 1200);
+    fs.writeFileSync(path.join(cdnDir, "media_q" + i + ".png"), PNG);
+    insMedia.run("/cdn/media_q" + i + ".png", "q" + i + ".png", 1000 + i, 800, 1200);
   }
+  // 15 张本机：路径必须是 /images/... 且文件真实存在
   for (let i = 0; i < 15; i++) {
+    fs.writeFileSync(path.join(dir, "media_l" + i + ".png"), PNG);
     insMedia.run("/images/2026/10/media_l" + i + ".png", "l" + i + ".png", 2000 + i, 1200, 800);
   }
-  // 一条真实文件，用于确认被引用时删除按钮禁用
-  const uploadDir = process.env.UPLOAD_DIR || path.join(process.cwd(), "public/images");
-  void uploadDir;
 
   const postIns = db.prepare(
     "INSERT INTO posts (type, title, slug, content, status, created_at, updated_at) VALUES ('post', ?, ?, ?, 'published', ?, ?)"
   );
   postIns.run("MEDIA_POST", "media-post",
-    "正文里引用了一张图 ![x](https://cdn.test/media_q0.png)",
+    "正文里引用了一张图 ![x](/cdn/media_q0.png)",
     new Date(now).toISOString(), new Date(now).toISOString());
   db.close();
   db = null;

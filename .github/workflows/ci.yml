@@ -73,3 +73,6 @@ jobs:
 
       - name: 媒体库（分页 / 筛选口径 / 裂图分块 / 竖图比例）
         run: npm run test:media
+
+      - name: 设置拆页 / 外链 / 操作日志
+        run: npm run test:settings

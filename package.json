@@ -20,13 +20,14 @@
     "verify:assets": "node scripts/verify-assets.mjs",
     "test:next": "node tests/next-integration.mjs",
     "test:browser": "node tests/browser-split.mjs",
-    "test:integration": "npm run test:next && npm run test:browser && npm run test:ui && npm run test:dark && npm run test:admin && npm run test:content && npm run test:comments && npm run test:media",
+    "test:integration": "npm run test:next && npm run test:browser && npm run test:ui && npm run test:dark && npm run test:admin && npm run test:content && npm run test:comments && npm run test:media && npm run test:settings",
     "test:ui": "node tests/ui-kit.mjs",
     "test:dark": "node tests/dark-mode.mjs",
     "test:admin": "node tests/admin-nav-overview.mjs",
     "test:content": "node tests/admin-content-list.mjs",
     "test:comments": "node tests/admin-comments.mjs",
-    "test:media": "node tests/admin-media.mjs"
+    "test:media": "node tests/admin-media.mjs",
+    "test:settings": "node tests/admin-settings.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
