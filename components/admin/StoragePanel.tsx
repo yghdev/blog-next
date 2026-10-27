@@ -115,10 +115,22 @@ export function StoragePanel() {
     } finally { setBusy(false); }
   };
 
+  /**
+   * 状态反馈的配色。
+   *
+   * 原先这里引用的是 --ok-fg / --err-bg / --ok-bd / --err-bd —— 这四个
+   * **从来没有定义过**（规范里叫 --ok / --ok-bg / --ok-border，错误态用
+   * --danger 一族）。注释里写着"暗色安全"，实际因为名字写错，每次都回退到
+   * 硬编码的浅色主题色值：浅绿底 #e7f7ee 配深绿字 #1a7f4b。暗色主题下
+   * 那是一整块亮斑，而且红绿状态色在暗底上完全失真。
+   *
+   * 现在只引用真实存在的语义 token，由主题自动切换。
+   * 注意错误态用 danger 而不是自造的 err：规范里没有 err 这一层。
+   */
   const toneStyle = (t: Tone) => ({
-    background: t === "ok" ? "var(--ok-bg, #e7f7ee)" : t === "err" ? "var(--err-bg, #fdecec)" : "var(--bg-tint)",
-    color: t === "ok" ? "var(--ok-fg, #1a7f4b)" : t === "err" ? "var(--err-fg, #a12626)" : "var(--text-p3)",
-    border: "1px solid " + (t === "ok" ? "var(--ok-bd, #b8e6cc)" : t === "err" ? "var(--err-bd, #f3c4c4)" : "var(--border)"),
+    background: t === "ok" ? "var(--ok-bg)" : t === "err" ? "var(--danger-bg)" : "var(--bg-tint)",
+    color: t === "ok" ? "var(--ok)" : t === "err" ? "var(--danger)" : "var(--text-p3)",
+    border: "1px solid " + (t === "ok" ? "var(--ok-border)" : t === "err" ? "var(--danger-border)" : "var(--border)"),
   });
 
   return (
@@ -129,8 +141,8 @@ export function StoragePanel() {
         <span style={{
           fontSize: ".72rem", padding: "2px 10px", borderRadius: 20, fontWeight: 500,
           ...(st?.configured
-            ? { background: "var(--ok-bg, #e7f7ee)", color: "var(--ok-fg, #1a7f4b)" }
-            : { background: "var(--warn-bg, #fff4e5)", color: "var(--warn-fg, #a15c00)" }),
+            ? { background: "var(--ok-bg)", color: "var(--ok)" }
+            : { background: "var(--warn-bg)", color: "var(--warn)" }),
         }}>
           {st?.configured
             ? "已启用 · " + st.bucket + (st.cdnDomain ? " · " + st.cdnDomain.replace(/^https?:\/\//, "") : "")

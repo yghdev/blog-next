@@ -107,8 +107,11 @@ export function MediaGrid({ items, storageConfigured, cdnDomain }: {
         ) : null}
         <span style={{
           fontSize: ".72rem", padding: "3px 10px", borderRadius: 20,
-          background: storageConfigured ? "var(--ok-bg, #e7f7ee)" : "var(--warn-bg, #fff4e5)",
-          color: storageConfigured ? "var(--ok-fg, #1a7f4b)" : "var(--warn-fg, #a15c00)",
+          // 用规范里真实存在的语义 token。原先写的是 --ok-fg / --warn-fg ——
+          // 这两个从未定义过，于是每次都回退到硬编码的浅色主题色值
+          // （#e7f7ee 浅绿底 + #1a7f4b 深绿字），暗色下就是一块刺眼的亮斑。
+          background: storageConfigured ? "var(--ok-bg)" : "var(--warn-bg)",
+          color: storageConfigured ? "var(--ok)" : "var(--warn)",
         }}>
           {storageConfigured
             ? "新图写入七牛 · " + (cdnDomain || "CDN 未填")
@@ -157,7 +160,7 @@ export function MediaGrid({ items, storageConfigured, cdnDomain }: {
                   <span style={{
                     padding: "1px 6px", borderRadius: 4,
                     background: "var(--bg-tint)",
-                    color: m.storage === "qiniu" ? "var(--ok-fg, #1a7f4b)" : "var(--text-p3)",
+                    color: m.storage === "qiniu" ? "var(--ok)" : "var(--text-p3)",
                   }}>{m.storage === "qiniu" ? "七牛 CDN" : "本机磁盘"}</span>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
