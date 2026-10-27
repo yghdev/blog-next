@@ -61,3 +61,6 @@ jobs:
 
       - name: 暗色缺陷回归（PostList / MediaGrid / StoragePanel）
         run: npm run test:dark
+
+      - name: 后台分组导航与概览页
+        run: npm run test:admin
