@@ -7,9 +7,15 @@ import { Empty } from "./ui";
 type Item = {
   id: number; path: string; filename: string; mime: string; size: number;
   created_at: string; width: number | null; height: number | null; refs: number;
+  /** 图片实际存在哪：七牛（CDN 直链）还是本机磁盘（历史存量） */
+  storage: "qiniu" | "local";
 };
 
-export function MediaGrid({ items }: { items: Item[] }) {
+export function MediaGrid({ items, storageConfigured, cdnDomain }: {
+  items: Item[];
+  storageConfigured: boolean;
+  cdnDomain: string;
+}) {
   const router = useRouter();
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -56,14 +62,30 @@ export function MediaGrid({ items }: { items: Item[] }) {
     setBusy(false);
     if (res.ok) {
       setOrphans(d.orphans || []);
-      setMsg("磁盘 " + d.onDisk + " 个文件 / 库内 " + d.inDb + " 条 / 孤儿 " + d.orphanCount + " 个");
+      setMsg(
+        "本机 " + d.onDisk + " 个 / 七牛 " + (d.qiniu ?? 0) + " 个 / 库内 " + d.inDb + " 条" +
+        " / 孤儿 " + d.orphanCount + " 个" +
+        (d.missingCount ? " / 裂图 " + d.missingCount + " 个" : "")
+      );
     } else setErr(d.error || "扫描失败");
   };
 
   return (
     <>
-      <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+      <div style={{
+        display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap",
+        alignItems: "center",
+      }}>
         <button className="btn btn-sm" onClick={scan} disabled={busy}>扫描孤儿文件</button>
+        <span style={{
+          fontSize: ".72rem", padding: "3px 10px", borderRadius: 20,
+          background: storageConfigured ? "var(--ok-bg, #e7f7ee)" : "var(--warn-bg, #fff4e5)",
+          color: storageConfigured ? "var(--ok-fg, #1a7f4b)" : "var(--warn-fg, #a15c00)",
+        }}>
+          {storageConfigured
+            ? "新图写入七牛 · " + (cdnDomain || "CDN 未填")
+            : "七牛未配置 · 新图写入本机磁盘"}
+        </span>
       </div>
 
       {msg ? <div className="notice notice-ok">{msg}</div> : null}
@@ -102,6 +124,13 @@ export function MediaGrid({ items }: { items: Item[] }) {
                 <div style={{ fontSize: ".68rem", color: "var(--text-p4)", margin: "2px 0 8px" }}>
                   {(m.size / 1024).toFixed(0)} KB{m.width ? " · " + m.width + "×" + m.height : ""}
                   {" · "}{m.refs > 0 ? "引用 " + m.refs : "未引用"}
+                </div>
+                <div style={{ fontSize: ".66rem", color: "var(--text-p4)", marginBottom: 8 }}>
+                  <span style={{
+                    padding: "1px 6px", borderRadius: 4,
+                    background: "var(--bg-tint)",
+                    color: m.storage === "qiniu" ? "var(--ok-fg, #1a7f4b)" : "var(--text-p3)",
+                  }}>{m.storage === "qiniu" ? "七牛 CDN" : "本机磁盘"}</span>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button

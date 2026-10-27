@@ -11,6 +11,7 @@ const NAV = [
   { href: "/admin/media", label: "图片", key: "media" },
   { href: "/admin/links", label: "外链", key: "links" },
   { href: "/admin/audit", label: "日志", key: "audit" },
+  { href: "/admin/storage", label: "存储", key: "storage" },
   { href: "/admin/settings", label: "设置", key: "settings" },
 ];
 

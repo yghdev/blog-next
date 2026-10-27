@@ -5,6 +5,7 @@ import { getDb, type MediaRow } from "@/lib/db";
 import { requireAdmin, handle, noStore, badRequest, notFound, conflict } from "@/lib/guards";
 import { logAudit } from "@/lib/audit";
 import { safeJoin } from "@/lib/upload";
+import { deleteFromStorage, keyFromUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -24,17 +25,31 @@ export const DELETE = handle(async (req: NextRequest, { params }: { params: Prom
     .get("%" + row.path + "%") as { c: number }).c;
   if (refs > 0) throw conflict("这张图仍被 " + refs + " 篇文章引用，请先移除引用");
 
-  const rel = row.path.replace(/^\/images\//, "");
-  try {
-    await fs.unlink(safeJoin(UPLOAD_DIR, rel));
-  } catch {
-    // 文件已不在磁盘上，仍清掉记录
+  // 两条存储路径都要处理：新图在七牛，老图在本机磁盘。
+  // 先删对象再删记录 —— 反过来一旦删对象失败，就会留下一条指向已删记录的孤儿对象。
+  const key = keyFromUrl(row.path);
+  if (key) {
+    try {
+      await deleteFromStorage(key);
+    } catch (e) {
+      // 七牛侧删除失败就中止，避免「库里没了但空间里还在」（会变成看不见的费用）
+      throw new Error("七牛删除失败：" + (e as Error).message);
+    }
+  } else if (row.path.startsWith("/images/")) {
+    const rel = row.path.replace(/^\/images\//, "");
+    try {
+      await fs.unlink(safeJoin(UPLOAD_DIR, rel));
+    } catch {
+      // 文件已不在磁盘上，仍清掉记录
+    }
   }
+
   db.prepare("DELETE FROM media WHERE id = ?").run(id);
 
   logAudit({
     action: "media.delete", userId: ctx.user.id, userName: ctx.user.username,
     targetType: "media", targetId: row.path, ip: ctx.ip, userAgent: ctx.userAgent,
+    meta: { storage: key ? "qiniu" : "local" },
   });
   return noStore(NextResponse.json({ ok: true }));
 });
