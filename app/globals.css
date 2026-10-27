@@ -2816,3 +2816,59 @@ a.kpi-card:hover { border-color: var(--border-strong); transform: translateY(-1p
   padding: var(--space-8);
   margin-bottom: var(--space-7);
 }
+
+/* ── 评论列表项（阶段 02-3）─────────────────────────────
+   一段评论由四层构成：元信息 / 引文 / 正文 / 操作。
+   用固定垂直节奏而不是每处行内 margin，长列表扫读时对齐才稳定。 */
+.comment-item {
+  padding: var(--space-6) var(--space-7);
+  border-bottom: 1px solid var(--border);
+}
+.comment-item:last-child { border-bottom: none; }
+
+.comment-item-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+  font-size: var(--fs-sm);
+  color: var(--text-p3);
+}
+.comment-author-name { color: var(--text-p0); }
+.comment-item-post {
+  color: var(--text-p3);
+  text-decoration: none;
+  /* 长标题要能省略，否则会把元信息行撑成两行 */
+  max-width: 22em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.comment-item-post:hover { color: var(--link); text-decoration: underline; }
+.comment-item-meta {
+  color: var(--text-p4);
+  font-variant-numeric: tabular-nums;
+}
+.comment-item-reply { color: var(--link); }
+
+/* 引用的上一条评论：左侧竖线而不是整块底色，避免和正文抢注意力 */
+.comment-item-quote {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--border-strong);
+  font-size: var(--fs-xs);
+  color: var(--text-p4);
+  line-height: var(--lh-normal);
+}
+
+.comment-item-body {
+  margin-bottom: var(--space-4);
+  font-size: var(--fs-md);
+  color: var(--text-p2);
+  line-height: var(--lh-loose);
+  /* 保留用户输入的换行。评论是纯文本，不该被压成一段 */
+  white-space: pre-wrap;
+  /* 超长无空格串（链接、乱码）必须能断，否则 375px 会横向溢出 */
+  overflow-wrap: anywhere;
+}

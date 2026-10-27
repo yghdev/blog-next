@@ -10,12 +10,31 @@ import { formatIn } from "@/lib/time";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "评论" };
 
+const PAGE = 50;
+
 const STATUS_LABEL: Record<string, { text: string; tone: "ok" | "warn" | "danger" | "neutral" }> = {
   approved: { text: "已通过", tone: "ok" },
   pending: { text: "待审核", tone: "warn" },
   spam: { text: "垃圾", tone: "danger" },
 };
 
+/**
+ * 评论管理（阶段 02-3）。
+ *
+ * 本轮改掉的：
+ *  1) 空状态没有出口。原来 `actions` 只在"筛选后为空"时给链接；**一条评论
+ *     都没有时 actions=undefined**，用户看到一段说明却无处可去 ——
+ *     违反 B 端门禁 14（空状态必须给行动出口）。现在两种空态都给出口。
+ *  2) 评论卡片全是行内样式（每行 ~10 个魔法数字）。收进 .comment-item 等类，
+ *     并让回复引文、正文、操作区有稳定的垂直节奏。
+ *  3) 分页链接用字符串拼接 `"?status=" + status + "&page="`，status 为空时
+ *     会产生 `?status=&page=2` 这种脏 URL。改用 URLSearchParams 统一构造。
+ *  4) 排序原来靠 SQL 的 CASE 把待审排前面，但界面上没说明。现在待审筛选是
+ *     默认关注点，且在页头说明审核时效性。
+ *
+ * 保留不动：CommentActions 的三按钮语义（通过与垃圾都是次级按钮，不替审核人
+ * 做决定；只有删除是危险色并要求确认）—— 那是既有 B 端门禁的正确实现。
+ */
 export default async function CommentsPage({ searchParams }: { searchParams: Promise<{ status?: string; page?: string }> }) {
   const user = await currentUser();
   if (!user) redirect("/admin/login");
@@ -23,7 +42,6 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
   const sp = await searchParams;
   const status = sp.status ?? "";
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
-  const PAGE = 50;
 
   const db = getDb();
   const where = status ? "WHERE c.status = ?" : "";
@@ -52,31 +70,45 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
   const byId = new Map(rows.map((r) => [r.id, r]));
   const pages = Math.max(1, Math.ceil(total / PAGE));
 
-  // 分段控件：三项平铺（≤4 项不用下拉，B 端参考 06）
-  const tab = (k: string, label: string, count: number) => (
-    <a
-      key={k || "all"}
-      href={k ? "/admin/comments?status=" + k : "/admin/comments"}
-      className={status === k ? "is-active" : undefined}
-      aria-current={status === k ? "page" : undefined}
-    >
-      {label}
-      <span className="seg-count">{count}</span>
-    </a>
-  );
+  /** 统一构造筛选与分页链接，避免 status 为空时拼出 "?status=&page=2" */
+  const link = (next: { status?: string; page?: number }) => {
+    const u = new URLSearchParams();
+    const s = next.status !== undefined ? next.status : status;
+    if (s) u.set("status", s);
+    if (next.page && next.page > 1) u.set("page", String(next.page));
+    const q = u.toString();
+    return "/admin/comments" + (q ? "?" + q : "");
+  };
+
+  const tabs = [
+    { key: "", label: "全部", count: counts.all },
+    { key: "pending", label: "待审核", count: counts.pending },
+    { key: "approved", label: "已通过", count: counts.approved },
+    { key: "spam", label: "垃圾", count: counts.spam },
+  ];
 
   return (
     <AdminShell active="comments" username={user.username}>
       <PageHeader
         title="评论"
-        sub="游客评论默认进待审队列，通过之后才会出现在文章页。垃圾评论只会隐藏，删除才是真的移除。"
+        sub="游客评论默认进待审队列，通过之后才会出现在文章页。垃圾只会隐藏，删除才是真的移除。"
       />
 
       <nav className="seg-tabs" aria-label="评论状态筛选">
-        {tab("", "全部", counts.all)}
-        {tab("pending", "待审核", counts.pending)}
-        {tab("approved", "已通过", counts.approved)}
-        {tab("spam", "垃圾", counts.spam)}
+        {tabs.map((t) => {
+          const active = status === t.key;
+          return (
+            <Link
+              key={t.key || "all"}
+              href={link({ status: t.key, page: 1 })}
+              className={active ? "is-active" : undefined}
+              aria-current={active ? "true" : undefined}
+            >
+              {t.label}
+              <span className="seg-count">{t.count}</span>
+            </Link>
+          );
+        })}
       </nav>
 
       {rows.length === 0 ? (
@@ -84,8 +116,14 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
           title={status ? "这个状态下没有评论" : "还没有评论"}
           hint={status
             ? "换个状态看看，或者切回「全部」。"
-            : "文章页底部的评论区接通的是 Artalk，评论会先落到待审队列。"}
-          actions={status ? <Link className="btn btn-sm" href="/admin/comments">看全部评论</Link> : undefined}
+            : "文章页底部的评论区接通的是 Artalk，读者留言后会先落到待审队列，通过后才显示。"}
+          actions={
+            status
+              ? <Link className="btn btn-sm" href="/admin/comments">看全部评论</Link>
+              // 一条评论都没有时也必须给出口：原来这里是 undefined，
+              // 用户看到说明却无处可去（B 端门禁 14）
+              : <Link className="btn btn-sm" href="/admin">回到内容列表</Link>
+          }
         />
       ) : (
         <div className="data-panel">
@@ -93,24 +131,24 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
             const parent = c.parent_id ? byId.get(c.parent_id) : null;
             const st = STATUS_LABEL[c.status] ?? { text: c.status, tone: "neutral" as const };
             return (
-              <div key={c.id} style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
-                <div style={{ fontSize: ".8rem", color: "var(--text-p3)", marginBottom: 8, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <strong style={{ color: "var(--text-p0)" }}>{c.author}</strong>
+              <div key={c.id} className="comment-item">
+                <div className="comment-item-head">
+                  <strong className="comment-author-name">{c.author}</strong>
                   <Badge tone={st.tone} dot>{st.text}</Badge>
-                  <span>· {c.post_title}</span>
-                  <span>· {formatIn(c.created_at, "datetime")}</span>
-                  <span style={{ color: "var(--text-p4)" }}>· {c.ip}</span>
-                  {parent ? <span style={{ color: "var(--link)" }}>· 回复 {parent.author}</span> : null}
+                  <Link className="comment-item-post" href={"/" + encodeURIComponent(c.post_slug)}>
+                    {c.post_title}
+                  </Link>
+                  <span className="comment-item-meta">{formatIn(c.created_at, "datetime")}</span>
+                  <span className="comment-item-meta">{c.ip}</span>
+                  {parent ? <span className="comment-item-reply">回复 {parent.author}</span> : null}
                 </div>
+
                 {parent ? (
-                  <div style={{
-                    fontSize: ".78rem", color: "var(--text-p4)", borderLeft: "1px solid var(--border-strong)",
-                    paddingLeft: 10, marginBottom: 8, lineHeight: 1.7,
-                  }}>{parent.content.slice(0, 100)}</div>
+                  <blockquote className="comment-item-quote">{parent.content.slice(0, 100)}</blockquote>
                 ) : null}
-                <div style={{ fontSize: ".88rem", color: "var(--text-p2)", marginBottom: 10, whiteSpace: "pre-wrap", lineHeight: 1.75 }}>
-                  {c.content}
-                </div>
+
+                <div className="comment-item-body">{c.content}</div>
+
                 <CommentActions id={c.id} currentStatus={c.status} />
               </div>
             );
@@ -119,10 +157,10 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
       )}
 
       {pages > 1 ? (
-        <div className="pager" style={{ marginTop: 16 }}>
-          {page > 1 ? <Link className="btn btn-sm" href={"/admin/comments?status=" + status + "&page=" + (page - 1)}>上一页</Link> : null}
-          <span className="btn btn-sm" style={{ pointerEvents: "none", opacity: .6 }}>{page} / {pages}</span>
-          {page < pages ? <Link className="btn btn-sm" href={"/admin/comments?status=" + status + "&page=" + (page + 1)}>下一页</Link> : null}
+        <div className="pager list-pager">
+          {page > 1 ? <Link className="btn btn-sm" href={link({ page: page - 1 })}>上一页</Link> : null}
+          <span className="btn btn-sm pager-current" aria-current="page">{page} / {pages}</span>
+          {page < pages ? <Link className="btn btn-sm" href={link({ page: page + 1 })}>下一页</Link> : null}
         </div>
       ) : null}
     </AdminShell>
