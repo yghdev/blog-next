@@ -44,8 +44,15 @@ export function forceRemove(target) {
   if (!fs.existsSync(target)) return;
   const st = fs.lstatSync(target);
   if (st.isDirectory()) {
+    // 目录必须先补上 **执行位** 才能遍历与删除其内容。
+    // 这里踩过真坑：原先对目录也写 chmod 0o666，把 x 位剥掉了，目录变成
+    // `drw-rw-rw-` —— 之后 readdirSync/rmdirSync 都进不去，下一次
+    // `next build` 就在 unlink 该目录内文件时报
+    //   EACCES: permission denied, unlink .../better-sqlite3/package.json
+    // 而报错完全指不回"是本脚本把权限改坏的"，排查成本极高。
+    // 结论：文件用 0o666、目录用 0o777，两者语义不同，不能共用一个常量。
+    try { fs.chmodSync(target, 0o777); } catch { /* 已经可写 */ }
     for (const e of fs.readdirSync(target)) forceRemove(path.join(target, e));
-    try { fs.chmodSync(target, 0o666); } catch { /* 已经可写 */ }
     fs.rmdirSync(target);
     return;
   }

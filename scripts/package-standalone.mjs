@@ -8,7 +8,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { materializeNestedNativeDeps } from "./materialize-native-deps.mjs";
+import { materializeNestedNativeDeps, forceRemove } from "./materialize-native-deps.mjs";
 
 const ROOT = process.cwd();
 const OUT = path.join(ROOT, "dist");
@@ -26,18 +26,14 @@ const STANDALONE = path.join(ROOT, ".next", "standalone");
  *
  * dist/ 里含大量中文文件名（out/posts/*.md），所以这里绝不能用 rmSync。
  */
-function forceRemove(target) {
-  if (!fs.existsSync(target)) return;
-  const st = fs.lstatSync(target);
-  if (st.isDirectory()) {
-    for (const e of fs.readdirSync(target)) forceRemove(path.join(target, e));
-    try { fs.chmodSync(target, 0o666); } catch { /* 已经可写 */ }
-    fs.rmdirSync(target);
-    return;
-  }
-  try { fs.chmodSync(target, 0o666); } catch { /* 已经可写 */ }
-  fs.unlinkSync(target);
-}
+/**
+ * 注意：这里**不再**保留一份本地 forceRemove 实现。
+ *
+ * 原先本文件与 materialize-native-deps.mjs 各有一份，看起来一样，实际
+ * 两处都把目录 chmod 成 0o666（剥掉执行位），导致目录变成 `drw-rw-rw-`，
+ * 下一次 build 在 unlink 里面文件时报 EACCES，而报错完全指不回这里。
+ * 同一个函数写两遍就一定会这样漂移 —— 所以统一从共享模块导入。
+ */
 
 forceRemove(OUT);
 fs.mkdirSync(OUT, { recursive: true });
