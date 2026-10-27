@@ -50,6 +50,19 @@ jobs:
       - name: 安装 Playwright 浏览器（双页隔离测试用）
         run: npx playwright install --with-deps chromium
 
+      # Chromium 的系统库由上一步 --with-deps 覆盖（libnspr4 / libnss3 / libasound2）。
+      # 但中文字体**不在**其中，必须显式安装：
+      #   `.ui-tab` 只设了 min-height: 44px，宽度由文字撑开。没有中文字体时
+      #   "文章"两字回退到 DejaVu 测得 43.73px，触发 `width < 44` 的热区断言失败，
+      #   而日志 Math.round 又显示成 44 —— 报错是"44×44 却小于 44"，与真实原因无关。
+      # 这一步失败要高可读，所以在装字体前先打印判定结果。
+      - name: 安装中文字体（后台 UI 断言依赖文字度量）
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends fonts-noto-cjk
+          echo "fc-list :lang=zh 条目数：$(fc-list :lang=zh | wc -l)"
+          fc-match "sans-serif:lang=zh-cn"
+
       - name: 真实 Next HTTP 集成测试（隔离数据库）
         run: npm run test:next
 

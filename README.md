@@ -42,6 +42,30 @@ npm run dev
 
 访问 http://localhost:3000 ，后台在 /admin 。
 
+### 跑浏览器测试的前置条件
+
+`npm run test:ui` / `test:dark` / `test:admin` / `test:content` / `test:comments` /
+`test:media` / `test:settings` / `test:browser` 需要真实 Chromium，因此有两个
+**与代码无关**的环境要求。缺了不会报"缺依赖"，而是报一个看起来像代码 bug 的错：
+
+| 前置条件           | 缺失时的表现                                                    | 安装                                        |
+| ------------------ | --------------------------------------------------------------- | ------------------------------------------- |
+| Chromium 系统库    | `error while loading shared libraries: libnspr4.so`             | `npx playwright install --with-deps chromium` |
+| 中文字体（CJK）    | 热区断言报"44×44 却小于 44"（实际宽度 43.73px，取整后显示 44）  | `sudo apt install fonts-noto-cjk`           |
+
+第二条尤其值得记：`.ui-tab` 只设了 `min-height: 44px`，**宽度由文字撑开**。
+没有中文字体时 "文章" 两字回退到 DejaVu 测得 43.73px，触发 `width < 44`；
+而日志里 `Math.round(43.73)` 显示成 44 —— 报错信息与真实原因完全对不上。
+
+现在测试启动时会自检中文字体（`tests/helpers/prereqs.mjs`），缺字体直接告诉你
+该装什么，不用再对着 "44 < 44" 猜。确认字体是否生效：
+
+```bash
+fc-match "sans-serif:lang=zh-cn"   # 应返回中文黑体，而不是 DejaVu
+```
+
+临时绕过用 `SKIP_FONT_CHECK=1`（会导致基于文字宽度的断言不可信，CI 下该开关无效）。
+
 ## 数据
 
 - 系统数据：`data/blog.db`（本地）或 `DATA_DIR` 指定

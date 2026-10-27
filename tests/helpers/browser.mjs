@@ -12,13 +12,18 @@
  *   手写 CDP 只会在 03.2 反复踩同样的坑（僵尸进程、端口占用、storage 串味）。
  */
 import { chromium } from "@playwright/test";
+import { launchChromium } from "./prereqs.mjs";
 
 /**
  * 起浏览器并返回一个 controller。
  * 调用方负责 finally 里 await controller.close()。
+ *
+ * 启动前先过环境前置检查（中文字体 / Chromium 系统库），理由见
+ * helpers/prereqs.mjs 顶部注释：缺字体时**不会报错**，而是让基于文字宽度的
+ * 断言算错（43.73px 判成 <44，日志取整又显示 44），排查成本极高。
  */
 export async function startBrowser({ headless = true } = {}) {
-  const browser = await chromium.launch({ headless });
+  const browser = await launchChromium(chromium, { headless });
 
   /**
    * 新建一个独立 context 并登录。
