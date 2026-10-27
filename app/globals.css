@@ -2286,3 +2286,330 @@ a.kpi-card:hover { border-color: var(--border-strong); transform: translateY(-1p
     font-size: 16px;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   阶段 01-A：追加型设计令牌（纯追加，不改任何既有值与规则）
+   ──────────────────────────────────────────────────────────────
+   三层结构，禁止跨层直接引用：
+     1) 基础色板 —— 已存在于本文件顶部（--bg / --text-p0~p4 / --cat-1~7 等）
+     2) 语义色   —— 已存在（--danger / --ok / --warn / --info 及其 -bg 与 -border）
+     3) 组件别名 —— 本段新增，只引用第 2 层，不写具体色值
+
+   为什么用别名而不是再定义一套颜色：现有 --text-p0~p4 / --ok* / --danger* 已经
+   覆盖了全部语义，再建平行体系必然出现"同名不同色"。所以这里只做映射，
+   组件样式一律引用别名，将来调整主题只改这一层。
+
+   刻度来源（不是拍脑袋）：统计了 app/ 与 components/ 下全部内联样式与 CSS 的
+   实际用量，间距高频值是 4/6/8/10/12/14/16/20/24，圆角是 8/10/12/14/20，
+   字号是 .72/.78/.82/.85/.9/.95rem。令牌只收录这些真实出现过的值，
+   多出来的刻度等于鼓励新代码写出没人用过的间距。
+   ══════════════════════════════════════════════════════════════ */
+:root {
+  /* ── 间距刻度（1 单位 = 4px，与现有 padding 数值对齐）── */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 8px;
+  --space-4: 10px;
+  --space-5: 12px;
+  --space-6: 14px;
+  --space-7: 16px;
+  --space-8: 20px;
+  --space-9: 24px;
+  --space-10: 32px;
+
+  /* ── 圆角 ── */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-pill: 999px;
+
+  /* ── 字号（沿用既有 .72~.95rem 刻度；--fs 仍是根字号 16px）── */
+  --fs-2xs: .72rem;
+  --fs-xs: .78rem;
+  --fs-sm: .82rem;
+  --fs-md: .9rem;
+  --fs-lg: .95rem;
+  --fs-xl: 1.15rem;
+  --fs-2xl: 1.3rem;
+
+  /* ── 行高 ── */
+  --lh-tight: 1.6;
+  --lh-normal: 1.7;
+  --lh-loose: 1.8;
+
+  /* ── 字重（暗色主题会在本文件末尾统一降 40，这里只给语义名）── */
+  --fw-normal: 400;
+  --fw-medium: 550;
+  --fw-semibold: 560;
+  --fw-bold: 650;
+
+  /* ── 组件别名：按钮 ── */
+  --btn-bg: var(--bg);
+  --btn-bg-hover: var(--bg-subtle);
+  --btn-border: var(--border-strong);
+  --btn-text: var(--text-p0);
+  --btn-primary-bg: var(--text-p0);
+  --btn-primary-text: var(--bg);
+  --btn-ghost-text: var(--text-p3);
+  --btn-disabled-opacity: .45;
+
+  /* ── 组件别名：表单 ── */
+  --field-bg: var(--bg);
+  --field-bg-focus: var(--card-bg);
+  --field-border: var(--border-strong);
+  --field-label: var(--text-p3);
+  --field-hint: var(--text-p4);
+  --field-error: var(--danger);
+
+  /* ── 组件别名：数据容器 ── */
+  --table-bg: var(--card-bg);
+  --table-border: var(--border);
+  --table-head-bg: var(--bg-subtle);
+  --table-row-hover: var(--bg-subtle);
+  --table-cell-text: var(--text-p1);
+  --table-head-text: var(--text-p4);
+
+  /* ── 组件别名：骨架屏 ──
+     用半透明中性色而不是固定灰：暗色主题下固定灰会亮得像贴纸。 */
+  --skeleton-bg: var(--bg-subtle);
+  --skeleton-shine: color-mix(in oklab, var(--text-p0) 6%, transparent);
+
+  /* ── 组件别名：浮层（Toast）── */
+  --toast-bg: var(--surface-2);
+  --toast-border: var(--border-strong);
+  --toast-shadow: var(--lift-2);
+  --toast-text: var(--text-p1);
+}
+
+/* ── Toast 容器（固定右上，手机端贴底并避让安全区）────────────────
+   用 position:fixed 直接挂 body 下的容器；不依赖 portal，因为本组件不嵌在
+   带 backdrop-filter 的顶栏里（那条坑见 docs/design-system.md 第三节第 7 条）。 */
+.ui-toast-viewport {
+  position: fixed;
+  top: calc(var(--space-7) + var(--safe-top));
+  right: var(--space-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  z-index: 90;
+  max-width: min(360px, calc(100vw - var(--space-10)));
+  pointer-events: none;
+}
+.ui-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--toast-border);
+  border-radius: var(--radius-lg);
+  background: var(--toast-bg);
+  box-shadow: var(--toast-shadow);
+  color: var(--toast-text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-normal);
+  pointer-events: auto;
+  /* 进场：位移 + 透明度，缩短到 160ms，比"弹出"克制 */
+  animation: ui-toast-in .16s ease-out;
+}
+.ui-toast-text { flex: 1; min-width: 0; text-wrap: pretty; }
+.ui-toast-close {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  /* 触控热区 44px：视觉是 20px 图标，热区靠 padding 撑满，不改视觉尺寸 */
+  width: var(--tap); height: var(--tap);
+  margin: calc(var(--space-5) * -1) calc(var(--space-6) * -1) calc(var(--space-5) * -1) 0;
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--text-p4); font-size: var(--fs-lg); line-height: 1;
+}
+.ui-toast-close:hover { color: var(--text-p0); }
+.ui-toast[data-tone="ok"]     { border-color: var(--ok-border);     background: var(--ok-bg);     color: var(--ok); }
+.ui-toast[data-tone="danger"] { border-color: var(--danger-border); background: var(--danger-bg); color: var(--danger); }
+.ui-toast[data-tone="warn"]   { border-color: var(--warn-border);   background: var(--warn-bg);   color: var(--warn); }
+.ui-toast[data-tone="info"]   { border-color: var(--info-border);   background: var(--info-bg);   color: var(--info); }
+@keyframes ui-toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 820px) {
+  .ui-toast-viewport {
+    top: auto;
+    left: var(--space-5);
+    right: var(--space-5);
+    /* 贴底必须避让安全区，否则 iPhone 上被 Home 条压住 */
+    bottom: calc(var(--space-7) + var(--safe-bottom));
+    max-width: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast { animation: none; }
+}
+
+/* ── 骨架屏 ──
+   只在"确实要等"的地方用。形状要贴合最终内容（同高同宽），
+   否则内容到达时会有二次跳动，比直接空白更难受。 */
+.ui-skeleton {
+  display: block;
+  border-radius: var(--radius-xs);
+  background: var(--skeleton-bg);
+  position: relative;
+  overflow: hidden;
+}
+.ui-skeleton::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, var(--skeleton-shine), transparent);
+  transform: translateX(-100%);
+  animation: ui-skeleton-shine 1.4s ease-in-out infinite;
+}
+@keyframes ui-skeleton-shine { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .ui-skeleton::after { animation: none; }
+}
+.ui-skeleton-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+
+/* ── Tabs（真 tablist：键盘可达、aria-selected 只挂在 role=tab 上）──
+   注意区分：**筛选按钮**要用 aria-pressed，筛选链接用 aria-current；
+   只有真正切换「面板」的控件才配 role=tab。挂错会骗过读屏。 */
+.ui-tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--table-border);
+  margin-bottom: var(--space-7);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ui-tabs::-webkit-scrollbar { display: none; }
+.ui-tab {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: var(--tap);
+  padding: 0 var(--space-6);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  /* 未选中态用 --text-p2 而不是 --text-p3：
+     tab 是**可交互控件**，其文字属 WCAG 1.4.3 的正文级别（4.5:1），
+     不能按"次要元信息"的 3:1 放宽。--text-p3 在暗色下只有 ~3.9:1，不达标。 */
+  color: var(--text-p2);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+}
+.ui-tab:hover { color: var(--text-p0); }
+.ui-tab[aria-selected="true"] {
+  color: var(--text-p0);
+  border-bottom-color: var(--text-p0);
+  font-weight: var(--fw-semibold);
+}
+.ui-tab:disabled { opacity: var(--btn-disabled-opacity); cursor: not-allowed; }
+.ui-tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in oklab, var(--text-p3) 22%, transparent);
+  border-radius: var(--radius-xs);
+}
+
+/* ── StatBar（横向比例条，用于"构成"类指标）──
+   不做无标签的纯色条：每一段必须有文字或 aria-label，否则读屏读不出来。 */
+.ui-statbar { display: flex; flex-direction: column; gap: var(--space-3); }
+.ui-statbar-track {
+  display: flex;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  background: var(--bg-subtle);
+}
+.ui-statbar-seg { height: 100%; transition: width .24s ease; }
+.ui-statbar-legend {
+  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6);
+  font-size: var(--fs-xs); color: var(--text-p3);
+}
+.ui-statbar-legend-item { display: inline-flex; align-items: center; gap: var(--space-2); }
+.ui-statbar-swatch {
+  width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0;
+}
+.ui-statbar-value { font-variant-numeric: tabular-nums; color: var(--text-p2); }
+
+/* ── DataTable ──
+   不引入原生 <table>：后台列表在 ≤820px 要变成两行卡片，而原生表格改布局
+   需要 display:block 覆盖一堆默认行为，反而更难维护。这里用 div + ARIA
+   role 保留表格语义（读屏仍能按表格导航），视觉走已有的 .data-panel/.data-row。 */
+.ui-table { border: 1px solid var(--table-border); border-radius: var(--radius-xl); background: var(--table-bg); overflow: hidden; }
+.ui-table-head {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  background: var(--table-head-bg);
+  border-bottom: 1px solid var(--table-border);
+  font-size: var(--fs-2xs);
+  /* 用 --text-p3 而不是 --table-head-text(=--text-p4)：
+     列头是**表格内容的一部分**，读屏会读出来，属正文级文字，需 4.5:1。
+     --text-p4 在暗色卡片底上只有 3.57:1，不达标。
+     这里只改新组件的取值，不动全局 --text-p4（那是既有视觉，属 02 范围）。 */
+  color: var(--text-p3);
+  font-weight: var(--fw-medium);
+  letter-spacing: .02em;
+}
+.ui-table-row {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--table-border);
+  font-size: var(--fs-md);
+  color: var(--table-cell-text);
+  transition: background .14s;
+}
+.ui-table-row:last-child { border-bottom: none; }
+.ui-table-row:hover { background: var(--table-row-hover); }
+.ui-table-cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-table-cell--grow { flex: 1; }
+.ui-table-cell--num { flex-shrink: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.ui-table-foot {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--table-border);
+  font-size: var(--fs-xs);
+  color: var(--text-p4);
+}
+@media (max-width: 820px) {
+  /* 手机端：表头隐藏，行变成两行（主信息 + 元信息），与 .data-row 行为一致 */
+  .ui-table-head { display: none; }
+  .ui-table-row { flex-wrap: wrap; row-gap: var(--space-2); }
+  .ui-table-cell { white-space: normal; }
+  .ui-table-cell--num { text-align: left; }
+}
+
+/* ── Field（标签 + 控件 + 提示/错误）──
+   错误文案用语义色，且不靠颜色单独传达 —— 前面有文字"错误："，
+   色盲用户和暗色主题下都能分辨。 */
+.ui-field { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-6); }
+.ui-field-label {
+  font-size: var(--fs-sm);
+  color: var(--field-label);
+  font-weight: var(--fw-medium);
+}
+.ui-field-label .ui-field-req { color: var(--danger); margin-left: var(--space-1); }
+.ui-field-hint { font-size: var(--fs-xs); color: var(--field-hint); line-height: var(--lh-normal); text-wrap: pretty; }
+.ui-field-error { font-size: var(--fs-xs); color: var(--field-error); line-height: var(--lh-normal); }
+.ui-field-error::before { content: "错误："; font-weight: var(--fw-semibold); }
+.ui-field[data-invalid="true"] .input,
+.ui-field[data-invalid="true"] .textarea { border-color: var(--danger-border); }
+.ui-field[data-invalid="true"] .input:focus,
+.ui-field[data-invalid="true"] .textarea:focus {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger-border), 0 0 0 3px var(--danger-bg);
+}
+
+/* ── 行内加载转圈（Button loading 用）──
+   单独定义 keyframes 而不是复用别处的 spinner：现有的旋转关键帧散落在
+   各组件里且名称不一致，组件层只引用这一个，避免"同一个动画三份实现"。 */
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  /* 减弱动效时不做无限旋转：改为呼吸透明度，仍能表达"进行中" */
+  .btn[aria-busy="true"] > span[aria-hidden="true"] {
+    animation: ui-pulse 1.2s ease-in-out infinite !important;
+  }
+}
+@keyframes ui-pulse { 50% { opacity: .35; } }
