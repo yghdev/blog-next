@@ -2872,3 +2872,103 @@ a.kpi-card:hover { border-color: var(--border-strong); transform: translateY(-1p
   /* 超长无空格串（链接、乱码）必须能断，否则 375px 会横向溢出 */
   overflow-wrap: anywhere;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   后台左侧栏（阶段 02-1 修正版）
+   ──────────────────────────────────────────────────────────────
+   上一版把导航放在顶部单行、分组标题只在抽屉里出现，却命名为"侧栏分组导航"，
+   名不副实。这里改成真正的侧栏：桌面纵向排列、分组标题常驻可见。
+
+   为什么必须是侧栏：四组共 9 项（设置拆页后会更多），排在 920px 的一行里
+   装不下只能横向滚动，而"要滚动才能看全导航"本身就是导航失败。侧栏纵向
+   有无限空间，分组层次才真的呈现出来。
+
+   布局用 grid 而不是 flex：侧栏固定宽、内容自适应，且不需要给 main 算
+   padding-left（flex 下容易漏掉，一换断点就错位）。
+   ══════════════════════════════════════════════════════════════ */
+.admin-shell {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  min-height: 100dvh;
+  background: var(--bg-subtle);
+}
+
+.admin-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-7) var(--space-4) var(--space-6);
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  overflow-y: auto;
+  /* 侧栏滚动条在 macOS 上默认浮动，Windows 上会占位导致内容左右跳 1px */
+  scrollbar-width: thin;
+}
+.admin-sidebar-brand {
+  padding: 0 var(--space-3);
+  font-size: var(--fs-xl);
+}
+.admin-side-compose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--tap);
+}
+
+.admin-side-nav { display: flex; flex-direction: column; gap: var(--space-5); }
+.admin-side-group { display: flex; flex-direction: column; gap: 2px; }
+.admin-side-title {
+  padding: 0 var(--space-3);
+  margin-bottom: var(--space-1);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  letter-spacing: .08em;
+  color: var(--text-p4);
+}
+.admin-side-nav a {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-md);
+  color: var(--text-p2);
+  transition: background .14s, color .14s;
+}
+.admin-side-nav a:hover { background: var(--bg-subtle); color: var(--text-p0); }
+.admin-side-nav a.is-active {
+  background: var(--bg-subtle);
+  color: var(--text-p0);
+  font-weight: var(--fw-semibold);
+}
+/* 选中项加左侧竖条：深色主题下仅靠底色差异不够明显 */
+.admin-side-nav a.is-active { box-shadow: inset 2px 0 0 var(--link); }
+
+.admin-sidebar-foot {
+  margin-top: auto;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+
+/* 右侧主体：顶栏（仅手机显示）+ 内容 */
+.admin-body { min-width: 0; display: flex; flex-direction: column; }
+.admin-topbar-fill { flex: 1; }
+
+/* 桌面隐藏手机顶栏；内容区不再做居中限宽（侧栏已经占据左侧） */
+@media (min-width: 821px) {
+  .admin-topbar { display: none; }
+  .admin-main { max-width: 1080px; margin: 0; padding: 30px 32px 72px; }
+}
+
+/* 平板/手机：回到单列，顶栏 + 抽屉 */
+@media (max-width: 820px) {
+  .admin-shell { display: block; }
+  .admin-sidebar { display: none; }
+  .admin-topbar { display: block; }
+  .admin-main { max-width: 920px; margin: 0 auto; }
+}
