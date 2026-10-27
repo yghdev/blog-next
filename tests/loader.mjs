@@ -10,17 +10,26 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CANDIDATE_EXTS = [".ts", ".tsx", ".mjs", ".js"];
 
 function firstExisting(base) {
-  for (const e of CANDIDATE_EXTS) if (fs.existsSync(base + e) && fs.statSync(base + e).isFile()) return base + e;
+  for (const e of CANDIDATE_EXTS) {
+    const p = base + e;
+    if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
+  }
   if (fs.existsSync(base) && fs.statSync(base).isDirectory()) {
     for (const e of CANDIDATE_EXTS) {
-      const idx = path.join(base, "index" + e);
-      if (fs.existsSync(idx)) return idx;
+      const p = path.join(base, "index" + e);
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) return p;
     }
   }
   return null;
 }
 
 export async function resolve(specifier, context, next) {
+  if (specifier === "next/server") return next("next/server.js", context);
+  if (specifier === "next/headers" || specifier === "next/cache") {
+    if (!process.env.BLOG_TEST_NEXT_STUBS) throw new Error("Set BLOG_TEST_NEXT_STUBS=1 only for isolated route tests");
+    return { url: "test-next-request:" + specifier, shortCircuit: true };
+  }
+
   try {
     return await next(specifier, context);
   } catch (err) {
@@ -36,3 +45,18 @@ export async function resolve(specifier, context, next) {
     return next(pathToFileURL(target).href, { ...context, parentURL: context.parentURL });
   }
 }
+
+export async function load(url, context, next) {
+  if (url.startsWith("test-next-request:")) {
+    const which = url.slice("test-next-request:".length);
+    return {
+      format: "module",
+      shortCircuit: true,
+      source: `globalThis.__blogTestNext ??= { cookies: () => ({ get: () => undefined }), headers: async () => ({ get: () => null }), revalidateTag() {}, revalidatePath() {} };\n` + (which === "next/headers"
+        ? "export const cookies = () => globalThis.__blogTestNext.cookies(); export const headers = () => globalThis.__blogTestNext.headers();"
+        : "export const revalidateTag = (...a) => globalThis.__blogTestNext.revalidateTag(...a); export const revalidatePath = (...a) => globalThis.__blogTestNext.revalidatePath(...a); export const unstable_cache = (fn) => fn; export const unstable_noStore = () => {};" ),
+    };
+  }
+  return next(url, context);
+}
+
