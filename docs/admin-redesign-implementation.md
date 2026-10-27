@@ -98,31 +98,31 @@ revision INTEGER NOT NULL DEFAULT 1
 
 每篇文章最多一个当前服务端草稿：
 
-| 字段 | 约束与用途 |
-| --- | --- |
-| post_id | 主键；NOT NULL；references posts ON DELETE CASCADE |
-| client_draft_id | 客户端 UUID；UNIQUE；与 post_id 绑定 |
-| owner_user_id | 创建者；用于草稿归属校验和诊断 |
-| base_revision | 草稿基于的 posts.revision |
-| draft_revision | 从 1 开始，每次成功变更递增 |
-| snapshot_json | 服务端规范化后的完整快照 |
-| snapshot_hash | 服务端计算的 SHA-256 |
-| created_at / updated_at | UTC ISO 时间 |
-| updated_by | 最近保存者；references users ON DELETE SET NULL，删用户不删草稿 |
+| 字段                    | 约束与用途                                                      |
+| ----------------------- | --------------------------------------------------------------- |
+| post_id                 | 主键；NOT NULL；references posts ON DELETE CASCADE              |
+| client_draft_id         | 客户端 UUID；UNIQUE；与 post_id 绑定                            |
+| owner_user_id           | 创建者；用于草稿归属校验和诊断                                  |
+| base_revision           | 草稿基于的 posts.revision                                       |
+| draft_revision          | 从 1 开始，每次成功变更递增                                     |
+| snapshot_json           | 服务端规范化后的完整快照                                        |
+| snapshot_hash           | 服务端计算的 SHA-256                                            |
+| created_at / updated_at | UTC ISO 时间                                                    |
+| updated_by              | 最近保存者；references users ON DELETE SET NULL，删用户不删草稿 |
 
 ### 3.3 post_revisions
 
-| 字段 | 约束与用途 |
-| --- | --- |
-| id | 主键 |
-| post_id | NOT NULL；references posts ON DELETE CASCADE |
-| revision | 与 posts 发布后的 revision 对应；UNIQUE(post_id, revision) |
-| snapshot_json | 不可变完整快照 |
-| snapshot_hash | 快照身份 |
-| reason | `baseline` 或 `publish`；恢复历史本身不插入 |
-| publish_request_id | 发布幂等标识；baseline 为 NULL；非空时全局唯一 |
-| created_by | 操作者 |
-| created_at | 实际写入时间；baseline 不伪造原发布时间 |
+| 字段               | 约束与用途                                                 |
+| ------------------ | ---------------------------------------------------------- |
+| id                 | 主键                                                       |
+| post_id            | NOT NULL；references posts ON DELETE CASCADE               |
+| revision           | 与 posts 发布后的 revision 对应；UNIQUE(post_id, revision) |
+| snapshot_json      | 不可变完整快照                                             |
+| snapshot_hash      | 快照身份                                                   |
+| reason             | `baseline` 或 `publish`；恢复历史本身不插入                |
+| publish_request_id | 发布幂等标识；baseline 为 NULL；非空时全局唯一             |
+| created_by         | 操作者                                                     |
+| created_at         | 实际写入时间；baseline 不伪造原发布时间                    |
 
 历史列表按 id/created_at 展示，不能把 revision 当作连续发布序号。
 
@@ -263,32 +263,32 @@ GET /api/admin/posts/:id/publish-result?requestId=<uuid>
 
 ### 6.1 端点
 
-| 方法 | 路径 | 职责 |
-| --- | --- | --- |
-| GET | /api/admin/posts/:id/draft | 返回草稿身份与快照；无草稿时明确返回 null 和当前 post revision |
-| PUT | /api/admin/drafts/:clientDraftId | 新文章首次保存及同身份重试 |
-| PUT | /api/admin/posts/:id/draft | 已有/新壳文章的完整快照保存 |
-| DELETE | /api/admin/posts/:id/draft | 带版本校验地放弃服务端草稿 |
-| POST | /api/admin/posts/:id/draft/rebase | 用户确认后替换完整快照并更新基线 |
-| POST | /api/admin/posts/:id/publish | 发布当前服务端草稿 |
-| POST | /api/admin/posts/:id/restore-version | 用历史快照替换当前草稿 |
-| PATCH | /api/admin/posts/:id | 明确的元数据补丁，不再全字段覆盖 |
+| 方法   | 路径                                 | 职责                                                           |
+| ------ | ------------------------------------ | -------------------------------------------------------------- |
+| GET    | /api/admin/posts/:id/draft           | 返回草稿身份与快照；无草稿时明确返回 null 和当前 post revision |
+| PUT    | /api/admin/drafts/:clientDraftId     | 新文章首次保存及同身份重试                                     |
+| PUT    | /api/admin/posts/:id/draft           | 已有/新壳文章的完整快照保存                                    |
+| DELETE | /api/admin/posts/:id/draft           | 带版本校验地放弃服务端草稿                                     |
+| POST   | /api/admin/posts/:id/draft/rebase    | 用户确认后替换完整快照并更新基线                               |
+| POST   | /api/admin/posts/:id/publish         | 发布当前服务端草稿                                             |
+| POST   | /api/admin/posts/:id/restore-version | 用历史快照替换当前草稿                                         |
+| PATCH  | /api/admin/posts/:id                 | 明确的元数据补丁，不再全字段覆盖                               |
 
 旧 POST/PATCH 路由在迁移期只能委托上述服务，不能形成另一套数据语义。
 
 ### 6.1.1 编辑器调用矩阵
 
-| 场景 | 调用顺序 |
-| --- | --- |
-| 新建且尚未保存 | 本地生成 clientDraftId，只写本地，不请求服务端 |
-| 新文章首次保存 | PUT /api/admin/drafts/:clientDraftId → 返回 postId 与 DraftIdentity |
-| 新文章首次保存后 | 当前会话绑定 postId，后续 PUT /posts/:id/draft |
-| 打开已有文章 | 取得 posts 当前版本并 GET /posts/:id/draft；有草稿加载草稿，无草稿加载 posts |
-| 旧文章首次建草稿 | expectedDraftRevision=0，并携带打开时的 expectedPostRevision |
-| 首次保存超时 | 重试同一 clientDraftId；相同快照幂等返回，不同快照走正常版本校验 |
-| 发布 | POST /posts/:id/publish，正文取服务端当前草稿 |
-| 恢复历史 | POST /posts/:id/restore-version，成功后继续编辑草稿 |
-| 放弃服务端草稿 | 带版本校验 DELETE /posts/:id/draft |
+| 场景             | 调用顺序                                                                     |
+| ---------------- | ---------------------------------------------------------------------------- |
+| 新建且尚未保存   | 本地生成 clientDraftId，只写本地，不请求服务端                               |
+| 新文章首次保存   | PUT /api/admin/drafts/:clientDraftId → 返回 postId 与 DraftIdentity          |
+| 新文章首次保存后 | 当前会话绑定 postId，后续 PUT /posts/:id/draft                               |
+| 打开已有文章     | 取得 posts 当前版本并 GET /posts/:id/draft；有草稿加载草稿，无草稿加载 posts |
+| 旧文章首次建草稿 | expectedDraftRevision=0，并携带打开时的 expectedPostRevision                 |
+| 首次保存超时     | 重试同一 clientDraftId；相同快照幂等返回，不同快照走正常版本校验             |
+| 发布             | POST /posts/:id/publish，正文取服务端当前草稿                                |
+| 恢复历史         | POST /posts/:id/restore-version，成功后继续编辑草稿                          |
+| 放弃服务端草稿   | 带版本校验 DELETE /posts/:id/draft                                           |
 
 新文章首次保存超时且尚未取得 postId 时，不得改走另一个新建接口。
 
@@ -296,15 +296,15 @@ GET /api/admin/posts/:id/publish-result?requestId=<uuid>
 
 所有端点必须 requireAdmin。发布与编辑沿用现有规则，破坏性删除保留二次验证，不给高频草稿操作增加 TOTP：
 
-| 操作 | step-up |
-| --- | --- |
-| 读取、保存、rebase 草稿 | 不需要 |
-| 删除服务端草稿 | 不需要；有版本保护且可重新编辑 |
-| 发布、取消发布 | 不需要 |
-| 恢复历史到草稿 | 不需要；须显式确认和双版本校验 |
-| 单篇/批量软删除 | 需要 |
-| 单篇彻底删除 | 需要 |
-| 批量发布、取消发布、恢复回收站 | 不需要，保持当前行为 |
+| 操作                           | step-up                        |
+| ------------------------------ | ------------------------------ |
+| 读取、保存、rebase 草稿        | 不需要                         |
+| 删除服务端草稿                 | 不需要；有版本保护且可重新编辑 |
+| 发布、取消发布                 | 不需要                         |
+| 恢复历史到草稿                 | 不需要；须显式确认和双版本校验 |
+| 单篇/批量软删除                | 需要                           |
+| 单篇彻底删除                   | 需要                           |
+| 批量发布、取消发布、恢复回收站 | 不需要，保持当前行为           |
 
 ### 6.2 旧文章首次创建草稿
 
@@ -358,13 +358,13 @@ rebase 请求带 expectedDraftRevision、最新 expectedPostRevision、用户确
 
 ### 7.1 批量操作
 
-| 操作 | 有当前草稿时 | 无草稿时 |
-| --- | --- | --- |
-| publish | 跳过该条，HAS_UNPUBLISHED_DRAFT；不隐式选择快照 | 按逐项 expectedRevision 发布当前 posts |
-| unpublish | 允许，保留草稿，revision+1；再次保存触发基线冲突 | 允许，revision+1 |
-| delete | 允许软删并保留草稿，revision+1；再次保存 410 | 同样处理 |
-| restore | 允许，revision+1；恢复后保存仍需基线校验 | 同样处理 |
-| purge | 不可逆硬删，级联草稿/历史 | 同样处理 |
+| 操作      | 有当前草稿时                                     | 无草稿时                               |
+| --------- | ------------------------------------------------ | -------------------------------------- |
+| publish   | 跳过该条，HAS_UNPUBLISHED_DRAFT；不隐式选择快照  | 按逐项 expectedRevision 发布当前 posts |
+| unpublish | 允许，保留草稿，revision+1；再次保存触发基线冲突 | 允许，revision+1                       |
+| delete    | 允许软删并保留草稿，revision+1；再次保存 410     | 同样处理                               |
+| restore   | 允许，revision+1；恢复后保存仍需基线校验         | 同样处理                               |
+| purge     | 不可逆硬删，级联草稿/历史                        | 同样处理                               |
 
 每个成功项 revision 恰好 +1；跳过、冲突、不存在项完全不变。缓存只针对成功项失效。
 
@@ -404,15 +404,15 @@ rebuild/migrate-wp 采用维护窗口：
 
 以“本次发送快照 + 预期成功后的 draftRevision”为核对上下文，GET 当前草稿：
 
-| 结果 | 处理 |
-| --- | --- |
-| postId/clientDraftId/baseRevision/hash 匹配，draftRevision 为预期成功值 | already-saved |
-| hash 相同且 draftRevision 更大 | 当前值已同步，但不能清除更新的本地编辑 |
-| posts 基线已变化 | BASE_REVISION_CONFLICT |
-| hash 不同且 draftRevision 更大 | DRAFT_REVISION_CONFLICT |
-| 服务端身份仍等于 preIdentity，只是与本次发送内容不同 | 本次未落库，可使用原请求身份有界重试 |
-| draftRevision 未变，但服务端 hash 已不同于 preIdentity | `INCONSISTENT_STATE`，暂停该文自动保存，重新读取并显式核对，禁止旧版本直接重试 |
-| GET 失败或身份无法确认 | 保持 unknown，不清草稿、不盲目覆盖 |
+| 结果                                                                    | 处理                                                                           |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| postId/clientDraftId/baseRevision/hash 匹配，draftRevision 为预期成功值 | already-saved                                                                  |
+| hash 相同且 draftRevision 更大                                          | 当前值已同步，但不能清除更新的本地编辑                                         |
+| posts 基线已变化                                                        | BASE_REVISION_CONFLICT                                                         |
+| hash 不同且 draftRevision 更大                                          | DRAFT_REVISION_CONFLICT                                                        |
+| 服务端身份仍等于 preIdentity，只是与本次发送内容不同                    | 本次未落库，可使用原请求身份有界重试                                           |
+| draftRevision 未变，但服务端 hash 已不同于 preIdentity                  | `INCONSISTENT_STATE`，暂停该文自动保存，重新读取并显式核对，禁止旧版本直接重试 |
+| GET 失败或身份无法确认                                                  | 保持 unknown，不清草稿、不盲目覆盖                                             |
 
 保存前必须记录 preIdentity、sentSnapshotHash 和预期成功版本。正常“请求未到达服务端”与“hash 变了但 revision 未 bump”不得混淆。INCONSISTENT_STATE 记录告警、保留本地完整快照，不阻断查看/导出/其他文章，但必须重新读取、比较并显式 rebase 后才能继续保存。
 
@@ -482,16 +482,16 @@ rebuild/migrate-wp 采用维护窗口：
 
 交付与落点（文件名即交付物，不再有"文档里写了但仓库里没有"的项）：
 
-| 交付 | 落点 | 验证方式 |
-| --- | --- | --- |
-| 独立临时数据库 fixture | `tests/helpers/isolated-db.ts` | `assertIsolatedDataDir()` 拒绝 `data`；断言 `dbPath()===隔离路径`；跑完整套测试后 `data/blog.db` mtime 不变 |
-| 长期行为测试 | `tests/posts-api.test.ts` | 鉴权 401、草稿不可公开（直读/公开路由/搜索/RSS/首页）、软删+恢复、发布状态、正文逐字节不变、slug 冲突 409 |
-| 缺陷 pin（只记录不固化） | `tests/posts-api.test.ts` 的 4 条 `KNOWN-DEFECT` | trim 改写正文、`cover:null` 清不掉、全字段 PATCH 静默清空 categories/tags、别名单写不在事务内（触发器取证后残留） |
-| 独立应用上下文 | `tests/helpers/next-server.mjs` | 真进程 + 临时库 + 空闲端口；启动前清空 Next 缓存目录并断言其不存在 |
-| 缓存预热/验证辅助 | `tests/helpers/public-cache.mjs` | `warmPublicCache` / `searchProbe`（no-store 直查）/ `waitForFresh` |
-| 浏览器双页测试基础 | `tests/helpers/browser.mjs` + `tests/browser-split.mjs` | 同 context 两 page 共享 storage；不同 context 的 storage 与 cookie 完全隔离；匿名 context 落 `/admin/login` |
-| HTTP 集成测试 | `tests/next-integration.mjs` | 真实 Next 上断言 unstable_cache 真实性、revalidateTag 失效、RSS/搜索/sitemap 各自语义、308+Location、HTTP 鉴权 |
-| CI 全链路 | `.github/workflows/ci.yml` | Node 24：typecheck → 测试 → FTS5 冒烟 → 构建 → test:next → test:browser |
+| 交付                     | 落点                                                    | 验证方式                                                                                                          |
+| ------------------------ | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 独立临时数据库 fixture   | `tests/helpers/isolated-db.ts`                          | `assertIsolatedDataDir()` 拒绝 `data`；断言 `dbPath()===隔离路径`；跑完整套测试后 `data/blog.db` mtime 不变       |
+| 长期行为测试             | `tests/posts-api.test.ts`                               | 鉴权 401、草稿不可公开（直读/公开路由/搜索/RSS/首页）、软删+恢复、发布状态、正文逐字节不变、slug 冲突 409         |
+| 缺陷 pin（只记录不固化） | `tests/posts-api.test.ts` 的 4 条 `KNOWN-DEFECT`        | trim 改写正文、`cover:null` 清不掉、全字段 PATCH 静默清空 categories/tags、别名单写不在事务内（触发器取证后残留） |
+| 独立应用上下文           | `tests/helpers/next-server.mjs`                         | 真进程 + 临时库 + 空闲端口；启动前清空 Next 缓存目录并断言其不存在                                                |
+| 缓存预热/验证辅助        | `tests/helpers/public-cache.mjs`                        | `warmPublicCache` / `searchProbe`（no-store 直查）/ `waitForFresh`                                                |
+| 浏览器双页测试基础       | `tests/helpers/browser.mjs` + `tests/browser-split.mjs` | 同 context 两 page 共享 storage；不同 context 的 storage 与 cookie 完全隔离；匿名 context 落 `/admin/login`       |
+| HTTP 集成测试            | `tests/next-integration.mjs`                            | 真实 Next 上断言 unstable_cache 真实性、revalidateTag 失效、RSS/搜索/sitemap 各自语义、308+Location、HTTP 鉴权    |
+| CI 全链路                | `.github/workflows/ci.yml`                              | Node 24：typecheck → 测试 → FTS5 冒烟 → 构建 → test:next → test:browser                                           |
 
 阶段 00 期间确认并写进代码注释的三个真实坑（后续阶段不要再踩）：
 
@@ -514,11 +514,11 @@ rebuild/migrate-wp 采用维护窗口：
 
 交付与落点：
 
-| 交付 | 落点 | 说明 |
-| --- | --- | --- |
-| 三层 token（基础色板 → 语义色 → 组件别名） | `app/globals.css` 末尾追加块 | **纯追加**：`git diff --numstat` 为 +327 / -0，未改任何既有值与既有规则 |
-| 基础组件 | `components/ui/{Button,Field,Skeleton,Tabs,Toast,StatBar,DataTable}.tsx` | 全部复用既有 `.btn/.input/.data-*` 类名，渲染结果与旧页面一致 |
-| 组件对照页 | `app/admin/dev/ui`（`page.tsx` 门禁 + `kit.tsx` fixture） | 只复用真实组件；未登录走后台统一重定向，生产未启用时 404 |
+| 交付                                       | 落点                                                                     | 说明                                                                    |
+| ------------------------------------------ | ------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| 三层 token（基础色板 → 语义色 → 组件别名） | `app/globals.css` 末尾追加块                                             | **纯追加**：`git diff --numstat` 为 +327 / -0，未改任何既有值与既有规则 |
+| 基础组件                                   | `components/ui/{Button,Field,Skeleton,Tabs,Toast,StatBar,DataTable}.tsx` | 全部复用既有 `.btn/.input/.data-*` 类名，渲染结果与旧页面一致           |
+| 组件对照页                                 | `app/admin/dev/ui`（`page.tsx` 门禁 + `kit.tsx` fixture）                | 只复用真实组件；未登录走后台统一重定向，生产未启用时 404                |
 
 刻度不是自定的：间距/圆角/字号取自 `app/` 与 `components/` 的实际用量统计
 （间距高频 4/6/8/10/12/14/16/20/24，圆角 8/10/12/14/20，字号 .72~.95rem），
@@ -526,12 +526,14 @@ rebuild/migrate-wp 采用维护窗口：
 
 对照页覆盖空 / 加载 / 错误 / 禁用 / 长文本 / 双主题 / 窄屏，并由
 `tests/ui-kit.mjs` 在真实浏览器里判定（不靠肉眼）：
+
 - 未启用时**已登录也 404**；启用后正常渲染；不进导航；带 `noindex`
 - 双主题确实切换 token 驱动色（`rgb(252,252,251) → rgb(26,26,25)`）
 - 暗色对比度全部 ≥ 4.5:1（最小 5.21）
 - 375px 无横向溢出（375/375），tab 与 toast 关闭键热区 ≥44
 
 走查中修正的两个真实问题（都不是"调整观感"）：
+
 1. `.ui-table-head` 原用 `--text-p4`，暗色卡片底上只有 3.57:1。列头是表格内容、
    读屏会朗读，属正文级文字，改用 `--text-p3`（5.21:1）。只改新组件取值，
    不动全局 `--text-p4`（那是既有视觉，属 02 范围）。
@@ -539,6 +541,7 @@ rebuild/migrate-wp 采用维护窗口：
    其文字按 WCAG 1.4.3 属正文级，改用 `--text-p2`（9.46:1）。
 
 配套的测量方法学（避免"改了就过"）：
+
 - 对比度数学抽到 `tests/helpers/contrast.mjs`，并用 WCAG 官方值做单元测试
   （黑白 21:1、`#767676` 对白 4.54:1）。原因是同一页面两版手写公式分别算出
   2.77 与 1.89，尺子不准时任何结论都不可信。
@@ -569,11 +572,11 @@ border: 1px solid var(--ok-bd, #b8e6cc);
 
 改动（仅这三处颜色，行为与布局零改动）：
 
-| 文件 | 改动 |
-| --- | --- |
-| `MediaGrid.tsx` | `--ok-fg/--warn-fg` → `--ok/--warn`；去掉全部 hex fallback |
+| 文件               | 改动                                                                                |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| `MediaGrid.tsx`    | `--ok-fg/--warn-fg` → `--ok/--warn`；去掉全部 hex fallback                          |
 | `StoragePanel.tsx` | `toneStyle()` 与状态徽章的 `ok/err` 映射改 `--ok*/--danger*`；`err` 归一到 `danger` |
-| `PostList.tsx` | 复核：`#e5484d` 已在既有轮次改为 `.btn-danger`，无残留字面量 |
+| `PostList.tsx`     | 复核：`#e5484d` 已在既有轮次改为 `.btn-danger`，无残留字面量                        |
 
 防回归（两道，都验证过"能抓到原 bug"）：
 
@@ -599,21 +602,22 @@ border: 1px solid var(--ok-bd, #b8e6cc);
 
 每页一个提交；同一提交内迁移完该功能，不留两套实现。保存协议不变，回归全绿。
 
-#### 02-1 侧栏分组导航与概览页（已完成，2026-10-27）
+#### 02-1 左侧栏分组导航与概览页（已完成，2026-10-27，含一次返工）
 
 **导航改为四组任务导航，「写文章」常驻**（方案 §9.1）：
 
-| 分组 | 项 |
-| --- | --- |
-| 工作 | 概览 |
-| 内容 | 文章、评论、回收站 |
+| 分组 | 项                     |
+| ---- | ---------------------- |
+| 工作 | 概览                   |
+| 内容 | 文章、评论、回收站     |
 | 资源 | 媒体、外链、存储、日志 |
-| 系统 | 设置 |
+| 系统 | 设置                   |
 
-- 桌面顶栏保持单行紧凑（不显示分组标题）：「写文章」常驻在导航右侧。
-  8 个平铺词条在 920px 里已接近上限，再加分组标题必然挤爆 —— 桌面有足够横向
-  空间形成扫读节奏，手机没有，所以分组层次只在抽屉里以标题出现。
-- 手机端「写文章」移进抽屉顶部（整行、48dp），顶栏不再挤压。
+- **桌面是真正的左侧栏**（216px，纵向排列，四组标题常驻可见）。
+  首次实施时这里被做成了顶部单行、分组标题只在抽屉里出现，却命名为
+  "侧栏分组导航" —— 名不副实，已返工修正。
+- 手机（≤820px）侧栏隐藏，改为顶栏 + 底部抽屉，每项 48dp；
+  「写文章」在桌面位于侧栏顶部，手机移进抽屉顶部（整行）。
 - 分组标题 `aria-hidden`：它只是视觉层次，不是导航项，不该进入读屏导航流。
 - 现有 `active` key（`posts` 等）保持不变，避免为了导航改名去动一堆页面传参。
 
@@ -626,9 +630,13 @@ border: 1px solid var(--ok-bd, #b8e6cc);
 无收益的连带改动，且会让既有书签失效。分组导航解决了"找不到入口"的真问题，
 URL 保持不变。
 
-验证（`tests/admin-nav-overview.mjs`，8 项）：顶栏 9 项齐全、写文章常驻、
-KPI 全部可点、375px 无横向溢出、抽屉四组标题 `aria-hidden`、抽屉项热区 ≥48、
-空状态有出口、有数据时正确呈现草稿与计数。
+验证（`tests/admin-nav-overview.mjs`，8 项）：**桌面存在可见侧栏且位于内容左侧**、
+侧栏四组标题常驻可见、顶栏在桌面隐藏、写文章常驻侧栏、KPI 全部可点、
+手机侧栏隐藏/顶栏出现/抽屉四组且热区 ≥48、375px 无横向溢出、空状态有出口。
+
+首次实施时该测试断言的是"顶栏 9 项"，跟着错误实现一起通过了 ——
+测试断言错了对象，就不会发现名不副实。现在第一条断言直接锁"侧栏可见 + 在左侧"，
+把这类问题变成测试能抓住的东西。
 
 #### 02-2 内容列表（已完成，2026-10-27）
 
@@ -716,7 +724,6 @@ KPI 全部可点、375px 无横向溢出、抽屉四组标题 `aria-hidden`、�
 - 真实 Next 集成测试负责 unstable_cache、缓存预热、revalidateTag、RSS/搜索/sitemap 各自语义、308、HTTP 鉴权。缓存失效断言只能在这一层执行，需要真实起服务。
 - 浏览器测试负责本地草稿隔离、跨会话冲突、断网/响应丢失、保存中继续输入、首次保存超时和发布丢响应。
 - 测试控制钩子只存在于测试运行环境，不提供公开维护接口。
-
 
 ### 11.1 数据安全硬门槛
 
