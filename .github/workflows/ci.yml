@@ -55,3 +55,6 @@ jobs:
 
       - name: 浏览器双页隔离基础测试
         run: npm run test:browser
+
+      - name: 组件对照页走查（双主题 / 窄屏 / 对比度 / 热区）
+        run: npm run test:ui

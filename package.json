@@ -20,7 +20,8 @@
     "verify:assets": "node scripts/verify-assets.mjs",
     "test:next": "node tests/next-integration.mjs",
     "test:browser": "node tests/browser-split.mjs",
-    "test:integration": "npm run test:next && npm run test:browser"
+    "test:integration": "npm run test:next && npm run test:browser && npm run test:ui",
+    "test:ui": "node tests/ui-kit.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
