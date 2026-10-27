@@ -67,3 +67,6 @@ jobs:
 
       - name: 内容列表页（筛选语义 / 计数联动 / 窄屏）
         run: npm run test:content
+
+      - name: 评论管理页（空状态出口 / 脏 URL / 超长内容）
+        run: npm run test:comments
