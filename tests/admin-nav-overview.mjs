@@ -61,7 +61,7 @@ try {
   const sideLabels = await page.locator(".admin-side-nav a").evaluateAll((els) =>
     els.map((e) => (e.textContent || "").trim())
   );
-  for (const want of ["概览", "文章", "评论", "回收站", "媒体", "外链", "存储", "日志", "设置"]) {
+  for (const want of ["概览", "内容", "评论", "回收站", "媒体", "外链", "存储", "日志", "设置"]) {
     assert.ok(sideLabels.includes(want), "侧栏缺少导航项：" + want + " 实际=" + JSON.stringify(sideLabels));
   }
   console.log("PASS phase02: 侧栏四组标题常驻可见 + " + sideLabels.length + " 个导航项");
@@ -71,16 +71,13 @@ try {
   assert.ok(composeVisible, "桌面侧栏应常驻「写文章」主操作");
   console.log("PASS phase02: 侧栏常驻写文章");
 
-  /* ---------------- 4. KPI 全部可点 ---------------- */
-  const kpis = await page.locator(".kpi-card").evaluateAll((els) =>
-    els.map((e) => ({ tag: e.tagName, href: e.getAttribute("href") }))
-  );
-  assert.ok(kpis.length >= 4, "概览页应有至少 4 个 KPI，实际 " + kpis.length);
-  for (const k of kpis) {
-    assert.equal(k.tag, "A", "每个 KPI 都应可点进对应筛选");
-    assert.ok(k.href && k.href.startsWith("/admin"), "KPI 链接应指向后台： " + JSON.stringify(k));
-  }
-  console.log("PASS phase02: 概览 KPI 全部可点（" + kpis.length + " 个）");
+  /* ---------------- 4. 首屏继续工作，统计不抢占任务区 ---------------- */
+  assert.equal(await page.locator(".kpi-card").count(), 0, "概览不应恢复 KPI 卡片");
+  assert.equal(await page.locator(".ui-statbar").count(), 0, "概览不应恢复装饰性比例条");
+  assert.equal(await page.locator(".continue-card").count(), 1, "首屏必须有继续工作入口");
+  assert.equal(await page.locator(".mobile-topbar").count(), 0, "后台不得渲染前台 MobileNav");
+  assert.equal(await page.locator(".site-footer").count(), 0, "后台不得渲染前台页脚");
+  console.log("PASS phase02: 继续工作优先，无 KPI/比例条，无前台壳");
 
   /* ---------------- 5. 手机：侧栏隐藏、顶栏出现、抽屉分组 ---------------- */
   await page.setViewportSize({ width: 375, height: 800 });
@@ -128,11 +125,9 @@ try {
   assert.equal(make.status(), 200, await make.text());
   await p2.reload({ waitUntil: "networkidle" });
 
-  const draftShown = await p2.locator(".overview-item-main").allTextContents();
+  const draftShown = await p2.locator(".work-item-title").allTextContents();
   assert.ok(draftShown.some((t) => /OVERVIEW_DRAFT/.test(t)),
     "概览「未发布草稿」应列出新草稿，实际=" + JSON.stringify(draftShown));
-  const draftKpi = await p2.locator(".kpi-card").first().textContent();
-  assert.match(draftKpi || "", /1/, "未发布草稿 KPI 应显示 1，实际=" + JSON.stringify(draftKpi));
   console.log("PASS phase02: 有数据时概览正确呈现草稿与计数");
 
   console.log("All phase-02 nav/overview checks passed.");
