@@ -32,6 +32,20 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  /**
+   * 批量结果条（阶段 04）。
+   *
+   * 为什么不能只显示一句"已完成，影响 N 条"：批量有跳过/冲突/不存在三种
+   * 非成功状态，用户需要知道**哪几条没动、为什么**。只报成功数会让人以为
+   * 全部生效，于是不会去处理剩下的那几条。
+   */
+  const [bulkResult, setBulkResult] = useState<
+    | null
+    | {
+        summary: { total: number; succeeded: number; skipped: number; conflicts: number; notFound: number };
+        problems: { id: number; message: string }[];
+      }
+  >(null);
   const [needCode, setNeedCode] = useState(false);
   const [code, setCode] = useState("");
   /* 待确认的破坏性动作。null = 没有弹窗 */
@@ -67,24 +81,13 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
     setBusy(false);
     setPending(null);
     if (res.ok) {
-      // 逐项结果里失败的原因要能说清，否则用户不知道哪几条没动、为什么
-      const s = d.summary ?? {};
-      const parts: string[] = [];
-      if (s.succeeded) parts.push("成功 " + s.succeeded);
-      if (s.skipped) parts.push("跳过 " + s.skipped);
-      if (s.conflicts) parts.push("冲突 " + s.conflicts);
-      if (s.notFound) parts.push("不存在 " + s.notFound);
-      setMsg("已处理：" + (parts.join(" · ") || "无变更"));
-
-      const problems = (d.results ?? []).filter((r: any) => !r.ok);
-      if (problems.length) {
-        setErr(
-          problems
-            .slice(0, 3)
-            .map((r: any) => "ID " + r.id + "：" + (r.message ?? r.code ?? "未处理"))
-            .join("；") + (problems.length > 3 ? " …等 " + problems.length + " 条" : "")
-        );
-      }
+      // 逐项结果结构化呈现：成功/跳过/冲突/不存在分开计数，失败条目给出原因
+      const summary = d.summary ?? { total: 0, succeeded: 0, skipped: 0, conflicts: 0, notFound: 0 };
+      const problems = (d.results ?? [])
+        .filter((r: any) => !r.ok)
+        .map((r: any) => ({ id: r.id, message: r.message ?? r.code ?? "未处理" }));
+      setBulkResult({ summary, problems });
+      setMsg("");
       setSelected([]); setCode(""); setNeedCode(false);
       router.refresh();
     } else if (res.status === 428) {
@@ -166,6 +169,42 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
     <>
       {msg ? <div className="notice notice-ok">{msg}</div> : null}
       {err ? <div className="notice notice-error">{err}</div> : null}
+
+      {/* 批量结果条：分开计数，并列出没成功的具体原因（阶段 04） */}
+      {bulkResult ? (
+        <div className="bulk-result-bar" role="status">
+          <span className="bulk-result-stat">
+            共 <span className="bulk-result-num">{bulkResult.summary.total}</span> 条
+          </span>
+          <span className="bulk-result-stat">
+            成功 <span className="bulk-result-num ok">{bulkResult.summary.succeeded}</span>
+          </span>
+          {bulkResult.summary.skipped > 0 ? (
+            <span className="bulk-result-stat">
+              跳过 <span className="bulk-result-num warn">{bulkResult.summary.skipped}</span>
+            </span>
+          ) : null}
+          {bulkResult.summary.conflicts > 0 ? (
+            <span className="bulk-result-stat">
+              冲突 <span className="bulk-result-num danger">{bulkResult.summary.conflicts}</span>
+            </span>
+          ) : null}
+          {bulkResult.summary.notFound > 0 ? (
+            <span className="bulk-result-stat">
+              不存在 <span className="bulk-result-num danger">{bulkResult.summary.notFound}</span>
+            </span>
+          ) : null}
+          {bulkResult.problems.length ? (
+            <span className="cmdk-meta" title={bulkResult.problems.map((p) => "ID " + p.id + "：" + p.message).join("\n")}>
+              未完成：{bulkResult.problems.slice(0, 2).map((p) => "ID " + p.id + "（" + p.message + "）").join("；")}
+              {bulkResult.problems.length > 2 ? " …等 " + bulkResult.problems.length + " 条" : ""}
+            </span>
+          ) : null}
+          <button type="button" className="btn btn-sm" onClick={() => setBulkResult(null)} style={{ marginLeft: "auto" }}>
+            知道了
+          </button>
+        </div>
+      ) : null}
 
       {needCode || code ? (
         <div className="filter-bar" style={{ marginBottom: 12 }}>

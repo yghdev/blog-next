@@ -4,6 +4,7 @@ import { useState } from "react";
 import { LogoutButton } from "./LogoutButton";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { CommandPalette } from "./CommandPalette";
 
 /**
  * 后台导航（方案 §9.1：四组任务导航，「写文章」常驻）。
@@ -153,6 +154,9 @@ export function AdminShell({ children, active, username }: {
           ))}
         </nav>
       </BottomSheet>
+
+      {/* 命令面板挂在壳里：所有后台页面都能 Ctrl/Cmd+K 唤起 */}
+      <CommandPalette />
     </div>
   );
 }

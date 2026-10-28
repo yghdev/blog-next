@@ -3575,3 +3575,122 @@ a.kpi-card:hover { border-color: var(--border-strong); transform: translateY(-1p
   .version-line { grid-template-columns: 1.2em 1fr; }
   .version-line .version-no:first-child { display: none; }
 }
+
+/* ── 命令面板（阶段 04，方案 §10）──
+   定位是"效率工具"，所以它自己不能成为新的故障点：
+   搜索失败时静态入口照常可用（组件里已保证），这里只负责呈现。 */
+.cmdk-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, .42);
+}
+.cmdk {
+  width: min(620px, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
+  overflow: hidden;
+}
+/* 输入框去边框、只留底部一条分隔：看起来像"一个框"，而不是"表单里的一个字段" */
+.cmdk-input {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-p0);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  padding: var(--space-4) var(--space-5);
+  outline: none;
+}
+.cmdk-input::placeholder { color: var(--text-p4); }
+
+.cmdk-error {
+  padding: var(--space-2) var(--space-5);
+  font-size: .78rem;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.cmdk-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  overflow-y: auto;
+  flex: 1;
+}
+.cmdk-empty { padding: var(--space-5); color: var(--text-p3); font-size: var(--fs-sm); text-align: center; }
+
+.cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  /* 手机端热区：命令面板在手机上同样是主要操作入口 */
+  min-height: var(--tap);
+}
+/* 选中态用底色 + 左侧条双线索，不只靠颜色深浅 */
+.cmdk-item.is-active { background: var(--bg-subtle); box-shadow: inset 2px 0 0 var(--text-p1); }
+.cmdk-icon { color: var(--text-p4); flex-shrink: 0; width: 1em; text-align: center; }
+.cmdk-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cmdk-title { font-size: var(--fs-sm); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdk-meta { font-size: .72rem; color: var(--text-p3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdk-badge { font-size: .68rem; color: var(--text-p3); border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 1px 6px; flex-shrink: 0; }
+
+.cmdk-foot {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-5);
+  border-top: 1px solid var(--border);
+  font-size: .72rem;
+  color: var(--text-p3);
+}
+.cmdk-foot kbd {
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 0 4px;
+  margin-right: 2px;
+  background: var(--bg-subtle);
+}
+.cmdk-foot-hint { margin-left: auto; color: var(--text-p4); }
+
+/* 批量结果条：批量操作后告诉用户"哪几条成功、哪几条没动"，
+   避免"全选->操作"之后只有一个笼统的"已完成" */
+.bulk-result-bar {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  font-size: var(--fs-sm);
+}
+.bulk-result-stat { display: flex; align-items: center; gap: var(--space-2); }
+.bulk-result-num { font-variant-numeric: tabular-nums; font-weight: var(--fw-semibold); }
+.bulk-result-num.ok { color: var(--ok); }
+.bulk-result-num.warn { color: var(--warn); }
+.bulk-result-num.danger { color: var(--danger); }
+
+@media (max-width: 820px) {
+  .cmdk-backdrop { padding-top: 6vh; }
+  .cmdk { width: 94vw; max-height: 78vh; }
+  .cmdk-foot-hint { display: none; }
+}
