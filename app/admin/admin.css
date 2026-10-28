@@ -2896,3 +2896,8 @@ a.fx-figure:hover .fx-figure-label { color: var(--fx-ink-2); }
 @media (max-width: 820px) {
   .fx-action-row .btn { flex: 1; min-height: var(--tap); }
 }
+
+/* 登录页的品牌落点：与侧栏同一个 wordmark，但更克制（这是入口，不是工作区） */
+.login-brand { display: flex; flex-direction: column; margin-bottom: var(--fx-s5); }
+.login-brand .fx-brandmark { font-size: 1.25rem; }
+.login-brand .fx-brand-sub { margin-top: 4px; }

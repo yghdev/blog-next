@@ -43,8 +43,14 @@ export default function LoginPage() {
   return (
     <div className="login-wrap fx-scope">
       <div className="login-card">
+        {/* 登录页是后台品牌的第一落点：进来第一眼就该认出这是哪个站点的后台，
+            而不是一个通用登录框。品牌标识与侧栏同源（.fx-brandmark）。 */}
+        <div className="login-brand">
+          <span className="fx-brandmark">flechazo</span>
+          <span className="fx-brand-sub">妄司逸的小世界</span>
+        </div>
         <h1 className="login-title">后台登录</h1>
-        <p className="login-sub">blog.yghsite.cn</p>
+        <p className="login-sub">仅站长可访问</p>
 
         <form onSubmit={submit} noValidate>
           {err ? <div className="notice notice-error" role="alert">{err}</div> : null}
