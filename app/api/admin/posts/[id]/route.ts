@@ -18,8 +18,11 @@ export const GET = handleWrite(async (req: NextRequest, { params }: { params: Pr
   const conn = db();
   const row = conn.prepare("SELECT * FROM posts WHERE id = ?").get(id);
   if (!row) return noStoreJson({ error: "文章不存在", code: "POST_NOT_FOUND", status: 404 }, { status: 404 });
+  // 带上 snapshot_json：编辑器要用它判断"服务端草稿是否比 posts 新"，
+  // 冲突对比也要正文。只给 hash 的话前端还得再发一次 GET 才能拿到内容。
   const draft = conn.prepare(
-    "SELECT client_draft_id, base_revision, draft_revision, snapshot_hash, updated_at FROM post_drafts WHERE post_id = ?"
+    "SELECT client_draft_id, base_revision, draft_revision, snapshot_hash, snapshot_json, updated_at " +
+    "FROM post_drafts WHERE post_id = ?"
   ).get(id);
   return noStoreJson({ post: row, draft: draft ?? null });
 });

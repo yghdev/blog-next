@@ -277,3 +277,76 @@ export function newRequestId(): string {
 export function newClientDraftId(): string {
   return "cid-" + newRequestId();
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   自动保存用的传输层（阶段 03.2）
+   ══════════════════════════════════════════════════════════════════ */
+
+/**
+ * 把 saveDraft 的 Result 翻译成状态机能消费的 SaveOutcome。
+ *
+ * 为什么要单独一个函数：状态机只关心"能不能重试、要不要停"，
+ * 不该知道 409 和 403 的 HTTP 细节。这层翻译放在这里，
+ * 状态机就能在 Node 里用假传输层完整测试（tests/autosave.test.ts）。
+ */
+export async function autosaveOnce(input: {
+  postId?: number;
+  clientDraftId: string;
+  snapshot: Snapshot;
+  snapshotHash: string;
+  expectedPostRevision: number;
+  expectedDraftRevision: number;
+}): Promise<
+  | { kind: "ok"; identity: DraftIdentity }
+  | { kind: "conflict"; serverSnapshotHash?: string; currentDraftRevision?: number; currentPostRevision?: number }
+  | { kind: "invalid"; message: string }
+  | { kind: "forbidden"; message: string }
+  | { kind: "retryable"; message: string }
+  | { kind: "timeout"; message: string }
+  | { kind: "gone"; message: string }
+> {
+  const r = await saveDraft(input);
+  if (r.ok) return { kind: "ok", identity: r.value.identity };
+
+  const e = r.error;
+  switch (e.kind) {
+    case "conflict":
+      return {
+        kind: "conflict",
+        serverSnapshotHash: e.server?.serverSnapshotHash,
+        currentDraftRevision: e.server?.currentDraftRevision,
+        currentPostRevision: e.server?.currentPostRevision,
+      };
+    case "forbidden":
+      return { kind: "forbidden", message: e.message };
+    case "gone":
+    case "notFound":
+      return { kind: "gone", message: e.message };
+    case "invalid":
+      return { kind: "invalid", message: e.message };
+    default:
+      // status 0 = 网络层失败（可能已提交也可能没到）—— 必须与 5xx 区分
+      if (e.status === 0) return { kind: "timeout", message: e.message };
+      return { kind: "retryable", message: e.message };
+  }
+}
+
+/** 读当前草稿状态（超时核对用，方案 §8.2） */
+export async function observeDraft(postId: number): Promise<{
+  draft: { identity: DraftIdentity; snapshotHash: string; baseRevision: number; draftRevision: number } | null;
+  postRevision: number;
+} | null> {
+  const r = await loadDraft(postId);
+  if (!r.ok) return null;
+  return {
+    draft: r.value.draft
+      ? {
+          identity: r.value.draft.identity,
+          snapshotHash: r.value.draft.identity.snapshotHash,
+          baseRevision: r.value.draft.identity.baseRevision,
+          draftRevision: r.value.draft.identity.draftRevision,
+        }
+      : null,
+    postRevision: r.value.postRevision,
+  };
+}

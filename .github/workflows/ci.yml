@@ -89,3 +89,6 @@ jobs:
 
       - name: 设置拆页 / 外链 / 操作日志
         run: npm run test:settings
+
+      - name: 自动保存与本地恢复（崩溃 / 断网 / 多标签 / 冲突）
+        run: npm run test:autosave
