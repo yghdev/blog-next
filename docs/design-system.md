@@ -167,6 +167,7 @@
 | 移动端多选项、筛选 | `BottomSheet`（三分屏，≤80dvh） |
 | 录入表单的浮层 | `maskClosable={false}`，退出必须点「取消」 |
 | 全局跳转与搜索 | `CommandPalette`（Ctrl/Cmd+K，防抖 + 空/错误态 + 不劫持输入框） |
+| 从已有资源里挑一个 | `MediaPicker`（编辑器内「媒体库」，只做插入不做管理） |
 
 ---
 
@@ -201,6 +202,33 @@ npm run test:autosave && npm run test:editor && npm run test:cmdk
 **引用了但没定义的 `--token`**（fallback 会静默接管，暗色主题凭空失效）、
 **用了但没样式的 `className`**（写错类名不报错，只是「看起来差点意思」）。
 改完样式跑一遍，它会直接告出文件名与缺失项。
+
+### 上传体积：三个数字必须同步
+
+| 位置 | 值 | 作用 |
+| --- | --- | --- |
+| `lib/upload.ts` `MAX_UPLOAD_BYTES` | 8MB | 图片上限（应用层判定） |
+| `lib/upload.ts` `MAX_VIDEO_BYTES` | 40MB | 视频上限（应用层判定） |
+| `next.config.ts` `experimental.proxyClientMaxBodySize` | 48mb | Next 读进内存的上限 |
+| `deploy/nginx-blog.conf` `client_max_body_size` | 48m | 网关上限 |
+| `lib/image-plan.ts` 的两个 `_ASSUMED` | 同上 | 客户端预检副本 |
+
+**改任何一个都要同步其余几个。** 少改哪一层，就会在那一层被挡，而且报错常常
+指不到体积上：
+
+- 只改应用层不改 Next → 超出部分被**静默截断**，接口拿到空 `file` 字段，
+  报「没有收到文件」。这是 2026-10-28 上传视频时真实踩到的坑，排查了两轮。
+- 只改应用层不改 nginx → nginx 直接 413，应用层连日志都没有。
+
+`tests/image-plan.test.ts` 会断言两个 `_ASSUMED` 与服务端常量一致，
+另有一层是人工核对（Next / nginx 的配置无法在单测里验证）。
+
+### 视频为什么用 `<video>` 而不是 iframe
+
+自托管视频就在本站域名下，原生 `<video controls playsinline>` 才能拿到进度条、
+全屏、画中画，也不必为它放宽 CSP 的 `frame-src`。`playsinline` 不能省 ——
+少了它 iOS 会在点播放时强制全屏接管整个页面。
+平台外链（B 站/YouTube）仍走 iframe，那是另一条路径（`lib/video-embed.ts`）。
 
 真机量一遍（headless Chrome + CDP）比肉眼可靠：
 

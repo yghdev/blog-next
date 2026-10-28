@@ -366,6 +366,21 @@ a:hover { color: var(--link-hover); }
 
    这里补回容器语义：用 aspect-ratio 撑出 16:9，iframe 填满这一格。
    不依赖文章内容改写，任何绝对定位的嵌入都会被收进这个盒子。 */
+/* 自托管视频（2026-10-28）：编辑器可上传 MP4/WebM 到图床，正文里是 <video>。
+   与图片同一套「圆角 + 细边 + 上下留白」，宽度撑满内容栏，高度按 16:9 兜底
+   以免视频元数据到达前把正文顶得跳一下。 */
+.prose video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  margin: 1.4em 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #000;
+}
+
 .prose iframe {
   max-width: 100%;
   border: none;

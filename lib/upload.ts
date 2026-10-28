@@ -134,3 +134,81 @@ export function safeJoin(root: string, rel: string): string {
   if (!abs.startsWith(base + path.sep) && abs !== base) throw new Error("path traversal blocked");
   return abs;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   视频上传（2026-10-28 补）
+   ──────────────────────────────────────────────────────────────────────
+   与图片**完全同一套安全模型**：只认 magic bytes，扩展名与 MIME 都由服务端
+   决定，客户端给的 file.type / file.name 一个都不采信。
+
+   为什么单独一套大小上限：
+     图片 8MB 是为了让 nginx(12m) 有足够余量；视频天然更大。这里视频放到
+     40MB，同时 nginx 需要同步上调 client_max_body_size（见 deploy/nginx-blog.conf）。
+     两个数必须一起改，否则会在 nginx 层被 413 挡掉，而应用层完全看不到。
+
+   为什么不做"任意格式"：
+     只允许 MP4 / WebM 两个浏览器原生能播的容器。允许 .mov / .avi 只会产生
+     "传上去了但没人能播"的文件，那比拒绝更糟 —— 用户以为成功了。
+   ══════════════════════════════════════════════════════════════════════ */
+
+export type DetectedVideo = { mime: string; ext: string };
+
+const VIDEO_SIGS: { mime: string; ext: string; test: (b: Buffer) => boolean }[] = [
+  {
+    // ISO BMFF：offset 4 起是 "ftyp"，brand 决定是 mp4 家族（mp42/isom/avc1/M4V 等）
+    mime: "video/mp4", ext: ".mp4",
+    test: (b) => {
+      if (b.length < 12) return false;
+      if (b.subarray(4, 8).toString("latin1") !== "ftyp") return false;
+      const brand = b.subarray(8, 12).toString("latin1");
+      // qt 是 QuickTime(.mov)：浏览器支持度差，明确排除，别让它伪装成 mp4
+      if (brand === "qt  ") return false;
+      return /^(isom|iso2|iso4|iso5|iso6|mp41|mp42|avc1|M4V|M4A|dash|mmp4|MSNV|NDAS|f4v)/.test(brand);
+    },
+  },
+  {
+    // EBML：1A 45 DF A3，再往后 4 字节含 "webm" 或 "matroska"
+    mime: "video/webm", ext: ".webm",
+    test: (b) => {
+      if (b.length < 32) return false;
+      if (!(b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3)) return false;
+      // DocType 在 EBML header 里，通常前 64 字节内就能看到
+      return b.subarray(0, 64).toString("latin1").includes("webm");
+    },
+  },
+];
+
+/**
+ * 识别真实视频类型。识别不出返回 null（白名单策略，未知一律拒绝）。
+ * MP4 与 WebM 覆盖了浏览器 <video> 能播的绝大多数情况。
+ */
+export function detectVideo(buf: Buffer): DetectedVideo | null {
+  for (const s of VIDEO_SIGS) {
+    try {
+      if (s.test(buf)) return { mime: s.mime, ext: s.ext };
+    } catch {
+      // 极短文件的越界，视为不识别
+    }
+  }
+  return null;
+}
+
+/**
+ * 视频上传上限 40MB。
+ *
+ * 依据不是"越大越好"，而是这台机器的实际能力：出口带宽 400~700KB/s，
+ * 40MB 的片段首次加载约 60~100 秒。再大就属于"传上去也没人看得完"，
+ * 那种内容应该走 B 站/YouTube 外链（编辑器里仍然支持）。
+ *
+ * 与 MAX_UPLOAD_BYTES 一样，改这里必须同步改 deploy/nginx-blog.conf 的
+ * client_max_body_size（要留 ≥ 20% 余量给 multipart 边界与表单字段）。
+ */
+export const MAX_VIDEO_BYTES = 40 * 1024 * 1024;
+
+/** 统一的体积上限判定，供上传接口按类型选择 */
+export function limitFor(mime: string): number {
+  return mime.startsWith("video/") ? MAX_VIDEO_BYTES : MAX_UPLOAD_BYTES;
+}
+
+/** 视频按天配额。比图片严得多：单个体积是图的 5 倍，放宽会直接写满空间 */
+export const DAILY_VIDEO_LIMIT = 10;

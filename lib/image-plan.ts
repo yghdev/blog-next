@@ -40,6 +40,12 @@ export const COMPRESS_THRESHOLD_BYTES = 1.2 * 1024 * 1024;
  */
 export const MAX_UPLOAD_BYTES_ASSUMED = 8 * 1024 * 1024;
 
+/**
+ * 视频上限的客户端副本。理由与上面完全相同：lib/upload.ts 带 node:crypto，
+ * 不能进浏览器包。由 tests/image-plan.test.ts 断言与 MAX_VIDEO_BYTES 同步。
+ */
+export const MAX_VIDEO_BYTES_ASSUMED = 40 * 1024 * 1024;
+
 /** HEIC 转 JPEG 的质量（爱疯原图转出来通常仍有 1MB 以内） */
 export const HEIC_QUALITY = 0.82;
 

@@ -165,6 +165,8 @@ docker compose restart
 | 现象 | 排查 |
 |---|---|
 | 站点 502 | `systemctl status blog`，看是否 OOM 被杀 |
+| 上传视频报「没有收到文件」 | 检查 `next.config.ts` 的 `experimental.proxyClientMaxBodySize` 与 nginx 的 `client_max_body_size` 是否都 ≥ 48m。任一层偏小都会在那一层被无声截断，报错却指不到体积上 |
+| 上传视频报 413 | 只改了应用层没改 nginx。nginx 直接拒，应用层无日志 |
 | 图片 404 | 检查 `/var/www/blog-images/` 是否存在、属主是否 www-data |
 | 内存吃紧 | `free -m`、`systemctl show blog -p MemoryCurrent` |
 | 改代码不生效 | 是否忘了 `systemctl restart blog` |

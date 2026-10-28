@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detectImage, looksLikeMarkup, buildRelativePath, safeJoin, imageSize, MAX_UPLOAD_BYTES } from "../lib/upload.ts";
+import {
+  detectImage, detectVideo, looksLikeMarkup, buildRelativePath, safeJoin, imageSize,
+  MAX_UPLOAD_BYTES, MAX_VIDEO_BYTES, limitFor,
+} from "../lib/upload.ts";
 
 // 真实图片头的构造（只造头部，足以判定签名）
 const png = Buffer.concat([
@@ -65,4 +68,79 @@ test("尺寸解析：PNG 头部读出宽高", () => {
 
 test("上传上限为 8MB（与 nginx 12m 留余量）", () => {
   assert.equal(MAX_UPLOAD_BYTES, 8 * 1024 * 1024);
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+   视频识别（2026-10-28）
+   ──────────────────────────────────────────────────────────────────────
+   与图片同一套白名单策略：只认 magic bytes，识别不出就拒。
+   这些用例盯的是「别把不该进来的东西认成视频」，以及
+   「别把该进来的 mp4 家族漏掉」——两个方向都会让用户看到错的结论。
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** 造一个 ISO BMFF 头：4 字节长度 + "ftyp" + brand */
+function ftyp(brand: string): Buffer {
+  return Buffer.concat([
+    Buffer.from([0, 0, 0, 0x20]),
+    Buffer.from("ftyp", "latin1"),
+    Buffer.from(brand.padEnd(4).slice(0, 4), "latin1"),
+    Buffer.alloc(32),
+  ]);
+}
+
+/** 造一个 EBML 头，并在前 64 字节内带上 webm DocType */
+function webmBuf(docType = "webm"): Buffer {
+  const head = Buffer.from([0x1a, 0x45, 0xdf, 0xa3]);
+  return Buffer.concat([head, Buffer.alloc(8), Buffer.from(docType, "latin1"), Buffer.alloc(40)]);
+}
+
+test("视频：常见 mp4 brand 都能认出", () => {
+  for (const brand of ["isom", "mp42", "mp41", "avc1", "iso5", "M4V ", "dash"]) {
+    const d = detectVideo(ftyp(brand));
+    assert.equal(d?.mime, "video/mp4", brand + " 应识别为 mp4");
+    assert.equal(d?.ext, ".mp4");
+  }
+});
+
+test("视频：webm 能认出；matroska 不算 webm", () => {
+  assert.equal(detectVideo(webmBuf("webm"))?.ext, ".webm");
+  // matroska 是 .mkv 的容器名，浏览器支持度远不如 webm，不应伪装通过
+  assert.equal(detectVideo(webmBuf("matroska")), null, "matroska 不该被当成 webm 放行");
+});
+
+test("视频：QuickTime(.mov) 必须被拒 —— 浏览器基本播不了", () => {
+  // qt 的 brand 是 "qt  "，与 mp4 同一容器但浏览器支持极差。
+  // 放过它等于让用户传一个「上传成功但打不开」的文件。
+  assert.equal(detectVideo(ftyp("qt  ")), null);
+});
+
+test("视频：图片字节不会被认成视频，反之亦然", () => {
+  assert.equal(detectVideo(png), null, "PNG 不该被认成视频");
+  assert.equal(detectVideo(jpeg), null, "JPEG 不该被认成视频");
+  assert.equal(detectImage(ftyp("isom")), null, "mp4 不该被认成图片");
+  assert.equal(detectImage(webmBuf()), null, "webm 不该被认成图片");
+});
+
+test("视频：HTML/脚本永远不会被认成视频", () => {
+  const evil = Buffer.from("<!DOCTYPE html><script>alert(1)</script>", "utf8");
+  assert.equal(detectVideo(evil), null);
+  // 伪造成 ftyp 但 brand 不在白名单
+  const fake = Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from("ftyp", "latin1"),
+    Buffer.from("<htm", "latin1"), Buffer.alloc(32)]);
+  assert.equal(detectVideo(fake), null, "brand 不在白名单必须拒绝");
+});
+
+test("视频：超短文件不抛错，只返回 null", () => {
+  for (const n of [0, 1, 3, 7, 11]) {
+    assert.equal(detectVideo(Buffer.alloc(n)), null, n + " 字节应安全返回 null");
+  }
+});
+
+test("上限：视频 40MB，图片 8MB，且视频更大", () => {
+  assert.equal(MAX_VIDEO_BYTES, 40 * 1024 * 1024);
+  assert.equal(MAX_UPLOAD_BYTES, 8 * 1024 * 1024);
+  assert.ok(MAX_VIDEO_BYTES > MAX_UPLOAD_BYTES);
+  // 按类型取上限：接口要靠它做精确复核
+  assert.equal(limitFor("video/mp4"), MAX_VIDEO_BYTES);
+  assert.equal(limitFor("image/png"), MAX_UPLOAD_BYTES);
 });

@@ -3,8 +3,9 @@ import { useCallback, useEffect, useRef, useState, useDeferredValue } from "reac
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { prepareForUpload } from "@/lib/image-convert";
-import { isHeic, explainUploadFailure, formatBytes, MAX_UPLOAD_BYTES_ASSUMED } from "@/lib/image-plan";
+import { isHeic, explainUploadFailure, formatBytes, MAX_UPLOAD_BYTES_ASSUMED, MAX_VIDEO_BYTES_ASSUMED } from "@/lib/image-plan";
 import { videoToEmbed, normalizePastedIframe, SUPPORTED_HINT } from "@/lib/video-embed";
+import { mediaSnippet, type MediaKind } from "@/lib/editor-media";
 import {
   loadDraft,
   saveDraft as apiSaveDraft,
@@ -24,6 +25,7 @@ import { createLocalStore, canClearLocal, localUnavailableFallback, type LocalDr
 import { SaveStatus, ConflictDialog, RestoreBanner, type ConflictOption } from "./SaveStatus";
 import { VersionPanel } from "./VersionPanel";
 import { useAutosave } from "./useAutosave";
+import { MediaPicker } from "./MediaPicker";
 
 type Initial = {
   id?: number; type?: string; title?: string; slug?: string; content?: string;
@@ -64,6 +66,8 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
   const [dragOver, setDragOver] = useState(false);
   /* 视频外链：点工具栏「视频」展开的输入面板（不做自托管，见 lib/video-embed.ts 的说明） */
   const [videoOpen, setVideoOpen] = useState(false);
+  /* 从媒体库插入：复用已上传的资源，不必重传一份 */
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [videoInput, setVideoInput] = useState("");
 
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -242,14 +246,32 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
    *   · 超过 8MB 或长边 2560px 的图会被缩 + 重编码，顺带剥掉 EXIF/GPS
    * 服务端的安全校验完全不依赖这段逻辑（它只看 magic bytes），所以绕过也没用。
    */
-  const uploadFile = useCallback(async (raw: File): Promise<string | null> => {
-    const { file, note } = await prepareForUpload(raw);
-    if (note) setMsg(note);
-    // 预处理后仍超限就别发请求了，直接说清楚（省一次 30s 的超时等待）
-    if (file.size > MAX_UPLOAD_BYTES_ASSUMED) {
+  const uploadFile = useCallback(async (raw: File): Promise<{ url: string; kind: MediaKind } | null> => {
+    /**
+     * 图片走 prepareForUpload（HEIC 转码 / 大图压缩 / 剥 EXIF），视频原样上传。
+     *
+     * 为什么视频不能走同一条预处理：那段逻辑是 canvas 重编码，只能处理图片。
+     * 视频转码需要 WASM 版 ffmpeg（十几 MB），为了一次上传把编辑器包撑大不划算 ——
+     * 所以视频策略是「告诉用户上限，超了自己压」，而不是偷偷转码。
+     */
+    const isVideoFile = (raw.type || "").startsWith("video/");
+    let file = raw;
+    if (!isVideoFile) {
+      const prepared = await prepareForUpload(raw);
+      file = prepared.file;
+      if (prepared.note) setMsg(prepared.note);
+      // 预处理后仍超限就别发请求了，直接说清楚（省一次 30s 的超时等待）
+      if (file.size > MAX_UPLOAD_BYTES_ASSUMED) {
+        setErr(
+          raw.name + " 压缩后仍有 " + formatBytes(file.size) +
+          "，超过 " + Math.round(MAX_UPLOAD_BYTES_ASSUMED / 1024 / 1024) + "MB 上限，请先自行导出为小一些的图片"
+        );
+        return null;
+      }
+    } else if (file.size > MAX_VIDEO_BYTES_ASSUMED) {
       setErr(
-        raw.name + " 压缩后仍有 " + formatBytes(file.size) +
-        "，超过 " + Math.round(MAX_UPLOAD_BYTES_ASSUMED / 1024 / 1024) + "MB 上限，请先自行导出为小一些的图片"
+        raw.name + " 有 " + formatBytes(file.size) +
+        "，超过 " + Math.round(MAX_VIDEO_BYTES_ASSUMED / 1024 / 1024) + "MB 视频上限。请先压缩，或改用 B 站/YouTube 外链（编辑器支持）"
       );
       return null;
     }
@@ -263,7 +285,8 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         setErr(explainUploadFailure(raw.name, res.status, d.error || ""));
         return null;
       }
-      return d.url as string;
+      // kind 由服务端按 magic bytes 判定，前端不猜
+      return { url: d.url as string, kind: (d.kind === "video" ? "video" : "image") as MediaKind };
     } catch {
       setErr(raw.name + " 上传中断（网络问题？）");
       return null;
@@ -272,30 +295,42 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
     }
   }, []);
 
+  /**
+   * 上传并插入。图片与视频共用这一条路径。
+   *
+   * 判类型用「MIME 前缀 或 扩展名」，不能只看 MIME：Windows 与部分浏览器给
+   * HEIC / 某些视频的 type 是空串，只看 MIME 会把合法文件静默丢掉 ——
+   * 这正是历史上「选了图没反应」的来源之一。真正的类型判定仍在服务端
+   * （magic bytes），这里只负责「别在上传前就把文件筛掉」。
+   */
   const uploadAndInsert = useCallback(async (files: File[]) => {
     setErr("");
-    // 不能只看 f.type：Windows/部分浏览器给 HEIC 的 type 是空串，
-    // 用 startsWith("image/") 会把它静默丢掉 —— 这正是"选了图没反应"的来源之一。
-    const isImageLike = (f: File) =>
-      (f.type || "").startsWith("image/") || isHeic(f.name, f.type);
-    const images = files.filter(isImageLike);
-    const skipped = files.length - images.length;
-    if (!images.length) {
-      setErr(
-        skipped
-          ? "这里只能上传图片；视频请用外链嵌入（B 站/YouTube 的分享代码可直接粘进正文）"
-          : "没有可上传的文件"
-      );
+    const isMediaLike = (f: File) => {
+      const type = (f.type || "").toLowerCase();
+      if (type.startsWith("image/") || type.startsWith("video/")) return true;
+      if (isHeic(f.name, f.type)) return true;
+      // type 为空时按扩展名兜底
+      return /\.(png|jpe?g|gif|webp|avif|heic|heif|mp4|webm)$/i.test(f.name || "");
+    };
+    const media = files.filter(isMediaLike);
+    const skipped = files.length - media.length;
+    if (!media.length) {
+      setErr(skipped ? "只支持图片（PNG/JPEG/GIF/WEBP/AVIF/HEIC）与视频（MP4/WebM）" : "没有可上传的文件");
       return;
     }
 
-    let ok = 0;
-    for (const f of images) {
-      const url = await uploadFile(f);
-      if (url) { insert("![](" + url + ")\n"); ok++; }
+    let images = 0, videos = 0;
+    for (const f of media) {
+      const r = await uploadFile(f);
+      if (!r) continue;                                   // 已由 uploadFile 报错
+      insert(mediaSnippet(r.kind, r.url, f.name.replace(/\.[^.]+$/, "")));
+      if (r.kind === "video") videos++; else images++;
     }
-    if (ok) {
-      setMsg("已插入 " + ok + " 张图片" + (skipped ? "（跳过 " + skipped + " 个非图片文件）" : ""));
+    if (images || videos) {
+      const parts: string[] = [];
+      if (images) parts.push(images + " 张图片");
+      if (videos) parts.push(videos + " 个视频");
+      setMsg("已插入 " + parts.join("、" ) + (skipped ? "（跳过 " + skipped + " 个不支持的文件）" : ""));
       setTimeout(() => setMsg(""), 2500);
     }
   }, [insert, uploadFile]);
@@ -573,6 +608,8 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
 
       {/* 工具栏。手机端每个按钮靠 .editor-toolbar 的断点规则顶到 44pt，
           否则 3px 9px 内边距的按钮只有约 22×24px，手指基本点不中。 */}
+      {/* 工具栏里的按钮不使用 .btn 的边框样式（见 admin.css 的 editor-toolbar 规则），
+          它们是一条安静的凹槽里的轻动作，不该和发布按钮抢视觉重量。 */}
       <div className="editor-toolbar">
         {[
           { l: "H2", v: "## ", w: false },
@@ -592,12 +629,14 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
                   style={{ padding: "3px 9px", fontSize: ".78rem" }}>{b.l}</button>
         ))}
         <button type="button" className="btn btn-sm" onClick={() => fileRef.current?.click()}
-                style={{ padding: "3px 9px", fontSize: ".78rem" }}>图片</button>
+                title="选择本地图片或视频上传">上传</button>
+        <button type="button" className="btn btn-sm" onClick={() => setPickerOpen(true)}>媒体库</button>
         <button type="button" className="btn btn-sm" onClick={() => { setVideoOpen((v) => !v); setErr(""); }}
                 aria-expanded={videoOpen}
-                style={{ padding: "3px 9px", fontSize: ".78rem" }}>视频</button>
+                title="插入 B 站 / YouTube 等平台视频">外链视频</button>
+        {/* accept 同时列图片与视频：只写图片会让「上传视频」在选择框里根本看不到视频文件 */}
         <input ref={fileRef} type="file" multiple style={{ display: "none" }}
-               accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif"
+               accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif,video/mp4,video/webm,.mp4,.webm"
                onChange={(e) => { const fs2 = Array.from(e.target.files ?? []); if (fs2.length) void uploadAndInsert(fs2); e.target.value = ""; }} />
       </div>
 
@@ -645,7 +684,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
             </div>
           ) : null}
 
-          {dragOver ? <div className="notice">松开即可上传图片</div> : null}
+          {dragOver ? <div className="notice">松开即可上传图片或视频</div> : null}
 
         </div>{/* /editor-main */}
 
@@ -702,7 +741,12 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
                          accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif"
                          onChange={async (e) => {
                            const f = e.target.files?.[0];
-                           if (f) { const url = await uploadFile(f); if (url) { setCover(url); mark({ cover: url }); } }
+                           if (f) {
+                             const r = await uploadFile(f);
+                             // 封面必须是图片：视频传上来当 og:image 只会让分享卡片空白
+                             if (r && r.kind === "image") { setCover(r.url); mark({ cover: r.url }); }
+                             else if (r) setErr("封面只能是图片，视频请插进正文");
+                           }
                            e.target.value = "";
                          }} />
                   {cover ? (
@@ -743,6 +787,12 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
           <p className="editor-kbd-hint">Cmd/Ctrl+S 保存</p>
         </aside>
       </div>{/* /editor-layout */}
+
+      <MediaPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={(snippet) => { insert(snippet); }}
+      />
 
       {/* 版本历史：恢复只改草稿，不改线上（方案 §6.4） */}
       <VersionPanel

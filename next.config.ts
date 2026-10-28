@@ -141,6 +141,19 @@ const nextConfig: NextConfig = {
   experimental: {
     // 由浏览器原生处理前进/后退的滚动位置，避免 Next 的 scroll 恢复与应用渲染打架造成的跳动
     scrollRestoration: false,
+
+    /**
+     * 请求体上限（2026-10-28，上传视频时暴露的问题）。
+     *
+     * Next 默认只把 10MB 读进内存，超出部分**被静默截断**：接口拿到的
+     * 是一个不完整的 FormData，file 字段为空，于是报「没有收到文件」——
+     * 真实原因是「文件太大」。这个报错指不到体积上，实测排查了两轮才定位。
+     *
+     * 视频上限 40MB（lib/upload.ts 的 MAX_VIDEO_BYTES），这里给 48MB，
+     * 与 nginx 的 client_max_body_size 48m 对齐。三个数字是一组：
+     * 改任何一个都要同步另外两个，否则会在某一层被无声截断。
+     */
+    proxyClientMaxBodySize: "48mb",
   },
   async headers() {
     return [

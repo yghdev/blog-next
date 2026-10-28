@@ -53,10 +53,24 @@ mkdir -p "$TMP/images"
 if [ -d "$IMGDIR" ]; then
   cp -a "$IMGDIR/." "$TMP/images/" 2>/dev/null || true
 fi
+# 视频单独计数并报警（2026-10-28 编辑器支持上传视频后新增）。
+# 背景：本地目录里的视频会原样进每日备份并同步到坚果云。
+# 配置了七牛图床时视频走 CDN 不落盘，这里为 0；
+# 未配置时会落本机 —— 那条路径的代价必须让人看得见，而不是某天突然发现
+# 备份从 12MB 涨到几个 GB。
+VID_COUNT=$(find "$TMP/images" -type f \( -iname '*.mp4' -o -iname '*.webm' \) 2>/dev/null | wc -l)
+VID_BYTES=$(find "$TMP/images" -type f \( -iname '*.mp4' -o -iname '*.webm' \) -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}')
+VID_MB=$((VID_BYTES / 1024 / 1024))
+if [ "$VID_MB" -ge 200 ]; then
+  log "!! 本机视频已达 ${VID_MB}MB（${VID_COUNT} 个），备份与异地同步会随之变大。"
+  log "!! 建议在 设置 → 图片存储 配置七牛，让视频改走 CDN。"
+fi
+
 cat > "$TMP/MANIFEST.txt" <<EOF
 备份时间: $(date '+%F %T %Z')
 数据库: blog.db（integrity_check=ok，已发布文章 $POSTS 篇）
 图片: $(find "$TMP/images" -type f 2>/dev/null | wc -l) 个文件
+其中视频: ${VID_COUNT} 个，${VID_MB}MB（配置七牛图床后视频走 CDN，不计入此项）
 来源: $DB + $IMGDIR
 EOF
 

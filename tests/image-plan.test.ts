@@ -3,9 +3,9 @@ import assert from "node:assert/strict";
 import {
   isHeic, fitDimensions, planUpload, shouldReencode, outputMimeFor,
   formatBytes, explainUploadFailure, MAX_DIMENSION, COMPRESS_THRESHOLD_BYTES,
-  MAX_UPLOAD_BYTES_ASSUMED,
+  MAX_UPLOAD_BYTES_ASSUMED, MAX_VIDEO_BYTES_ASSUMED,
 } from "../lib/image-plan.ts";
-import { MAX_UPLOAD_BYTES } from "../lib/upload.ts";
+import { MAX_UPLOAD_BYTES, MAX_VIDEO_BYTES } from "../lib/upload.ts";
 
 /* ---------------- HEIC 识别：这是"传不上去"的头号原因 ---------------- */
 
@@ -149,5 +149,10 @@ test("客户端假设的上传上限必须与服务端一致", () => {
     MAX_UPLOAD_BYTES_ASSUMED,
     MAX_UPLOAD_BYTES,
     "lib/image-plan.ts 的 MAX_UPLOAD_BYTES_ASSUMED 与 lib/upload.ts 的 MAX_UPLOAD_BYTES 不同步"
+  );
+  assert.equal(
+    MAX_VIDEO_BYTES_ASSUMED,
+    MAX_VIDEO_BYTES,
+    "lib/image-plan.ts 的 MAX_VIDEO_BYTES_ASSUMED 与 lib/upload.ts 的 MAX_VIDEO_BYTES 不同步"
   );
 });

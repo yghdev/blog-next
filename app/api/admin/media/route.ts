@@ -29,10 +29,24 @@ export const GET = handle(async (req: NextRequest) => {
   const q = (sp.get("q") ?? "").trim();
   const limit = Math.min(Math.max(Number(sp.get("limit") ?? 60) || 60, 1), 200);
   const offset = Math.max(Number(sp.get("offset") ?? 0) || 0, 0);
+  /**
+   * 按类型筛选（编辑器「从媒体库插入」用）。
+   *   image / video —— 只看某一类
+   *   不传         —— 全部（媒体库管理页保持原行为）
+   * 用 mime 前缀判断而不是扩展名：媒体库里有历史上按扩展名猜出来的记录，
+   * 前缀是最稳的共同点。
+   */
+  const kind = sp.get("kind") ?? "";
+  const kindCond = kind === "image" ? "mime LIKE 'image/%'"
+    : kind === "video" ? "mime LIKE 'video/%'"
+    : "";
 
   const db = getDb();
-  const where = q ? "WHERE path LIKE ?" : "";
-  const args = q ? ["%" + q + "%"] : [];
+  const conds: string[] = [];
+  const args: unknown[] = [];
+  if (q) { conds.push("(path LIKE ? OR filename LIKE ?)"); args.push("%" + q + "%", "%" + q + "%"); }
+  if (kindCond) conds.push(kindCond);
+  const where = conds.length ? "WHERE " + conds.join(" AND ") : "";
   const total = (db.prepare("SELECT COUNT(*) c FROM media " + where).get(...args) as { c: number }).c;
   const rows = db.prepare("SELECT * FROM media " + where + " ORDER BY created_at DESC LIMIT ? OFFSET ?")
     .all(...args, limit, offset) as MediaRow[];
@@ -43,6 +57,8 @@ export const GET = handle(async (req: NextRequest) => {
     ...m,
     refs: (refRow.get("%" + m.path + "%") as { c: number }).c,
     storage: m.path.startsWith("/images/") ? "local" : "qiniu",
+    // 编辑器据此决定插入 <img> 还是 <video>，不必在前端重复判 mime
+    kind: m.mime.startsWith("video/") ? "video" as const : "image" as const,
   }));
 
   const cfg = readStorageConfig();
