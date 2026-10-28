@@ -22,6 +22,7 @@ import { AutosaveEngine, classifyReconcile, type AutosaveState } from "@/lib/aut
 import { createLocalStore, canClearLocal, localUnavailableFallback, type LocalDraft } from "@/lib/local-draft";
 import { SaveStatus, ConflictDialog, RestoreBanner, type ConflictOption } from "./SaveStatus";
 import { VersionPanel } from "./VersionPanel";
+import { useAutosave } from "./useAutosave";
 
 type Initial = {
   id?: number; type?: string; title?: string; slug?: string; content?: string;
@@ -78,7 +79,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
   const clientDraftIdRef = useRef<string>(newClientDraftId());
   const identityRef = useRef<DraftIdentity | null>(null);
 
-  /* ---------------- 自动保存（阶段 03.2） ---------------- */
+  /* ---------------- 自动保存（阶段 03.2，编排抽到 useAutosave） ---------------- */
   const [autoState, setAutoState] = useState<AutosaveState>("idle");
   const [autoMsg, setAutoMsg] = useState<string>("");
   const [savedAtIso, setSavedAtIso] = useState<string | null>(null);
@@ -92,85 +93,15 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
   const [restoreInfo, setRestoreInfo] = useState<LocalDraft | null>(null);
   const [versionOpen, setVersionOpen] = useState(false);
 
-  /** 本地存储：只在浏览器里可用；SSR 期间给一个空实现避免崩 */
-  const localStoreRef = useRef(
-    typeof window === "undefined"
-      ? null
-      : createLocalStore(window.localStorage)
-  );
-
-  /**
-   * 用 ref 保存"最新快照的构造方式"，供状态机回调读取。
-   *
-   * 为什么不用 state：状态机的 persistLocal/save 回调在定时器里执行，
-   * 闭包捕获的 state 会是旧值（经典的 stale closure）。用 ref 拿最新值，
-   * 才能保证"存下去的永远是用户此刻看到的内容"。
-   */
-  const snapshotBuilderRef = useRef<() => Snapshot>(() => ({
-    type: "post", title: "", slug: "", content: "", cover: null,
-    categories: [], tags: [], comments_enabled: 1,
-  }));
-
-  const engineRef = useRef<AutosaveEngine | null>(null);
-
-  if (!engineRef.current && typeof window !== "undefined") {
-    engineRef.current = new AutosaveEngine({
-      save: async (snapshot, identity) => {
-        const snap = snapshot as Snapshot;
-        const outcome = await autosaveOnce({
-          postId: identity?.postId ?? initial?.id,
-          clientDraftId: clientDraftIdRef.current,
-          snapshot: snap,
-          snapshotHash: hashSnapshot(canonicalize(snap)),
-          expectedPostRevision: identity?.baseRevision ?? initial?.revision ?? 1,
-          expectedDraftRevision: identity?.draftRevision ?? 0,
-        });
-        if (outcome.kind === "ok") {
-          identityRef.current = outcome.identity;
-          setSavedAtIso(new Date().toISOString());
-          // 新文章首次保存后接管 URL，后续都用 postId
-          if (!initial?.id && outcome.identity.postId) {
-            try { router.replace("/admin/edit/" + outcome.identity.postId); } catch { /* ignore */ }
-          }
-        }
-        return outcome;
-      },
-      persistLocal: (snapshot, localSnapshotId) => {
-        const store = localStoreRef.current;
-        if (!store) return true;   // SSR：不谎报失败
-        const draft: LocalDraft = {
-          clientDraftId: clientDraftIdRef.current,
-          postId: identityRef.current?.postId ?? initial?.id ?? null,
-          baseRevision: identityRef.current?.baseRevision ?? initial?.revision ?? 1,
-          draftRevision: identityRef.current?.draftRevision ?? 0,
-          snapshot,
-          localSnapshotId,
-          confirmedHash: identityRef.current?.snapshotHash ?? null,
-          savedAt: new Date().toISOString(),
-        };
-        const ok = store.save(draft);
-        if (!ok) setLocalUnavailable(true);
-        return ok;
-      },
-      onState: (state, detail) => {
-        setAutoState(state);
-        setAutoMsg(detail?.message ?? "");
-        if (detail?.localPersistOk === false) setLocalUnavailable(true);
-        // 冲突：拉服务端当前草稿与线上内容，准备三方对比
-        if (state === "conflict") void openConflict(detail?.sentSnapshot as Snapshot | null);
-      },
-    });
-  }
-
   /**
    * 冲突时准备三方对比（方案 §9.2）。
    *
-   * 用 function 声明而不是 const：引擎的 onState 回调在构造时就引用了它，
+   * 用 function 声明而不是 const：useAutosave 的 onConflict 回调在构造时就引用了它，
    * 而 const 箭头函数此时还在 TDZ 里 —— 那样会在"真的发生冲突"这一天才崩，
    * 也就是最难排查的时刻。
    */
   async function openConflict(sentSnapshot: Snapshot | null): Promise<void> {
-    const postId = identityRef.current?.postId ?? initial?.id;
+    const postId = api.getIdentity()?.postId ?? initial?.id;
     if (!postId) return;
     // 只发一次 GET：既要草稿正文来做对比，也要版本号写进说明
     const loaded = await loadDraft(postId);
@@ -185,13 +116,31 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
     });
   }
 
-  /**
-   * 任何输入都走这里：置 dirty + 通知自动保存状态机。
-   *
-   * 快照由 snapshotBuilderRef 现取，而不是把构造结果传下去 ——
-   * 状态机在 150ms/1.5s 的定时器里才真正消费快照，那时用户可能已经又输入了。
-   * 传"构造方式"而不是"构造结果"，才能保证存的是最新那份。
-   */
+  /** 读当前编辑器内容（给 useAutosave 用 ref 取，避免陈旧闭包） */
+  const snapshotRef = useRef<() => Snapshot>(() => ({
+    type: "post", title: "", slug: "", content: "", cover: null,
+    categories: [], tags: [], comments_enabled: 1,
+  }));
+
+  const api = useAutosave({
+    postId: initial?.id,
+    initialRevision: initial?.revision,
+    getSnapshot: () => snapshotRef.current(),
+    onPostCreated: (postId: number) => {
+      try { router.replace("/admin/edit/" + postId); } catch { /* ignore */ }
+    },
+    onState: (state: AutosaveState, detail: { message?: string; localPersistOk?: boolean }) => {
+      setAutoState(state);
+      setAutoMsg(detail.message ?? "");
+      if (detail.localPersistOk === false) setLocalUnavailable(true);
+      if (state === "saved") setSavedAtIso(new Date().toISOString());
+    },
+    onConflict: (sent: Snapshot | null) => { void openConflict(sent); },
+    onLocalDraftFound: (draft: LocalDraft) => setRestoreInfo(draft),
+  });
+
+  const { mark: autoMark, saveNow: autoSaveNow, flushLocal, resume: autoResume, keepLocal, setIdentity, getClientDraftId } = api;
+
   /**
    * 标记改动并驱动自动保存。
    *
@@ -203,9 +152,8 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
    */
   const mark = useCallback((override?: Partial<Snapshot>) => {
     setDirty(true);
-    const snap = { ...snapshotBuilderRef.current(), ...(override ?? {}) };
-    engineRef.current?.update(snap);
-  }, []);
+    autoMark(override);
+  }, [autoMark]);
 
   /* ---------------- 服务端草稿：打开已有文章时加载 ---------------- */
   /**
@@ -232,7 +180,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         // 只更新 identityRef 不同步引擎，会让它以为"还没有草稿"（draftRevision=0），
         // 于是拿 0 去和已存在的 v1 比较 —— 第一次自动保存就撞 409，
         // 而且表面上看起来像"版本冲突"，很难联想到是漏了这一步同步。
-        engineRef.current?.setIdentity(d.identity);
+        setIdentity(d.identity);
         const s = d.snapshot;
         setType(s.type);
         setTitle(s.title);
@@ -248,93 +196,11 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
     return () => { cancelled = true; };
   }, [mode, initial?.id]);
 
-  /* ---------------- 自动保存的持久化边界（方案 §8.4） ---------------- */
-  useEffect(() => {
-    const engine = engineRef.current;
-    if (!engine) return;
-
-    /**
-     * 切后台/关页面前同步 flush。
-     *
-     * 用 pagehide + visibilitychange:hidden 两个事件，因为它们各覆盖一半场景：
-     *   - pagehide 在导航离开时触发（尤其是 bfcache 场景）
-     *   - visibilitychange 在切标签/切 App/锁屏时触发（此时页面并不会卸载）
-     * 只监听其中一个，会在另一类退出路径上丢掉最后的输入。
-     *
-     * beforeunload 只用来**提示**，不承担保存：它可能被浏览器忽略，
-     * 而且同步写 localStorage 是唯一可靠的收尾动作。
-     */
-    const flush = () => { engine.flushLocalNow(); };
-    const onVisibility = () => { if (document.visibilityState === "hidden") flush(); };
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      const st = engine.getState();
-      if (st === "dirty" || st === "queued" || st === "saving" || st === "unknown") {
-        // 确有未同步内容才提示，避免每次关闭都弹（方案 §8.4）
-        engine.flushLocalNow();
-        e.preventDefault();
-        e.returnValue = "";
-      }
-    };
-
-    window.addEventListener("pagehide", flush);
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => {
-      window.removeEventListener("pagehide", flush);
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("beforeunload", onBeforeUnload);
-      engine.destroy();
-    };
-  }, []);
-
-  /* ---------------- 打开时检查本地可恢复草稿 ---------------- */
-  useEffect(() => {
-    const store = localStoreRef.current;
-    if (!store) return;
-    /**
-     * 已有文章：按 postId 映射找对应草稿。
-     * 新文章：本标签页的 clientDraftId 通常对不上（新标签页会生成新 UUID），
-     * 所以退回"扫描全部本地草稿，挑一份未绑定文章的新稿"。
-     *
-     * 这一步正是"崩溃后重开还能恢复"的关键：崩溃/关标签页后重新打开，
-     * 浏览器给的是**新的标签页**，sessionStorage 里的身份已经没了。
-     * 只按当前 clientDraftId 去找，等于每次崩溃都恢复不了自己刚写的东西 ——
-     * 那本地持久化就白做了。
-     */
-    let local: LocalDraft | null = null;
-    if (initial?.id) {
-      const cid = store.findClientDraftId(1, initial.id) ?? clientDraftIdRef.current;
-      local = store.load(1, cid);
-    } else {
-      const all = store.list(1);
-      // 优先取"没绑定 postId"的稿子（即新文章尚未首次保存的内容）
-      local = all.filter((d) => !d.postId).sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1))[0] ?? null;
-      if (!local) local = store.load(1, clientDraftIdRef.current);
-    }
-    if (!local) return;
-    // 与服务端当前内容比较：完全一样就不打扰用户
-    const same =
-      JSON.stringify(local.snapshot) ===
-      JSON.stringify({
-        type, title, slug, content, cover,
-        categories: cats.split(",").map((x) => x.trim()).filter(Boolean),
-        tags: tags.split(",").map((x) => x.trim()).filter(Boolean),
-        comments_enabled: commentsEnabled ? 1 : 0,
-      });
-    if (!same) setRestoreInfo(local);
-    // 只在挂载时检查一次：后续输入不应反复弹出提示
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  /* ---------------- 持久化边界与本地恢复检查 ---------------- */
   /**
-   * 说明：旧的 DRAFT_KEY 本地草稿机制已被 lib/local-draft.ts 取代，整段删除。
-   *
-   * 删掉的理由不是"新代码更好看"，而是**两套本地存储会互相打架**：
-   * 旧实现按 postId 存一份 {title,content}，新实现按 clientDraftId 存完整快照。
-   * 同时存在时，恢复界面会拿到哪一份取决于执行顺序，而两份的时间戳口径不同
-   * （旧的 at 是写入时刻，新的 savedAt 是节流后的真实落盘时刻）。
-   * 那种"看起来都在工作、偶尔恢复出旧内容"的 bug 最难查。
-   * 旧的 beforeunload 也被替换成新实现里"只在确有未同步状态时提示"的版本。
+   * 这两块（pagehide/visibilitychange flush、本地可恢复草稿扫描）已移到
+   * components/admin/useAutosave.ts。留这条注释是为了让人知道"不是漏了"：
+   * 它们现在与状态机在同一个 hook 里，改的时候只需看那一处。
    */
 
   /* ---------------- 实时预览（防抖） ---------------- */
@@ -503,7 +369,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
   }), [type, title, slug, content, cover, cats, tags, commentsEnabled]);
 
   // 每次渲染都把最新的构造器放进 ref：状态机的定时器回调据此取当前内容
-  snapshotBuilderRef.current = buildSnapshot;
+  snapshotRef.current = buildSnapshot;
 
   const save = useCallback(async (nextStatus?: string) => {
     const publish = nextStatus === "published";
@@ -645,12 +511,12 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
             setCommentsEnabled(s2.comments_enabled !== 0);
             setDirty(true);
             // 恢复后立刻进入自动保存流程：用户选择恢复就是要这份内容
-            engineRef.current?.update(s2);
+            autoMark(s2);
             setRestoreInfo(null);
           }}
           onDiscard={() => {
             // 只清本地快照，**不调接口** —— 与服务端草稿的"放弃"是两件事（方案 §6.5）
-            localStoreRef.current?.clear(1, restoreInfo.clientDraftId, restoreInfo.postId);
+            api.clearLocal(restoreInfo.clientDraftId, restoreInfo.postId);
             setRestoreInfo(null);
           }}
         />
@@ -818,7 +684,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         hasUnpublishedChanges={autoState !== "idle" && autoState !== "saved"}
         localUnavailable={localUnavailable}
         message={autoMsg}
-        onRetry={() => { engineRef.current?.saveNow(); }}
+        onRetry={() => { autoSaveNow(); }}
       />
 
       <div className="editor-savebar">
@@ -896,7 +762,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
           // 以服务端草稿为准：把内容替换掉，再让状态机继续
           setContent(conflict?.serverDraft ?? "");
           setConflict(null);
-          engineRef.current?.resume();
+          autoResume();
         }}
         onKeepLocal={() => {
           // 用我的版本覆盖：显式 rebase，不做字段级合并
@@ -904,7 +770,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
           setConflict(null);
           void (async () => {
             const postId = identityRef.current?.postId ?? initial?.id;
-            if (!postId) { engineRef.current?.resume(snap); return; }
+            if (!postId) { autoResume(snap); return; }
             const r = await apiRebaseDraft({
               postId,
               clientDraftId: clientDraftIdRef.current,
@@ -915,7 +781,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
             });
             if (r.ok) {
               identityRef.current = r.value.identity;
-              engineRef.current?.resume(snap);
+              autoResume(snap);
             } else {
               setErr(r.error.message);
             }
