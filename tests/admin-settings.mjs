@@ -64,7 +64,9 @@ try {
   const hasFriendLinksField = await page.locator("#set-friendLinks, [id*=friendLinks]").count();
   assert.equal(hasFriendLinksField, 0,
     "「每行 名称|链接」文本框前台已不再读取，不应继续出现在表单里（填了保存成功但前台无变化）");
-  const linksEntry = await page.locator('.card a[href="/admin/links"]').count();
+  // 设置分组不再是卡片（每组套一个边框盒子会让整页变成一叠白方块），
+  // 所以断言改成「页面上存在通向 /admin/links 的出口」，不绑定容器样式类。
+  const linksEntry = await page.locator('.settings-group a[href="/admin/links"]').count();
   assert.ok(linksEntry > 0, "移除输入框后必须给出「去外链管理」的出口");
   console.log("PASS phase02-5: 友链文本框已移除并指向 /admin/links");
 

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Badge, Empty } from "./ui";
+import { Empty, State } from "./ui";
 
 /**
  * Item 带 revision：批量/删除操作必须逐项传 expectedRevision（方案 §5.1）。
@@ -21,7 +21,8 @@ const TYPE_LABEL: Record<string, string> = { post: "文章", page: "页面", shu
  *     改用 .btn-danger（浅底深字语义色，跟随主题）。
  *  2) 「移入回收站」「彻底删除」点一下就执行，没有任何确认。彻底删除是
  *     不可逆的，必须过 ConfirmDialog 并写清连带影响。
- *  3) 状态原来只是一串灰字，看不出草稿/已发布。改成 Badge（浅底深字）。
+ *  3) 状态原来只是一串灰字，看不出草稿/已发布。改成 State（圆点 + 文案，
+ *     不用彩色胶囊：一屏 20 行每行挂个胶囊会变成彩虹，反而扫不出来）。
  *  4) 手机端标题、日期、按钮全挤在一行，溢出后按钮被挤出屏幕。
  *     现在 .data-row 在 ≤820px 自动折行，按钮顶到 48dp。
  *  5) 空列表原来只有一句「还没有内容」，没有出口。现在给出原因 + 新建入口。
@@ -224,7 +225,7 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
 
       {selected.length > 0 ? (
         <div className="bulk-bar" aria-label="批量操作">
-          <Badge tone="info">已选 {selected.length}</Badge>
+          <span className="fx-bulkbar-count">已选 {selected.length} 项</span>
           <span className="bulk-bar-fill" />
           {trash ? (
             <button className="btn btn-sm" disabled={busy} onClick={() => bulk("restore")}>批量恢复</button>
@@ -247,44 +248,54 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
         <span>{items.length} 条内容</span>
       </div>
 
+      {/*
+        行结构：选择框 → 类型 → 状态 → 标题 → 日期 → 行内操作。
+        标题是这一行的一号信息（字号最大、颜色最深、占据剩余宽度），
+        其余全部降级：类型是一行小字、状态是圆点 + 文案、日期最弱且等宽。
+        这里刻意不把状态做成彩色胶囊 —— 一屏 20 行都挂胶囊会变成彩虹，
+        反而扫不出任何东西。
+      */}
       <div className="data-panel">
-        {items.map((p) => (
-          <div key={p.id} className="data-row content-row">
-            <input
-              type="checkbox"
-              checked={selected.includes(p.id)}
-              onChange={() => toggle(p.id)}
-              aria-label={"选择 " + (p.title || "无标题")}
-              style={{ flexShrink: 0 }}
-            />
+        {items.map((p) => {
+          const on = selected.includes(p.id);
+          return (
+            <div key={p.id} className={"data-row content-row" + (on ? " is-selected" : "")}>
+              <input
+                type="checkbox"
+                checked={on}
+                onChange={() => toggle(p.id)}
+                aria-label={"选择 " + (p.title || "无标题")}
+              />
 
-            <span className="content-type">{TYPE_LABEL[p.type] ?? p.type}</span>
-
-            {/* 状态：不再是一串灰字，而是有语义的徽标 */}
-            {p.status === "published"
-              ? <Badge tone="ok" dot>已发布</Badge>
-              : <Badge tone="warn" dot>草稿</Badge>}
-
-            {trash ? (
-              <span className="data-row-title">{p.title || "(无标题)"}</span>
-            ) : (
-              <Link href={"/admin/edit/" + p.id} className="data-row-title">{p.title || "(无标题)"}</Link>
-            )}
-
-            <span className="data-row-meta">{p.dateLabel}</span>
-
-            {trash ? (
-              <span className="data-actions" style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                <button className="btn btn-sm" disabled={busy} onClick={() => restore(p.id)}>恢复</button>
-                <button
-                  className="btn btn-sm btn-danger"
-                  disabled={busy}
-                  onClick={() => void askPurge(p.id, p.title || "(无标题)")}
-                >彻底删除</button>
+              <span className="content-type" aria-hidden title={TYPE_LABEL[p.type] ?? p.type}>
+                {(TYPE_LABEL[p.type] ?? p.type).slice(0, 1)}
               </span>
-            ) : null}
-          </div>
-        ))}
+
+              {trash
+                ? <State status="trash" />
+                : <State status={p.status === "published" ? "published" : "draft"} />}
+
+              {trash ? (
+                <span className="data-row-title">{p.title || "(无标题)"}</span>
+              ) : (
+                <Link href={"/admin/edit/" + p.id} className="data-row-title">{p.title || "(无标题)"}</Link>
+              )}
+
+              <span className="data-row-meta">{p.dateLabel}</span>
+
+              {trash ? (
+                <span className="fx-row-actions">
+                  <button className="btn btn-sm" disabled={busy} onClick={() => restore(p.id)}>恢复</button>
+                  <button
+                    className="btn btn-sm btn-danger"
+                    disabled={busy}
+                    onClick={() => void askPurge(p.id, p.title || "(无标题)")}
+                  >彻底删除</button>
+                </span>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
 
       {/* 破坏性动作确认。标题只交代对象，副作用写进描述，按钮是明确动宾。 */}

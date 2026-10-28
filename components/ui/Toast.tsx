@@ -56,7 +56,7 @@ export function useToasts(max = 3) {
 export function ToastViewport({ items, onDismiss }: { items: ToastItem[]; onDismiss: (id: number) => void }) {
   if (items.length === 0) return null;
   return (
-    <div className="ui-toast-viewport">
+    <div className="ui-toast-viewport fx-scope">
       {items.map((t) => (
         <ToastCard key={t.id} item={t} onDismiss={onDismiss} />
       ))}

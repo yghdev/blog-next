@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Badge } from "./ui";
 
 /**
  * 图片存储配置面板（自建，不依赖任何第三方图床平台）。
@@ -127,55 +128,42 @@ export function StoragePanel() {
    * 现在只引用真实存在的语义 token，由主题自动切换。
    * 注意错误态用 danger 而不是自造的 err：规范里没有 err 这一层。
    */
-  const toneStyle = (t: Tone) => ({
-    background: t === "ok" ? "var(--ok-bg)" : t === "err" ? "var(--danger-bg)" : "var(--bg-tint)",
-    color: t === "ok" ? "var(--ok)" : t === "err" ? "var(--danger)" : "var(--text-p3)",
-    border: "1px solid " + (t === "ok" ? "var(--ok-border)" : t === "err" ? "var(--danger-border)" : "var(--border)"),
-  });
+  /* 状态条复用 .notice 的语义类：同一套「浅底深字 + 微边框」，
+     不再自己拼一组颜色（拼出来的那组很容易漏掉暗色主题）。 */
+  const toneClass = (t: Tone) =>
+    "notice " + (t === "ok" ? "notice-ok" : t === "err" ? "notice-error" : "notice-info");
 
   return (
-    <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+    <section className="card">
       {/* 标题行：状态徽章直接写出「空间名」，不让人再去表单里找 */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 4 }}>
-        <h3 style={{ margin: 0, fontSize: "1rem" }}>图片存储（七牛云）</h3>
-        <span style={{
-          fontSize: ".72rem", padding: "2px 10px", borderRadius: 20, fontWeight: 500,
-          ...(st?.configured
-            ? { background: "var(--ok-bg)", color: "var(--ok)" }
-            : { background: "var(--warn-bg)", color: "var(--warn)" }),
-        }}>
+      <div className="fx-card-head">
+        <h3 className="settings-group-title">图片存储（七牛云）</h3>
+        <Badge tone={st?.configured ? "ok" : "warn"} dot>
           {st?.configured
             ? "已启用 · " + st.bucket + (st.cdnDomain ? " · " + st.cdnDomain.replace(/^https?:\/\//, "") : "")
             : "未配置"}
-        </span>
-        {st?.hasSecret ? (
-          <span style={{ fontSize: ".7rem", color: "var(--text-p4)" }}>密钥已保存</span>
-        ) : null}
+        </Badge>
+        {st?.hasSecret ? <span className="fx-session-meta">密钥已保存</span> : null}
       </div>
-      <p style={{ fontSize: ".8rem", color: "var(--text-p4)", margin: "0 0 16px" }}>
+      <p className="settings-group-desc">
         上传的图片直接写入七牛空间，正文里插入的是 CDN 直链。未配置时自动退回本机磁盘（老方式）。
       </p>
 
       {/* 常驻结果条：不自动消失，方便对照表单排查 */}
       {result ? (
-        <div style={{
-          ...toneStyle(result.tone),
-          padding: "10px 14px", borderRadius: 10, marginBottom: 16,
-          fontSize: ".84rem", lineHeight: 1.6,
-          display: "flex", gap: 10, alignItems: "flex-start",
-        }}>
-          <span style={{ flex: 1 }}>{result.text}</span>
-          <span style={{ fontSize: ".7rem", opacity: .65, whiteSpace: "nowrap" }}>{result.at}</span>
+        <div className={toneClass(result.tone) + " fx-result-bar"}>
+          <span className="fx-result-text">{result.text}</span>
+          <span className="fx-result-time">{result.at}</span>
           <button
             type="button"
             onClick={() => setResult(null)}
             aria-label="关闭提示"
-            style={{ background: "none", border: 0, cursor: "pointer", color: "inherit", opacity: .6, fontSize: ".9rem", padding: 0 }}
+            className="fx-result-close"
           >×</button>
         </div>
       ) : null}
 
-      <div className="editor-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))" }}>
+      <div className="settings-grid">
         <div className="field">
           <label>存储空间名称</label>
           <input className="input" value={bucket} onChange={(e) => setBucket(e.target.value)} placeholder="如 flechazo-blog" />
@@ -189,41 +177,41 @@ export function StoragePanel() {
         <div className="field">
           <label>Endpoint</label>
           <input className="input" value={endpoint} onChange={(e) => setEndpoint(e.target.value)}
-                 placeholder="https://s3.cn-south-1.qiniucs.com" style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem" }} />
+                 placeholder="https://s3.cn-south-1.qiniucs.com" />
         </div>
         <div className="field">
           <label>CDN 访问域名</label>
           <input className="input" value={cdnDomain} onChange={(e) => setCdnDomain(e.target.value)}
-                 placeholder="https://cdn.yghsite.cn" style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem" }} />
+                 placeholder="https://cdn.yghsite.cn" />
         </div>
         <div className="field">
           <label>AccessKey</label>
           <input className="input" value={ak} onChange={(e) => setAk(e.target.value)}
-                 placeholder={st?.hasSecret ? "已保存，留空表示不修改" : "请输入 AccessKey"}
-                 style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem" }} />
+                 placeholder={st?.hasSecret ? "已保存，留空表示不修改" : "请输入 AccessKey"} />
         </div>
         <div className="field">
           <label>SecretKey</label>
           <input className="input" type="password" value={sk} onChange={(e) => setSk(e.target.value)}
-                 placeholder={st?.hasSecret ? "已保存，留空表示不修改" : "请输入 SecretKey"}
-                 style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem" }} />
+                 placeholder={st?.hasSecret ? "已保存，留空表示不修改" : "请输入 SecretKey"} />
         </div>
       </div>
 
-      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: ".84rem", marginTop: 12, cursor: "pointer" }}>
+      <label className="switch-row">
         <input type="checkbox" checked={pathStyle} onChange={(e) => setPathStyle(e.target.checked)} />
-        路径式访问（Path Style）—— 七牛一般不需要勾选；若提示 NoSuchBucket 可尝试打开
+        <span>
+          <b>路径式访问（Path Style）</b>
+          <em>七牛一般不需要勾选；若提示 NoSuchBucket 可尝试打开</em>
+        </span>
       </label>
 
-      <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap", alignItems: "center" }}>
-        <button className="btn btn-sm btn-primary" onClick={save} disabled={busy}
-                style={{ padding: "6px 16px" }}>{busy ? "处理中…" : "保存配置"}</button>
-        <button className="btn btn-sm" onClick={test} disabled={busy}
-                style={{ padding: "6px 16px" }}>{busy ? "…" : "测试连接"}</button>
-        <span style={{ fontSize: ".72rem", color: "var(--text-p4)", flex: 1, minWidth: 180 }}>
-          密钥用 AES-256-GCM 加密后落库，不会随备份明文外流
-        </span>
+      {/* 一个操作区最多一个主按钮：保存是主操作，测试连接是次级的 */}
+      <div className="fx-action-row">
+        <button className="btn btn-primary" onClick={save} disabled={busy}>
+          {busy ? "处理中…" : "保存配置"}
+        </button>
+        <button className="btn" onClick={test} disabled={busy}>{busy ? "…" : "测试连接"}</button>
+        <span className="fx-action-hint">密钥用 AES-256-GCM 加密后落库，不会随备份明文外流</span>
       </div>
-    </div>
+    </section>
   );
 }

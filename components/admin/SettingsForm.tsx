@@ -139,15 +139,21 @@ export function SettingsForm({ initial }: { initial: Settings }) {
       {msg ? <div className="notice notice-ok" role="status">{msg}</div> : null}
       {err ? <div className="notice notice-error" role="alert">{err}</div> : null}
 
+      {/*
+        分组不是卡片。设置页天然有 4–5 组字段，如果每组都套一层边框盒子，
+        整页就变成一叠白方块 —— 视觉上分不出「哪一组更重要」，只是把
+        本来就该由标题承担的分隔重复画了一遍。
+        这里用「衬线组标题 + 上下细线 + 组间大留白」组织，表单本身靠间距呼吸。
+      */}
       {GROUPS.map((g) => (
-        <section className="card" key={g.key}>
+        <section className="settings-group" key={g.key}>
           <h2 className="settings-group-title">{g.title}</h2>
           <p className="settings-group-desc">{g.desc}</p>
           <div className="settings-grid">{g.fields.map(field)}</div>
         </section>
       ))}
 
-      <section className="card">
+      <section className="settings-group">
         <h2 className="settings-group-title">功能开关</h2>
         <p className="settings-group-desc">
           关掉评论后前台不再渲染评论区（历史评论保留，重新打开即恢复）；关掉 RSS 后 /rss.xml 返回 404。
@@ -174,7 +180,7 @@ export function SettingsForm({ initial }: { initial: Settings }) {
 
       {/* 友链曾经是这里的一个自由文本框，现已由独立表接管 —— 说清楚去哪改，
           而不是把人领到一个保存了也不生效的输入框前面 */}
-      <section className="card">
+      <section className="settings-group">
         <h2 className="settings-group-title">友链与聚合站</h2>
         <p className="settings-group-desc">
           外链已改为逐条管理（名称、链接、分类、排序、显隐），保存后前台右栏与手机抽屉立即刷新。

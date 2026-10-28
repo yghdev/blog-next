@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Card, Empty, Badge, Notice, Kpi } from "@/components/admin/ui";
+import { Card, Empty, Badge, Notice, Figure, State, SectionHead, EmptyLine } from "@/components/admin/ui";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { Field, TextInput, TextArea } from "@/components/ui/Field";
 import { Skeleton, SkeletonText, SkeletonRows } from "@/components/ui/Skeleton";
@@ -163,18 +163,93 @@ export function UiKit() {
         </div>
       </Card>
 
-      <Card title="Kpi 与空状态">
-        <div className="kpi-row">
-          <Kpi label="未发布草稿" value={7} href="/admin" alert />
-          <Kpi label="待审评论" value={3} href="/admin/comments" />
-          <Kpi label="已发布" value={31} />
-          <Kpi label="回收站" value={2} />
+      <Card title="State 与 Badge 的分工" desc="列表行里的状态用 State（圆点 + 文案，不铺底）；Badge 只给需要跳出视线的少量信息。每行都挂胶囊会变成一条彩虹。">
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
+          <State status="published" />
+          <State status="draft" />
+          <State status="trash" />
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Badge>中性</Badge>
+          <Badge tone="ok" dot>已发布</Badge>
+          <Badge tone="warn" dot>草稿</Badge>
+          <Badge tone="danger" dot>已删除</Badge>
+          <Badge tone="info">12 条</Badge>
+          <Badge tone="accent">置顶</Badge>
+        </div>
+      </Card>
+
+      <Card title="列表行（留白 + 细线，没有卡片）" desc="行内操作默认隐藏，悬停或键盘聚焦时出现；(hover:none) 设备上常显 —— 手机不能依赖 hover。">
+        <SectionHead title="未发布草稿" action={<a href="/admin?status=draft">全部草稿</a>} />
+        <div className="work-list">
+          <a className="work-item" href="/admin/new">
+            <span className="work-item-title">把博客从 WordPress 搬到 SQLite 的这三个月</span>
+            <State status="draft" />
+            <span className="work-item-date">10-27</span>
+          </a>
+          <a className="work-item" href="/admin/new">
+            <span className="work-item-title">一篇标题非常长的文章，用来验证行内省略号生效而不是把日期和状态挤出屏幕</span>
+            <span className="work-item-date">10-26</span>
+          </a>
+        </div>
+        <EmptyLine>没有更多内容了。<a href="/admin/new">开一篇新的</a></EmptyLine>
+      </Card>
+
+      <Card title="数据行 + 批量条" desc="批量条只在选中后出现；它浮在列表上方，是这张页面上唯一允许有影子的东西。">
+        <div className="bulk-bar">
+          <span className="fx-bulkbar-count">已选 2 项</span>
+          <span className="bulk-bar-fill" />
+          <Button size="sm">发布</Button>
+          <Button size="sm">转草稿</Button>
+          <Button size="sm" variant="danger">移入回收站</Button>
+          <Button size="sm" variant="ghost">取消选择</Button>
+        </div>
+        <div className="data-panel">
+          <div className="data-row is-selected">
+            <input type="checkbox" defaultChecked aria-label="选择第一项" />
+            <span className="content-type">文</span>
+            <State status="published" />
+            <a className="data-row-title" href="/admin/new">霍夫变换到底在做什么</a>
+            <span className="data-row-meta">2026-10-27</span>
+            <span className="fx-row-actions"><Button size="sm" variant="ghost">编辑</Button></span>
+          </div>
+          <div className="data-row">
+            <input type="checkbox" aria-label="选择第二项" />
+            <span className="content-type">页</span>
+            <State status="draft" />
+            <a className="data-row-title" href="/admin/new">关于我</a>
+            <span className="data-row-meta">未发布</span>
+            <span className="fx-row-actions"><Button size="sm" variant="ghost">编辑</Button></span>
+          </div>
+        </div>
+      </Card>
+
+      <Card title="Figure 与空状态">
+        <div className="fx-figure-row" role="group" aria-label="内容概况">
+          <Figure label="未发布草稿" value={7} href="/admin" alert />
+          <Figure label="待审评论" value={3} href="/admin/comments" />
+          <Figure label="已发布" value={31} />
+          <Figure label="回收站" value={2} />
         </div>
         <Empty
           title="这里还没有内容"
           hint="说明为什么为空，并给一个能继续走的动作，而不是只留一句「暂无数据」。"
           actions={<ButtonLink href="/admin/new" variant="primary" size="sm">写第一篇</ButtonLink>}
         />
+      </Card>
+
+      <Card title="品牌标识与危险操作区" desc="品牌只有「衬线 wordmark + 一枚赤陶方点」，全站就这一处固定装饰。危险操作单独成区并自带确认。">
+        <div style={{ marginBottom: 16 }}>
+          <a className="fx-brandmark" href="/admin">flechazo</a>
+          <span className="fx-brand-sub">妄司逸的小世界</span>
+        </div>
+        <div className="danger-zone">
+          <h3 className="danger-zone-title">删除全部草稿</h3>
+          <p className="danger-zone-desc">
+            这里只是危险区样式的示例。真实场景里这个动作会走 ConfirmDialog，并在描述里写清连带影响。
+          </p>
+          <Button size="sm" variant="danger">删除全部草稿</Button>
+        </div>
       </Card>
     </>
   );

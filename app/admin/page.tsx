@@ -82,11 +82,28 @@ export default async function AdminPage({ searchParams }: {
     return "/admin" + (qs ? "?" + qs : "");
   };
 
+  /**
+   * 标题区只放「这一页独有的操作」。
+   *
+   * 「写文章」已常驻在侧栏（桌面）/ 抽屉顶部（手机），这里再放一次就是
+   * 同一个主操作在一屏里出现两次 —— 既抢注意力，也让「主操作唯一」失效。
+   * 回收站的独有操作是「回到内容列表」，那才是它该有的动作。
+   */
   return (
     <AdminShell active={trash ? "trash" : "posts"} username={user.username}>
       <PageHeader
-        title={trash ? "回收站" : "内容"}
-        actions={!trash ? <Link href="/admin/new" className="btn btn-primary">写文章</Link> : null}
+        eyebrow={trash ? "内容 · 回收站" : "内容"}
+        title={trash ? "回收站" : "文章与说说"}
+        count={
+          <>
+            {total} 篇
+            {!trash && q ? <span className="fx-filter-note">· 搜索「{q}」</span> : null}
+          </>
+        }
+        sub={trash
+          ? "删除的内容先放这里，可以恢复或彻底清除。彻底清除不可逆。"
+          : "文章、页面与说说共用这一份列表；用类型筛选切换。"}
+        actions={trash ? <Link href="/admin" className="btn btn-sm">回到内容列表</Link> : null}
       />
 
       <div className="content-toolbar">

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState, useDeferredValue } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { prepareForUpload } from "@/lib/image-convert";
 import { isHeic, explainUploadFailure, formatBytes, MAX_UPLOAD_BYTES_ASSUMED } from "@/lib/image-plan";
 import { videoToEmbed, normalizePastedIframe, SUPPORTED_HINT } from "@/lib/video-embed";
@@ -479,20 +480,53 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
   const chars = content.replace(/\s/g, "").length;
 
   return (
-    <div onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onDrop={onDrop}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-        <select className="input" value={type} onChange={(e) => { setType(e.target.value); mark({ type: e.target.value as Snapshot["type"] }); }}
-                style={{ width: 110, padding: "6px 10px" }}>
+    <div className="editor-workbench"
+         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+         onDragLeave={() => setDragOver(false)}
+         onDrop={onDrop}>
+      {/*
+        顶部操作条：返回 · 类型 · 字数 / 保存状态 · 预览 · 存草稿 · 发布。
+        刻意贴紧页面顶部而不是浮在屏幕中间 —— 编辑时视线在正文，回退/发布
+        这类全局动作应当固定在同一个位置，不必滚动寻找。
+      */}
+      <div className="editor-topbar">
+        <Link href="/admin" className="editor-back" aria-label="返回内容列表">
+          <span aria-hidden>←</span> 内容
+        </Link>
+
+        <select
+          className="input editor-type"
+          value={type}
+          aria-label="内容类型"
+          onChange={(e) => { setType(e.target.value); mark({ type: e.target.value as Snapshot["type"] }); }}
+        >
           <option value="post">文章</option>
           <option value="page">页面</option>
           <option value="shuoshuo">说说</option>
         </select>
-        <span style={{ flex: 1 }} />
-        <span style={{ fontSize: ".74rem", color: "var(--text-p4)" }}>
+
+        <span className="editor-topbar-fill" />
+
+        <span className="editor-count">
           {chars} 字{uploading ? " · 上传中 " + uploading : ""}
         </span>
-        <button className="btn btn-sm editor-split-btn" onClick={() => setSplit(!split)}>
+
+        <button type="button" className="btn btn-sm editor-split-btn" onClick={() => setSplit(!split)}>
           {split ? "单栏" : "分屏预览"}
+        </button>
+
+        {/* 版本历史只有已存在的文章才有意义：新文章还没有任何历史 */}
+        {initial?.id ? (
+          <button type="button" className="btn btn-sm" disabled={busy} onClick={() => setVersionOpen(true)}>
+            版本历史
+          </button>
+        ) : null}
+
+        <button type="button" className="btn btn-sm" disabled={busy} onClick={() => save("draft")}>
+          存草稿
+        </button>
+        <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => save("published")}>
+          {busy ? "保存中…" : status === "published" ? "更新" : "发布"}
         </button>
       </div>
 
@@ -522,20 +556,20 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         />
       ) : null}
 
-      {!isShuo ? (
-        <div className="field">
-          <label>标题</label>
-          <input className="input" value={title} onChange={(e) => { setTitle(e.target.value); mark({ title: e.target.value }); }}
-                 placeholder="文章标题" style={{ fontSize: "1.05rem", fontFamily: "var(--font-serif)" }} />
-        </div>
-      ) : null}
-
-      {!isShuo && mode === "edit" ? (
-        <div className="field">
-          <label>URL 路径（改动会自动为旧地址保留 301 跳转）</label>
-          <input className="input" value={slug} onChange={(e) => { setSlug(e.target.value); mark({ slug: e.target.value }); }} />
-        </div>
-      ) : null}
+      <div className="editor-layout">
+        {/* ── 主编辑区：标题 → 工具条 → 正文 ── */}
+        <div className="editor-main">
+          {!isShuo ? (
+            <label className="editor-title-field">
+              <span className="sr-only">标题</span>
+              <input
+                className="editor-title-input"
+                value={title}
+                onChange={(e) => { setTitle(e.target.value); mark({ title: e.target.value }); }}
+                placeholder="文章标题"
+              />
+            </label>
+          ) : null}
 
       {/* 工具栏。手机端每个按钮靠 .editor-toolbar 的断点规则顶到 44pt，
           否则 3px 9px 内边距的按钮只有约 22×24px，手指基本点不中。 */}
@@ -567,141 +601,148 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
                onChange={(e) => { const fs2 = Array.from(e.target.files ?? []); if (fs2.length) void uploadAndInsert(fs2); e.target.value = ""; }} />
       </div>
 
-      <div className="editor-grid" style={{ gridTemplateColumns: split ? "1fr 1fr" : "1fr" }}>
-        <textarea
-          ref={taRef}
-          className="textarea"
-          value={content}
-          onChange={(e) => { setContent(e.target.value); mark({ content: e.target.value }); }}
-          onPaste={onPaste}
-          placeholder={isShuo
-            ? "写点什么…（可直接粘贴图片）"
-            : "支持 Markdown。可直接粘贴或拖入图片；iPhone 的 HEIC 会自动转成 JPEG，大图自动压缩"}
-          style={{ minHeight: isShuo ? 140 : 420, fontFamily: "var(--font-mono)", fontSize: ".9rem", lineHeight: 1.7 }}
-        />
-        {split ? (
-          <div className="prose" style={{
-            minHeight: 420, maxHeight: 620, overflow: "auto", padding: "16px 18px",
-            border: "1px solid var(--border)", borderRadius: 12, background: "var(--card-bg)",
-          }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
-        ) : null}
-      </div>
+          <div className={"editor-grid" + (split ? " is-split" : "")}>
+            <textarea
+              ref={taRef}
+              className="textarea editor-textarea"
+              value={content}
+              onChange={(e) => { setContent(e.target.value); mark({ content: e.target.value }); }}
+              onPaste={onPaste}
+              placeholder={isShuo
+                ? "写点什么…（可直接粘贴图片）"
+                : "支持 Markdown。可直接粘贴或拖入图片；iPhone 的 HEIC 会自动转成 JPEG，大图自动压缩"}
+            />
+            {split ? (
+              <div className="prose editor-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+            ) : null}
+          </div>
 
       {/* 视频外链面板：不做自托管视频（带宽与备份链都不允许），
           这里只把平台链接转成 iframe 嵌入代码插入正文。 */}
-      {videoOpen ? (
-        <div
-          style={{
-            marginTop: 10, padding: "12px 14px", border: "1px solid var(--border)",
-            borderRadius: 12, background: "var(--bg-tint)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-            <label style={{ fontSize: ".84rem", fontWeight: 600 }}>视频链接</label>
-            <span style={{ fontSize: ".74rem", color: "var(--text-p4)", flex: 1, minWidth: 200 }}>
-              贴链接即可，视频留在原平台播放，本站不存文件
+          {/* 视频外链面板：不做自托管视频（带宽与备份链都不允许），
+              这里只把平台链接转成 iframe 嵌入代码插入正文。 */}
+          {videoOpen ? (
+            <div className="editor-video">
+              <div className="editor-video-head">
+                <label htmlFor="editor-video-url">视频链接</label>
+                <span className="editor-video-hint">贴链接即可，视频留在原平台播放，本站不存文件</span>
+                <button type="button" className="btn btn-sm btn-ghost"
+                        onClick={() => { setVideoOpen(false); setVideoInput(""); }}>关闭</button>
+              </div>
+              <input
+                id="editor-video-url"
+                className="input"
+                value={videoInput}
+                onChange={(e) => setVideoInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); insertVideo(); } }}
+                placeholder="BV1rAdTBfEEn / youtube.com/watch?v=... / 直接粘贴 <iframe> 代码"
+                autoFocus
+              />
+              <div className="editor-video-foot">
+                <button type="button" className="btn btn-sm btn-primary" onClick={insertVideo}>插入视频</button>
+                <span className="editor-video-hint">{SUPPORTED_HINT}</span>
+              </div>
+            </div>
+          ) : null}
+
+          {dragOver ? <div className="notice">松开即可上传图片</div> : null}
+
+        </div>{/* /editor-main */}
+
+        {/*
+          辅助区：分类、标签、封面、别名、评论开关、保存状态。
+          放在右栏而不是塞在正文下面 —— 元信息是「写完之后顺手补的」，
+          不该把正文推离视口。窄屏时它折到正文下方（见 admin.css）。
+        */}
+        <aside className="editor-aside" aria-label="文章元信息">
+          {!isShuo && mode === "edit" ? (
+            <div className="field">
+              <label htmlFor="editor-slug">URL 路径</label>
+              <input
+                id="editor-slug"
+                className="input"
+                value={slug}
+                onChange={(e) => { setSlug(e.target.value); mark({ slug: e.target.value }); }}
+              />
+              <span className="editor-field-hint">改动会自动为旧地址保留 301 跳转。</span>
+            </div>
+          ) : null}
+
+          {!isShuo ? (
+            <>
+              <div className="field">
+                <label htmlFor="editor-cats">分类</label>
+                <input
+                  id="editor-cats"
+                  className="input"
+                  value={cats}
+                  onChange={(e) => { setCats(e.target.value); mark({ categories: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) }); }}
+                  placeholder="学习, AI"
+                />
+                <span className="editor-field-hint">逗号分隔</span>
+              </div>
+
+              <div className="field">
+                <label htmlFor="editor-tags">标签</label>
+                <input
+                  id="editor-tags"
+                  className="input"
+                  value={tags}
+                  onChange={(e) => { setTags(e.target.value); mark({ tags: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) }); }}
+                  placeholder="部署, 工具"
+                />
+                <span className="editor-field-hint">逗号分隔</span>
+              </div>
+
+              <div className="field">
+                <span className="editor-field-label">封面图</span>
+                <div className="editor-cover">
+                  <button type="button" className="btn btn-sm" onClick={() => coverRef.current?.click()}>选择图片</button>
+                  <input ref={coverRef} type="file" style={{ display: "none" }}
+                         accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif"
+                         onChange={async (e) => {
+                           const f = e.target.files?.[0];
+                           if (f) { const url = await uploadFile(f); if (url) { setCover(url); mark({ cover: url }); } }
+                           e.target.value = "";
+                         }} />
+                  {cover ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={cover} alt="封面预览" className="editor-cover-thumb" />
+                      <button type="button" className="btn btn-sm btn-ghost"
+                              onClick={() => { setCover(null); mark({ cover: null }); }}>移除</button>
+                    </>
+                  ) : <span className="editor-field-hint">未设置</span>}
+                </div>
+                <span className="editor-field-hint">用于分享卡片的 og:image</span>
+              </div>
+            </>
+          ) : null}
+
+          {/* 单篇评论开关：页面类型默认也想开评论，但隐私政策这类应当可以单独关掉 */}
+          <label className="switch-row editor-switch">
+            <input type="checkbox" checked={commentsEnabled}
+                   onChange={(ev) => { setCommentsEnabled(ev.target.checked); mark({ comments_enabled: ev.target.checked ? 1 : 0 }); }} />
+            <span>
+              <b>允许评论</b>
+              <em>关闭后该页面不显示评论区</em>
             </span>
-            <button type="button" className="btn btn-sm" onClick={() => { setVideoOpen(false); setVideoInput(""); }}
-                    style={{ padding: "3px 9px", fontSize: ".78rem" }}>关闭</button>
-          </div>
-          <input
-            className="input"
-            value={videoInput}
-            onChange={(e) => setVideoInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); insertVideo(); } }}
-            placeholder="BV1rAdTBfEEn / youtube.com/watch?v=... / 直接粘贴 <iframe> 代码"
-            style={{ fontFamily: "var(--font-mono)", fontSize: ".84rem" }}
-            autoFocus
+          </label>
+
+          {/* 双状态指示器：草稿状态与线上版本分开显示（方案 §9.2） */}
+          <SaveStatus
+            state={autoState}
+            savedAt={savedAtIso}
+            publishedAt={initial?.published_at ?? (status === "published" ? savedAtIso : null)}
+            hasUnpublishedChanges={autoState !== "idle" && autoState !== "saved"}
+            localUnavailable={localUnavailable}
+            message={autoMsg}
+            onRetry={() => { autoSaveNow(); }}
           />
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-            <button type="button" className="btn btn-sm btn-primary" onClick={insertVideo}
-                    style={{ padding: "5px 14px", fontSize: ".8rem" }}>插入视频</button>
-            <span style={{ fontSize: ".72rem", color: "var(--text-p4)", flex: 1, minWidth: 180 }}>
-              {SUPPORTED_HINT}
-            </span>
-          </div>
-        </div>
-      ) : null}
 
-      {dragOver ? (
-        <div className="notice" style={{ marginTop: 8 }}>松开即可上传图片</div>
-      ) : null}
-
-      {!isShuo ? (
-        <div className="editor-grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", marginTop: 12 }}>
-          <div className="field">
-            <label>分类（逗号分隔）</label>
-            <input className="input" value={cats} onChange={(e) => { setCats(e.target.value); mark({ categories: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) }); }} placeholder="学习, AI" />
-          </div>
-          <div className="field">
-            <label>标签（逗号分隔）</label>
-            <input className="input" value={tags} onChange={(e) => { setTags(e.target.value); mark({ tags: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) }); }} placeholder="部署, 工具" />
-          </div>
-        </div>
-      ) : null}
-
-      {!isShuo ? (
-        <div className="field" style={{ marginTop: 12 }}>
-          <label>封面图（可选，用于分享卡片 og:image）</label>
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button type="button" className="btn btn-sm" onClick={() => coverRef.current?.click()}>选择图片</button>
-            <input ref={coverRef} type="file" style={{ display: "none" }}
-                   accept="image/png,image/jpeg,image/gif,image/webp,image/avif,image/heic,image/heif,.heic,.heif"
-                   onChange={async (e) => {
-                     const f = e.target.files?.[0];
-                     if (f) { const url = await uploadFile(f); if (url) { setCover(url); mark({ cover: url }); } }
-                     e.target.value = "";
-                   }} />
-            {cover ? (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={cover} alt="封面" style={{ height: 40, borderRadius: 6, border: "1px solid var(--border)" }} />
-                <button type="button" className="btn btn-sm" onClick={() => { setCover(null); mark({ cover: null }); }}>移除</button>
-              </>
-            ) : <span style={{ fontSize: ".78rem", color: "var(--text-p4)" }}>未设置</span>}
-          </div>
-        </div>
-      ) : null}
-
-      {/* 单篇评论开关：页面类型默认也想开评论，但隐私政策这类应当可以单独关掉 */}
-      <label style={{
-        display: "flex", gap: 8, alignItems: "center", marginTop: 14,
-        fontSize: ".86rem", color: "var(--text-p2)", cursor: "pointer",
-      }}>
-        <input type="checkbox" checked={commentsEnabled}
-               onChange={(ev) => { setCommentsEnabled(ev.target.checked); mark({ comments_enabled: ev.target.checked ? 1 : 0 }); }} />
-        允许评论
-        <span style={{ fontSize: ".76rem", color: "var(--text-p4)" }}>
-          （关闭后该页面不显示评论区）
-        </span>
-      </label>
-
-      {/* 双状态指示器：草稿状态与线上版本分开显示（方案 §9.2） */}
-      <SaveStatus
-        state={autoState}
-        savedAt={savedAtIso}
-        publishedAt={initial?.published_at ?? (status === "published" ? savedAtIso : null)}
-        hasUnpublishedChanges={autoState !== "idle" && autoState !== "saved"}
-        localUnavailable={localUnavailable}
-        message={autoMsg}
-        onRetry={() => { autoSaveNow(); }}
-      />
-
-      <div className="editor-savebar">
-        <span className="editor-savebar-hint">
-          {dirty ? "有未保存改动 · Cmd/Ctrl+S 保存" : ""}
-        </span>
-        {/* 版本历史只有已存在的文章才有意义：新文章还没有任何历史 */}
-        {initial?.id ? (
-          <button className="btn" disabled={busy} onClick={() => setVersionOpen(true)}>
-            版本历史
-          </button>
-        ) : null}
-        <button className="btn" disabled={busy} onClick={() => save("draft")}>存草稿</button>
-        <button className="btn btn-primary" disabled={busy} onClick={() => save("published")}>
-          {busy ? "保存中…" : status === "published" ? "更新" : "发布"}
-        </button>
-      </div>
+          <p className="editor-kbd-hint">Cmd/Ctrl+S 保存</p>
+        </aside>
+      </div>{/* /editor-layout */}
 
       {/* 版本历史：恢复只改草稿，不改线上（方案 §6.4） */}
       <VersionPanel

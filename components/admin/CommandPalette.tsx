@@ -179,7 +179,7 @@ export function CommandPalette() {
   if (!open) return null;
 
   return (
-    <div className="cmdk-backdrop" onClick={() => setOpen(false)}>
+    <div className="cmdk-backdrop fx-scope" onClick={() => setOpen(false)}>
       <div
         className="cmdk"
         role="dialog"

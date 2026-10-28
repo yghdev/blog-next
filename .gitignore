@@ -33,3 +33,5 @@ blog.db-shm
 # 草稿不进仓库：尚未发布的内容（含服务器架构、IP 等部署细节）
 # 要发布时再手动放进 content/ 并提交。
 drafts/
+.tmp-review/
+.tmp-prod/

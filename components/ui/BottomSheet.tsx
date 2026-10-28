@@ -43,7 +43,7 @@ export function BottomSheet({
 
   return createPortal(
     <div
-      className="sheet-mask"
+      className="sheet-mask fx-scope"
       onClick={() => { if (maskClosable) onClose(); }}
     >
       <div

@@ -53,7 +53,9 @@ try {
   const sideTitles = await page.locator(".admin-side-title").evaluateAll((els) =>
     els.map((e) => ({ text: (e.textContent || "").trim(), ariaHidden: e.getAttribute("aria-hidden") }))
   );
-  assert.deepEqual(sideTitles.map((t) => t.text), ["工作", "内容", "资源", "系统"],
+  // 分组名按本轮设计规范：工作台 / 内容 / 资源 / 系统。
+  // 「日志」从「资源」移到「系统」（它是运维排查，不是资源配置）。
+  assert.deepEqual(sideTitles.map((t) => t.text), ["工作台", "内容", "资源", "系统"],
     "侧栏应常驻显示四组标题，实际 " + JSON.stringify(sideTitles));
   assert.ok(sideTitles.every((t) => t.ariaHidden === "true"),
     "分组标题只是视觉层次，不应进入读屏导航流");
@@ -61,7 +63,9 @@ try {
   const sideLabels = await page.locator(".admin-side-nav a").evaluateAll((els) =>
     els.map((e) => (e.textContent || "").trim())
   );
-  for (const want of ["概览", "内容", "评论", "回收站", "媒体", "外链", "日志", "设置"]) {
+  // 「文章与说说」而不是「内容」：分组标题已经叫「内容」，菜单项再叫「内容」
+  // 会与分组语义打架（内容 > 内容）。名称必须说清这一页管的是什么。
+  for (const want of ["概览", "文章与说说", "评论", "回收站", "媒体", "外链", "日志", "设置"]) {
     assert.ok(sideLabels.includes(want), "侧栏缺少导航项：" + want + " 实际=" + JSON.stringify(sideLabels));
   }
   assert.ok(!sideLabels.includes("存储"),
@@ -101,7 +105,7 @@ try {
   const sheetTitles = await page.locator(".sheet-nav-title").evaluateAll((els) =>
     els.map((e) => (e.textContent || "").trim())
   );
-  assert.deepEqual(sheetTitles, ["工作", "内容", "资源", "系统"], "抽屉分组应为四组：实际 " + JSON.stringify(sheetTitles));
+  assert.deepEqual(sheetTitles, ["工作台", "内容", "资源", "系统"], "抽屉分组应为四组：实际 " + JSON.stringify(sheetTitles));
 
   const small = await page.locator(".sheet-nav a").evaluateAll((els) =>
     els.map((e) => ({ t: (e.textContent || "").trim(), h: Math.round(e.getBoundingClientRect().height) }))

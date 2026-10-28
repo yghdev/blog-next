@@ -41,7 +41,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-wrap">
+    <div className="login-wrap fx-scope">
       <div className="login-card">
         <h1 className="login-title">后台登录</h1>
         <p className="login-sub">blog.yghsite.cn</p>

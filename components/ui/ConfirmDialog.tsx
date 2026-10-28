@@ -85,7 +85,7 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className="dialog-mask"
+      className="dialog-mask fx-scope"
       onClick={() => { if (maskClosable && !busy) onCancel(); }}
     >
       <div

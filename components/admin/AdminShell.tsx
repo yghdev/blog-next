@@ -7,38 +7,39 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { CommandPalette } from "./CommandPalette";
 
 /**
- * 后台导航（方案 §9.1：四组任务导航，「写文章」常驻）。
+ * 后台导航（四组任务导航，「写文章」常驻）。
  *
  * 布局分两套，不是"同一套挤一挤"：
- *   桌面（>820px）：**左侧侧栏**。四组纵向排列，组标题可见。
- *   手机（≤820px）：顶栏只留站点名 + 菜单键，导航进底部抽屉，每项 48dp。
+ *   桌面（>820px）：**左侧侧栏** 224px。四组纵向排列，组标题常驻可见。
+ *   手机（≤820px）：顶栏只留品牌 + 菜单键，导航进底部抽屉，每项 48dp。
  *
- * 为什么桌面必须是侧栏而不是顶栏：
- *   四组共 9 项（设置拆页后还会更多），排在顶栏一行里 920px 装不下，
- *   只能横向滚动 —— 而"需要滚动才能看到全部导航"本身就是导航失败。
- *   侧栏纵向有无限空间，分组标题才能真的呈现出层次。
- *
- * 上一版这里写的是"侧栏分组导航"，但实际实现是顶部栏单行、分组标题只在
- * 抽屉里出现 —— 名不副实，已在本版纠正为真正的侧栏。
+ * 为什么桌面必须是侧栏而不是顶栏：四组共 8 项，排在顶栏一行里装不下，
+ * 只能横向滚动 —— 而"需要滚动才能看到全部导航"本身就是导航失败。
  *
  * 「写文章」不做进任何一组：它是后台唯一高频主操作，埋在分组里每次多两跳。
- * 桌面在侧栏顶部；手机在抽屉顶部（整行 48dp）。
+ * 桌面在侧栏顶部（带 Cmd/Ctrl+K 提示，因为命令面板也能新建），
+ * 手机在抽屉顶部（整行 48dp）。
  *
- * key 与既有页面 active 值保持兼容：内容列表仍叫 posts，避免为导航改名
- * 去动一堆页面传参。
+ * 分组与名称严格对齐现有路由与真实功能，不改名、不合并、不删除：
+ *   - 文章与说说共用 /admin 列表（?type=shuoshuo 筛选），不为了好看拆成两页
+ *   - 页面同理（?type=page）
+ *   - 回收站是 /admin?trash=1，同属内容区，保留为入口
+ *   - 存储配置已在阶段 02-5 并入设置，仍不在导航里单列
+ * key 与既有页面 active 值保持兼容：内容列表仍叫 posts。
  */
 type NavItem = { href: string; label: string; key: string };
 
 const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
-    title: "工作",
-    items: [{ href: "/admin/overview", label: "概览", key: "overview" },
-      { href: "/admin", label: "内容", key: "posts" }],
+    title: "工作台",
+    items: [
+      { href: "/admin/overview", label: "概览", key: "overview" },
+    ],
   },
   {
     title: "内容",
     items: [
-
+      { href: "/admin", label: "文章与说说", key: "posts" },
       { href: "/admin/comments", label: "评论", key: "comments" },
       { href: "/admin?trash=1", label: "回收站", key: "trash" },
     ],
@@ -48,14 +49,14 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/admin/media", label: "媒体", key: "media" },
       { href: "/admin/links", label: "外链", key: "links" },
-      { href: "/admin/audit", label: "日志", key: "audit" },
     ],
   },
   {
     title: "系统",
-    /* 阶段 02-5：图片存储原为独立导航项，现收进设置区（/admin/settings/storage）。
-       配置类事务集中在一处，避免"资源里有存储、系统里有设置"这种同类两入口。 */
-    items: [{ href: "/admin/settings", label: "设置", key: "settings" }],
+    items: [
+      { href: "/admin/audit", label: "日志", key: "audit" },
+      { href: "/admin/settings", label: "设置", key: "settings" },
+    ],
   },
 ];
 
@@ -66,13 +67,18 @@ export function AdminShell({ children, active, username }: {
   const isActive = (key: string) => active === key;
 
   return (
-    <div className="admin-shell">
+    <div className="admin-shell fx-scope">
       {/* ── 桌面侧栏（≤820px 由 CSS 隐藏，改用顶栏 + 抽屉）── */}
       <aside className="admin-sidebar">
-        <Link href="/" className="admin-brand admin-sidebar-brand">flechazo</Link>
+        <div className="admin-sidebar-brand">
+          <Link href="/" className="fx-brandmark">flechazo</Link>
+          {/* 品牌注脚：说明这是哪个站点的后台，而不是一个通用工作台 */}
+          <span className="fx-brand-sub">妄司逸的小世界</span>
+        </div>
 
-        <Link href="/admin/new" className="btn btn-primary admin-side-compose">
+        <Link href="/admin/new" className="admin-side-compose">
           写文章
+          <kbd aria-hidden="true">⌘K</kbd>
         </Link>
 
         <nav className="admin-side-nav" aria-label="后台导航">
@@ -104,7 +110,7 @@ export function AdminShell({ children, active, username }: {
         {/* ── 手机顶栏（>820px 由 CSS 隐藏）── */}
         <header className="admin-topbar">
           <div className="admin-topbar-inner">
-            <Link href="/" className="admin-brand">flechazo</Link>
+            <Link href="/" className="fx-brandmark">flechazo</Link>
             <span className="admin-topbar-fill" />
             <ThemeToggle />
             <button
@@ -147,7 +153,6 @@ export function AdminShell({ children, active, username }: {
                   onClick={() => setNavOpen(false)}
                 >
                   <span>{n.label}</span>
-                  {isActive(n.key) ? <span aria-hidden>·</span> : null}
                 </Link>
               ))}
             </div>

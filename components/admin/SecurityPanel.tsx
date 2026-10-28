@@ -9,10 +9,9 @@ type SessionInfo = {
   createdAtLabel: string; lastSeenLabel: string;
 };
 
-const box = {
-  border: "1px solid var(--border)", borderRadius: 14, background: "var(--card-bg)",
-  padding: 20, marginBottom: 18,
-} as const;
+/* 每块是一个独立事务（账号 / 2FA / 设备 / 密码），各自动作即时生效，
+   所以它们确实需要各自的边界 → 用 .card（后台的「独立模块」表面）。
+   视觉全走 admin.css 的令牌，组件里不再写行内颜色。 */
 
 /**
  * 按钮变体三选一，互斥。
@@ -143,7 +142,7 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
   };
 
   const needStepUpHint = totpEnabled ? (
-    <div className="field" style={{ maxWidth: 220 }}>
+    <div className="field fx-field-narrow">
       <label>当前两步验证码（敏感操作需要）</label>
       <input
         className="input"
@@ -159,17 +158,17 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
 
   return (
     <>
-      <section style={box}>
-        <h2 style={{ fontSize: ".95rem", color: "var(--text-p0)", margin: "0 0 4px", fontWeight: 600 }}>账号</h2>
-        <p style={{ fontSize: ".85rem", color: "var(--text-p3)", margin: "0 0 10px" }}>当前账号：{username}</p>
+      <section className="card">
+        <h2 className="settings-group-title">账号</h2>
+        <p className="settings-group-desc">当前账号：{username}</p>
         {msg ? <div className="notice notice-ok">{msg}</div> : null}
         {err ? <div className="notice notice-error">{err}</div> : null}
         {needStepUpHint}
       </section>
 
-      <section style={box}>
-        <h2 style={{ fontSize: ".95rem", color: "var(--text-p0)", margin: "0 0 4px", fontWeight: 600 }}>两步验证（TOTP）</h2>
-        <p style={{ fontSize: ".85rem", color: "var(--text-p3)", margin: "0 0 12px" }}>
+      <section className="card">
+        <h2 className="settings-group-title">两步验证（TOTP）</h2>
+        <p className="settings-group-desc">
           {totpEnabled
             ? "已启用。关闭它需要输入当前验证码 —— 这一点是刻意的：即使 Cookie 被窃也无法单方面关掉 2FA。"
             : "未启用。建议开启；开启后会生成 8 个恢复码，验证器丢失时可用来登录。"}
@@ -182,25 +181,20 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
 
         {step === "verify" ? (
           <div>
-            <p style={{ fontSize: ".85rem", color: "var(--text-p2)", marginBottom: 8 }}>
+            <p className="settings-group-desc is-tight">
               1. 在验证器 App 里添加账号（手动输入下面的密钥）
             </p>
-            <div style={{
-              fontFamily: "var(--font-mono)", fontSize: ".8rem", background: "var(--bg-subtle)",
-              padding: "10px 12px", borderRadius: 8, wordBreak: "break-all", marginBottom: 8,
-              border: "1px solid var(--border)",
-            }}>{secret}</div>
-            <p style={{ fontSize: ".74rem", color: "var(--text-p4)", marginBottom: 12, wordBreak: "break-all" }}>{uri}</p>
-            <p style={{ fontSize: ".85rem", color: "var(--text-p2)", marginBottom: 8 }}>2. 输入 App 显示的 6 位验证码</p>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div className="fx-code-block">{secret}</div>
+            <p className="fx-mono-note">{uri}</p>
+            <p className="settings-group-desc is-tight">2. 输入 App 显示的 6 位验证码</p>
+            <div className="fx-inline-row">
               <input
-                className="input"
+                className="input fx-input-narrow"
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 maxLength={6}
-                style={{ maxWidth: 140 }}
               />
               <Btn onClick={confirm} busy={busy} variant="primary">确认</Btn>
             </div>
@@ -208,55 +202,50 @@ export function SecurityPanel({ username, totpEnabled, recoveryRemaining, sessio
         ) : null}
 
         {totpEnabled ? (
-          <div style={{ marginTop: 14, fontSize: ".82rem", color: "var(--text-p3)" }}>
+          <div className="settings-group-desc">
             剩余恢复码：<b>{recoveryRemaining}</b>
-            <div style={{ marginTop: 8 }}><Btn onClick={regenRecovery} busy={busy}>重新生成恢复码</Btn></div>
+            <div className="fx-mt-2"><Btn onClick={regenRecovery} busy={busy}>重新生成恢复码</Btn></div>
           </div>
         ) : null}
 
         {recoveryCodes.length ? (
-          <div style={{ marginTop: 14 }}>
-            <div className="notice notice-ok" style={{ marginBottom: 8 }}>
+          <div className="fx-mt-4">
+            <div className="notice notice-ok">
               这些恢复码只显示这一次，请立即保存到密码管理器。
             </div>
-            <div style={{
-              display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6,
-              fontFamily: "var(--font-mono)", fontSize: ".82rem", color: "var(--text-p1)",
-              background: "var(--bg-subtle)", padding: 12, borderRadius: 8, border: "1px solid var(--border)",
-            }}>
+            <div className="fx-code-grid">
               {recoveryCodes.map((c) => <span key={c}>{c}</span>)}
             </div>
           </div>
         ) : null}
       </section>
 
-      <section style={box}>
-        <h2 style={{ fontSize: ".95rem", color: "var(--text-p0)", margin: "0 0 4px", fontWeight: 600 }}>已登录设备</h2>
-        <p style={{ fontSize: ".82rem", color: "var(--text-p3)", margin: "0 0 12px" }}>
+      <section className="card">
+        <h2 className="settings-group-title">已登录设备</h2>
+        <p className="settings-group-desc">
           库里只存会话 token 的 SHA-256，所以这里显示的是哈希前缀，而非 token 本身。
         </p>
         {sessions.map((s) => (
-          <div key={s.id} style={{
-            display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap",
-            padding: "10px 0", borderBottom: "1px solid var(--border)", fontSize: ".82rem",
-          }}>
-            <span style={{ flex: 1, minWidth: 200, color: "var(--text-p2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {s.current ? "🟢 " : ""}{s.userAgent}
+          <div key={s.id} className="fx-session-row">
+            <span className="fx-session-agent">
+              {s.current ? <span className="fx-session-current" aria-label="当前设备">当前</span> : null}
+              {s.userAgent}
             </span>
-            <span style={{ color: "var(--text-p4)", fontSize: ".76rem" }}>{s.ip}</span>
-            <span style={{ color: "var(--text-p4)", fontSize: ".76rem" }}>最近 {s.lastSeenLabel}</span>
-            {s.current ? <span style={{ fontSize: ".74rem", color: "var(--text-p4)" }}>当前</span>
+            <span className="fx-session-meta">{s.ip}</span>
+            <span className="fx-session-meta">最近 {s.lastSeenLabel}</span>
+            {s.current
+              ? <span className="fx-session-meta">本机</span>
               : <Btn onClick={() => revoke(s.id)} busy={busy}>撤销</Btn>}
           </div>
         ))}
-        <div style={{ marginTop: 12 }}>
+        <div className="fx-mt-3">
           <Btn onClick={() => setConfirming("revoke-all")} busy={busy} variant="danger">退出所有设备</Btn>
         </div>
       </section>
 
-      <section style={box}>
-        <h2 style={{ fontSize: ".95rem", color: "var(--text-p0)", margin: "0 0 4px", fontWeight: 600 }}>修改密码</h2>
-        <p style={{ fontSize: ".82rem", color: "var(--text-p3)", margin: "0 0 12px" }}>
+      <section className="card">
+        <h2 className="settings-group-title">修改密码</h2>
+        <p className="settings-group-desc">
           至少 12 位。修改成功后所有会话（含当前）都会失效，需要重新登录。
         </p>
         <div className="field">
