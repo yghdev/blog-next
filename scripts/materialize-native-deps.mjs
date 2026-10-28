@@ -41,21 +41,43 @@ import path from "node:path";
  * lstat 判定为链接就只 unlink 链接本身，绝不递归进去。
  */
 export function forceRemove(target) {
-  if (!fs.existsSync(target)) return;
-  const st = fs.lstatSync(target);
+  // 用 lstat 而不是 existsSync 判断存在性：悬空软链 existsSync 返回 false，
+  // 但那条链接本身还在，不删掉会让后续 copyDir/mkdir 撞上它。
+  let st;
+  try {
+    st = fs.lstatSync(target);
+  } catch {
+    return;
+  }
+
+  /**
+   * 符号链接必须最先处理，而且**只 unlink 链接本身**。
+   *
+   * 这是本项目最危险的一处：`next build` 会在 .next 里建大量软链，
+   * 其中 `.next/standalone/node_modules/better-sqlite3` 常是指向真实包的链接。
+   * 若让它落到下面的"文件"分支，`fs.chmodSync(link, 0o666)` 会**跟随链接**
+   * 把**目标目录**权限改成 0666 —— 剥掉执行位后，那个真实目录就再也进不去，
+   * 此后任何 build/测试碰它都报
+   *   EACCES: permission denied, unlink .../better-sqlite3/package.json
+   *
+   * 更麻烦的是：报错发生在**下一次**运行时（可能是测试、可能是别人的 build），
+   * 完全指不回"是这次清理把权限改坏的"。实测这个坑重复出现多次，
+   * 每次都要重新排查 —— 所以这里必须把链接判定放在目录/文件判定之前。
+   */
+  if (st.isSymbolicLink()) {
+    fs.unlinkSync(target);
+    return;
+  }
+
   if (st.isDirectory()) {
-    // 目录必须先补上 **执行位** 才能遍历与删除其内容。
-    // 这里踩过真坑：原先对目录也写 chmod 0o666，把 x 位剥掉了，目录变成
-    // `drw-rw-rw-` —— 之后 readdirSync/rmdirSync 都进不去，下一次
-    // `next build` 就在 unlink 该目录内文件时报
-    //   EACCES: permission denied, unlink .../better-sqlite3/package.json
-    // 而报错完全指不回"是本脚本把权限改坏的"，排查成本极高。
-    // 结论：文件用 0o666、目录用 0o777，两者语义不同，不能共用一个常量。
+    // 目录必须先补上 **执行位** 才能遍历与删除其内容（文件用 0o666，目录用 0o777，
+    // 两者语义不同，不能共用一个常量 —— 同样踩过）。
     try { fs.chmodSync(target, 0o777); } catch { /* 已经可写 */ }
     for (const e of fs.readdirSync(target)) forceRemove(path.join(target, e));
     fs.rmdirSync(target);
     return;
   }
+
   try { fs.chmodSync(target, 0o666); } catch { /* 已经可写 */ }
   fs.unlinkSync(target);
 }
@@ -81,7 +103,15 @@ export function copyDir(src, dst, onDangling) {
     }
     if (stat.isDirectory()) copyDir(s, d, onDangling);
     else {
-      if (fs.existsSync(d)) { try { fs.chmodSync(d, 0o666); } catch { /* ignore */ } }
+      // 只为"覆盖只读文件"才 chmod，且先确认目标确实是文件。
+      // 若目标恰好是目录（上次中断留下的残骸），对它 chmod 0o666 会剥掉执行位，
+      // 之后就再也删不掉里面的东西 —— 与 forceRemove 那个坑同源。
+      if (fs.existsSync(d)) {
+        try {
+          if (fs.lstatSync(d).isFile()) fs.chmodSync(d, 0o666);
+          else forceRemove(d);
+        } catch { /* ignore */ }
+      }
       fs.copyFileSync(s, d);
     }
   }
