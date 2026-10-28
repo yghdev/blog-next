@@ -194,16 +194,36 @@ export function detectVideo(buf: Buffer): DetectedVideo | null {
 }
 
 /**
- * 视频上传上限 40MB。
+ * 视频上传上限 16MB。
  *
- * 依据不是"越大越好"，而是这台机器的实际能力：出口带宽 400~700KB/s，
- * 40MB 的片段首次加载约 60~100 秒。再大就属于"传上去也没人看得完"，
- * 那种内容应该走 B 站/YouTube 外链（编辑器里仍然支持）。
+ * **这个值由实测内存决定，不是由"想要多大"决定。**
  *
- * 与 MAX_UPLOAD_BYTES 一样，改这里必须同步改 deploy/nginx-blog.conf 的
- * client_max_body_size（要留 ≥ 20% 余量给 multipart 边界与表单字段）。
+ * 2026-10-28 线上事故：最初设成 40MB，结果一次 40MB 上传把整个 Node 进程
+ * 顶进 cgroup 节流（wchan=mem_cgroup_handle_over_high，D 状态，swap 抖动），
+ * **同进程的所有请求一起超时** —— 前台首页也挂了。
+ *
+ * 实测（scripts 里跑的一次性探针，METHOD 见下）：
+ *    文件 10MB → RSS +56MB（5.6x）
+ *    文件 16MB → RSS +104MB（6.5x）
+ *    文件 20MB → RSS +129MB（6.5x）
+ *    文件 25MB → RSS +159MB（6.4x）
+ * 放大来自 Next 在把请求交给 route handler **之前**就解析完整个 multipart
+ * body（连被本模块拒绝的请求也照样花掉这份内存）。
+ *
+ * 本机约束：MemoryHigh=300M，生产基线峰值约 120MB。
+ *   → 16MB 上传峰值约 224MB，留 76MB 余量，安全。
+ *   → 40MB 上传要约 380MB，**必然触顶**，这就是事故的直接原因。
+ *
+ * 所以上限取 16MB。更大的视频走平台外链（B 站/YouTube，编辑器支持），
+ * 那本来也是更合适的选择：这台机器出口带宽 400~700KB/s，40MB 的片段
+ * 访客要等 60~100 秒，传上去也没人看得完。
+ *
+ * ⚠ 想调大必须先确认机器能承受（基线 + 6.5 × 上限 < MemoryHigh），
+ * 并**同步改四处**：本常量、lib/image-plan.ts 的 _ASSUMED 副本、
+ * next.config.ts 的 proxyClientMaxBodySize、deploy/nginx-blog.conf 的
+ * client_max_body_size。漏改任一处都会在那一层被截断或节流。
  */
-export const MAX_VIDEO_BYTES = 40 * 1024 * 1024;
+export const MAX_VIDEO_BYTES = 16 * 1024 * 1024;
 
 /** 统一的体积上限判定，供上传接口按类型选择 */
 export function limitFor(mime: string): number {

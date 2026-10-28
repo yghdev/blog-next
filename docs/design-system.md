@@ -208,9 +208,9 @@ npm run test:autosave && npm run test:editor && npm run test:cmdk
 | 位置 | 值 | 作用 |
 | --- | --- | --- |
 | `lib/upload.ts` `MAX_UPLOAD_BYTES` | 8MB | 图片上限（应用层判定） |
-| `lib/upload.ts` `MAX_VIDEO_BYTES` | 40MB | 视频上限（应用层判定） |
-| `next.config.ts` `experimental.proxyClientMaxBodySize` | 48mb | Next 读进内存的上限 |
-| `deploy/nginx-blog.conf` `client_max_body_size` | 48m | 网关上限 |
+| `lib/upload.ts` `MAX_VIDEO_BYTES` | **16MB** | 视频上限（应用层判定） |
+| `next.config.ts` `experimental.proxyClientMaxBodySize` | 20mb | Next 读进内存的上限 |
+| `deploy/nginx-blog.conf` `client_max_body_size` | 20m | 网关上限 |
 | `lib/image-plan.ts` 的两个 `_ASSUMED` | 同上 | 客户端预检副本 |
 
 **改任何一个都要同步其余几个。** 少改哪一层，就会在那一层被挡，而且报错常常
@@ -219,6 +219,35 @@ npm run test:autosave && npm run test:editor && npm run test:cmdk
 - 只改应用层不改 Next → 超出部分被**静默截断**，接口拿到空 `file` 字段，
   报「没有收到文件」。这是 2026-10-28 上传视频时真实踩到的坑，排查了两轮。
 - 只改应用层不改 nginx → nginx 直接 413，应用层连日志都没有。
+
+### 上限由内存决定，不由"想要多大"决定
+
+2026-10-28 线上事故：视频上限最初设 40MB，一次 40MB 上传把整个 Node 进程顶进
+cgroup 节流（`wchan=mem_cgroup_handle_over_high`，D 状态，swap 抖动），
+**同进程所有请求一起超时，连前台首页都挂了**。
+
+实测上传的内存放大（整个 multipart body 在第 28 行的 route handler 之前就被
+Next 读进内存，连被拒的请求也照样花掉这份内存）：
+
+| 文件 | RSS 增量 | 倍率 |
+| --- | --- | --- |
+| 10MB | +56MB | 5.6× |
+| 16MB | +104MB | 6.5× |
+| 20MB | +129MB | 6.5× |
+| 25MB | +159MB | 6.4× |
+
+本机 `MemoryHigh=300M`、生产基线峰值约 120MB，所以：
+
+- 16MB 上限 → 峰值约 224MB，留 76MB 余量，安全（已实测）
+- 40MB 上限 → 约 380MB，**必然触顶**
+
+**要调大上限，先算 `基线 + 6.5 × 上限 < MemoryHigh`。** 更大的视频走平台外链
+（B 站/YouTube，编辑器支持）——那本来也更合适：出口带宽 400~700KB/s，
+40MB 的片段访客要等 60~100 秒。
+
+代码里另有一道**早期拒绝**：先看 `Content-Length`，超限就直接返回，
+不再解析 multipart。它省不掉已经花掉的内存（Next 早已缓冲完），但能让
+请求快速失败，不至于在解析上再叠一层开销。
 
 `tests/image-plan.test.ts` 会断言两个 `_ASSUMED` 与服务端常量一致，
 另有一层是人工核对（Next / nginx 的配置无法在单测里验证）。

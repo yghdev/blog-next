@@ -136,8 +136,11 @@ test("视频：超短文件不抛错，只返回 null", () => {
   }
 });
 
-test("上限：视频 40MB，图片 8MB，且视频更大", () => {
-  assert.equal(MAX_VIDEO_BYTES, 40 * 1024 * 1024);
+test("上限：视频 16MB，图片 8MB，且视频更大", () => {
+  // 16MB 是实测出来的：本机 MemoryHigh=300M、基线约 120MB，
+  // 而上传的内存放大约 6.5x。40MB 会让进程顶进 cgroup 节流，
+  // 进而拖垮同进程所有请求（2026-10-28 线上事故）。
+  assert.equal(MAX_VIDEO_BYTES, 16 * 1024 * 1024);
   assert.equal(MAX_UPLOAD_BYTES, 8 * 1024 * 1024);
   assert.ok(MAX_VIDEO_BYTES > MAX_UPLOAD_BYTES);
   // 按类型取上限：接口要靠它做精确复核

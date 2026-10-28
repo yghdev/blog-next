@@ -79,16 +79,17 @@ try {
   assert.equal(evil.status(), 400, "伪装成 mp4 的 HTML 必须被拒（同域存储型 XSS 的入口）");
   console.log("PASS media: HTML 伪装 mp4 被拒");
 
-  /* ---------- 5. 超过 40MB 的视频被明确拒绝，且报错说清是体积 ---------- */
-  const bigBytes = mp4Bytes(41 * 1024 * 1024);
+  /* ---------- 5. 超过上限的视频被明确拒绝，且报错说清是体积 ---------- */
+  // 上限 16MB（实测内存决定，见 lib/upload.ts）。这里用 17MB 刚好越过它。
+  const bigBytes = mp4Bytes(17 * 1024 * 1024);
   const big = await upload("big.mp4", bigBytes, "video/mp4");
-  assert.equal(big.status(), 400, "41MB 必须拒绝");
+  assert.equal(big.status(), 400, "17MB 必须拒绝");
   const bigJson = await big.json();
   assert.match(
     bigJson.error,
-    /过大|40MB|视频/,
+    /过大|16MB|视频/,
     "报错必须指到体积上。历史上这里报的是「没有收到文件」——那是 Next 静默截断" +
-    " 10MB 之后的假象，与真实原因无关。实际：" + JSON.stringify(bigJson.error)
+    " 之后的假象，与真实原因无关。实际：" + JSON.stringify(bigJson.error)
   );
   console.log("PASS media: 超限视频报「过大」，不再是误导性的「没有收到文件」");
 

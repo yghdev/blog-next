@@ -25,6 +25,28 @@ function startOfToday(): string {
 export const POST = handle(async (req: NextRequest) => {
   const ctx = await requireAdmin(req);
 
+  /**
+   * 先按 Content-Length 拒掉超大请求，再去解析 multipart。
+   *
+   * 这一步不是重复校验，而是**唯一能省下内存的时机**：Next 在把请求交给我们
+   * 之前就已经把整个 body 读进内存了（实测 40MB 被本函数拒绝的上传，
+   * 进程 RSS 仍涨了 169MB）。也就是说下面 `file.size > hardCap` 那条检查
+   * 只能给出正确的报错文案，却**救不回已经花掉的内存**。
+   *
+   * 本机 MemoryHigh 只有 300M，而一次 40MB 上传要涨约 260MB —— 会直接把
+   * 进程顶进 cgroup 节流（实测 wchan=mem_cgroup_handle_over_high），
+   * 变成 D 状态并开始 swap 抖动，届时**同进程的所有请求一起超时**，
+   * 前台首页也挂（2026-10-28 线上事故）。所以这里必须尽早返回。
+   */
+  const declared = Number(req.headers.get("content-length") ?? 0);
+  const HARD_CAP_TOTAL = MAX_VIDEO_BYTES + 1024 * 1024; // 留 1MB 给 multipart 边界
+  if (declared && declared > HARD_CAP_TOTAL) {
+    throw badRequest(
+      "文件过大：视频最大 " + Math.round(MAX_VIDEO_BYTES / 1024 / 1024) +
+      "MB。更大的视频请用平台外链（编辑器里「外链视频」支持 B 站/YouTube）"
+    );
+  }
+
   const form = await req.formData().catch(() => null);
   const file = form?.get("file");
   if (!file || typeof file === "string") throw badRequest("没有收到文件");

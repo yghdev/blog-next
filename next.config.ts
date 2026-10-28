@@ -145,15 +145,22 @@ const nextConfig: NextConfig = {
     /**
      * 请求体上限（2026-10-28，上传视频时暴露的问题）。
      *
-     * Next 默认只把 10MB 读进内存，超出部分**被静默截断**：接口拿到的
-     * 是一个不完整的 FormData，file 字段为空，于是报「没有收到文件」——
-     * 真实原因是「文件太大」。这个报错指不到体积上，实测排查了两轮才定位。
+     * 两层原因，都是实测出来的：
      *
-     * 视频上限 40MB（lib/upload.ts 的 MAX_VIDEO_BYTES），这里给 48MB，
-     * 与 nginx 的 client_max_body_size 48m 对齐。三个数字是一组：
-     * 改任何一个都要同步另外两个，否则会在某一层被无声截断。
+     * 1) Next 默认只把 10MB 读进内存，超出部分**被静默截断**：接口拿到的是
+     *    一个不完整的 FormData，file 字段为空，于是报「没有收到文件」——
+     *    真实原因是「文件太大」。这个报错指不到体积上，排查了两轮才定位。
+     *
+     * 2) 更关键：**这个值直接决定进程内存**。整个 body 在进入 route handler
+     *    之前就被读进内存了，所以设得越大，一次上传就可能把进程顶进 cgroup
+     *    节流（MemoryHigh=300M），进而拖垮同进程的所有请求 —— 2026-10-28
+     *    线上事故就是这么来的（当时设的 48mb + 视频上限 40MB）。
+     *
+     * 现在视频上限 16MB（lib/upload.ts 的 MAX_VIDEO_BYTES），这里给 20mb：
+     * 比上限略大以容纳 multipart 边界与表单字段，同时保证峰值内存
+     * （基线 ~120MB + 约 6.5 × 20MB ≈ 250MB）仍在 MemoryHigh=300M 之下。
      */
-    proxyClientMaxBodySize: "48mb",
+    proxyClientMaxBodySize: "20mb",
   },
   async headers() {
     return [
