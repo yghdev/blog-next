@@ -92,3 +92,6 @@ jobs:
 
       - name: 自动保存与本地恢复（崩溃 / 断网 / 多标签 / 冲突）
         run: npm run test:autosave
+
+      - name: EditorV2 与版本体验（四项退出门槛）
+        run: npm run test:editor

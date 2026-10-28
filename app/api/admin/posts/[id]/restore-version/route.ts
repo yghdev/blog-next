@@ -58,6 +58,8 @@ export const GET = handleWrite(async (req: NextRequest, { params }: { params: Pr
       reason: r.reason,
       createdAt: r.created_at,
       snapshotHash: r.snapshot_hash,
+      // 给界面的简短标签：历史列表里要能一眼看出"这是发布还是基线"
+      label: r.reason === "baseline" ? "初始基线" : "发布",
     })),
   });
 });

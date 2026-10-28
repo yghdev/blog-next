@@ -3491,3 +3491,87 @@ a.kpi-card:hover { border-color: var(--border-strong); transform: translateY(-1p
   .conflict-actions { flex-direction: column-reverse; }
   .conflict-actions .btn { width: 100%; min-height: var(--tap); }
 }
+
+/* ── 版本历史与对比（阶段 03.3，方案 §9.2）──
+   列表按时间倒序、显示"发布/初始基线"而不是"第 N 版"：
+   revision 是行版本，元数据改一次也会涨，当发布序号用会误导。 */
+.version-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  padding: var(--space-5);
+  overflow: auto;
+}
+.version-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.version-head h2 { font-size: var(--fs-lg); }
+/* 恢复只改草稿这句必须显眼：用户最容易误以为"恢复=上线" */
+.version-hint { flex: 1; min-width: 240px; color: var(--text-p3); font-size: var(--fs-sm); line-height: 1.6; }
+
+.version-body { display: flex; gap: var(--space-5); margin-top: var(--space-4); align-items: flex-start; flex-wrap: wrap; }
+.version-list { flex: 1 1 320px; min-width: 0; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.version-empty { color: var(--text-p3); font-size: var(--fs-sm); padding: var(--space-4); }
+
+.version-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+.version-item.is-active { border-color: var(--text-p2); }
+.version-item-main { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 2px; }
+.version-item-label { font-weight: var(--fw-semibold); font-size: var(--fs-sm); }
+.version-item-rev { color: var(--text-p3); font-size: .74rem; font-variant-numeric: tabular-nums; }
+.version-item-time { color: var(--text-p4); font-size: .74rem; font-variant-numeric: tabular-nums; }
+.version-item-actions { display: flex; gap: var(--space-2); flex-shrink: 0; }
+
+.version-diff { flex: 1 1 420px; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); }
+.version-diff-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; font-size: var(--fs-sm); margin-bottom: var(--space-3); }
+.version-arrow { color: var(--text-p4); }
+.version-stat { color: var(--text-p3); font-size: .76rem; font-variant-numeric: tabular-nums; }
+
+.version-fields { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--space-3); }
+.version-fields-none { color: var(--text-p4); font-size: .76rem; }
+.version-field-row { display: flex; gap: var(--space-2); align-items: baseline; font-size: .78rem; flex-wrap: wrap; }
+.version-field-name { color: var(--text-p3); min-width: 64px; }
+.version-field-from { color: var(--danger); text-decoration: line-through; }
+.version-field-to { color: var(--ok); font-weight: var(--fw-medium); }
+
+/* 行级 diff：等宽 + 保留空白，否则缩进与对齐差异看不出来 */
+.version-lines { max-height: 56vh; overflow: auto; border-radius: var(--radius-sm); background: var(--bg-tint); }
+.version-line { display: grid; grid-template-columns: 3.2em 3.2em 1.2em 1fr; gap: 4px; font-family: var(--font-mono); font-size: .76rem; line-height: 1.6; }
+.version-no { color: var(--text-p4); text-align: right; user-select: none; font-variant-numeric: tabular-nums; }
+.version-sign { color: var(--text-p3); text-align: center; user-select: none; }
+.version-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 增删行靠底色区分，但**不依赖颜色单独表意**：+/- 符号同时给出 */
+.line-insert { background: var(--ok-bg); }
+.line-insert .version-sign { color: var(--ok); font-weight: var(--fw-semibold); }
+.line-delete { background: var(--danger-bg); }
+.line-delete .version-sign { color: var(--danger); font-weight: var(--fw-semibold); }
+.hunk-equal .version-line { opacity: .75; }
+.version-identical { color: var(--text-p3); font-size: var(--fs-sm); padding: var(--space-3) 0; }
+
+@media (max-width: 820px) {
+  .version-panel { padding: var(--space-3); }
+  /* 手机端列表与对比改上下排列：并排时每栏都窄到无法读代码 */
+  .version-body { flex-direction: column; }
+  .version-diff, .version-list { flex: 1 1 auto; width: 100%; }
+  .version-lines { max-height: 40vh; }
+  .version-item-actions .btn { min-height: var(--tap); }
+  /* 手机上隐藏左侧原始行号，只留右侧：宽度不够显示两组 */
+  .version-line { grid-template-columns: 1.2em 1fr; }
+  .version-line .version-no:first-child { display: none; }
+}

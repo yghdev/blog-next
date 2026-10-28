@@ -21,6 +21,7 @@ import {
 import { AutosaveEngine, classifyReconcile, type AutosaveState } from "@/lib/autosave";
 import { createLocalStore, canClearLocal, localUnavailableFallback, type LocalDraft } from "@/lib/local-draft";
 import { SaveStatus, ConflictDialog, RestoreBanner, type ConflictOption } from "./SaveStatus";
+import { VersionPanel } from "./VersionPanel";
 
 type Initial = {
   id?: number; type?: string; title?: string; slug?: string; content?: string;
@@ -89,6 +90,7 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
     serverMeta: string;
   } | null>(null);
   const [restoreInfo, setRestoreInfo] = useState<LocalDraft | null>(null);
+  const [versionOpen, setVersionOpen] = useState(false);
 
   /** 本地存储：只在浏览器里可用；SSR 期间给一个空实现避免崩 */
   const localStoreRef = useRef(
@@ -823,11 +825,40 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         <span className="editor-savebar-hint">
           {dirty ? "有未保存改动 · Cmd/Ctrl+S 保存" : ""}
         </span>
+        {/* 版本历史只有已存在的文章才有意义：新文章还没有任何历史 */}
+        {initial?.id ? (
+          <button className="btn" disabled={busy} onClick={() => setVersionOpen(true)}>
+            版本历史
+          </button>
+        ) : null}
         <button className="btn" disabled={busy} onClick={() => save("draft")}>存草稿</button>
         <button className="btn btn-primary" disabled={busy} onClick={() => save("published")}>
           {busy ? "保存中…" : status === "published" ? "更新" : "发布"}
         </button>
       </div>
+
+      {/* 版本历史：恢复只改草稿，不改线上（方案 §6.4） */}
+      <VersionPanel
+        postId={initial?.id ?? 0}
+        open={versionOpen}
+        onClose={() => setVersionOpen(false)}
+        currentDraftRevision={identityRef.current?.draftRevision ?? 0}
+        currentPostRevision={identityRef.current?.baseRevision ?? initial?.revision ?? 1}
+        clientDraftId={clientDraftIdRef.current}
+        onRestored={(snap) => {
+          // 恢复后的内容进入编辑器；用户继续编辑或显式发布
+          setType(snap.type ?? type);
+          setTitle(String(snap.title ?? ""));
+          setSlug(String(snap.slug ?? ""));
+          setContent(String(snap.content ?? ""));
+          setCover(snap.cover ?? null);
+          setCats((snap.categories ?? []).join(", "));
+          setTags((snap.tags ?? []).join(", "));
+          setCommentsEnabled(snap.comments_enabled !== 0);
+          setDirty(true);
+          setMsg("已把所选版本恢复为草稿，发布后才会更新前台");
+        }}
+      />
 
       {/* 冲突三方对比：绝不自动合并，用户必须明确选一份（方案 §9.2） */}
       <ConflictDialog
