@@ -42,8 +42,12 @@ type Initial = {
  *   - 分屏实时预览（用 useDeferredValue 防抖，不再点一次刷一次）
  *   - 封面上传 + 字数统计
  */
-export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "edit" }) {
-  const [type, setType] = useState(initial?.type || "post");
+export function Editor({ initial, mode, initialType }: {
+  initial?: Initial; mode: "new" | "edit";
+  /** 新建时的默认类型（由 /admin/new?type=… 决定），已有内容仍以 initial.type 为准 */
+  initialType?: "post" | "page" | "shuoshuo";
+}) {
+  const [type, setType] = useState(initial?.type || initialType || "post");
   const [title, setTitle] = useState(initial?.title || "");
   const [slug, setSlug] = useState(initial?.slug || "");
   const [content, setContent] = useState(initial?.content || "");
@@ -513,6 +517,12 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
 
   const isShuo = type === "shuoshuo";
   const chars = content.replace(/\s/g, "").length;
+  /**
+   * 「返回」回到这一类内容自己的列表，而不是永远回文章列表。
+   * 从说说明细页点返回却落在文章列表，用户会以为刚才那一条没了。
+   */
+  const backHref = type === "shuoshuo" ? "/admin/shuoshuo" : type === "page" ? "/admin/pages" : "/admin";
+  const backLabel = type === "shuoshuo" ? "说说" : type === "page" ? "页面" : "文章";
 
   return (
     <div className="editor-workbench"
@@ -525,8 +535,8 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         这类全局动作应当固定在同一个位置，不必滚动寻找。
       */}
       <div className="editor-topbar">
-        <Link href="/admin" className="editor-back" aria-label="返回内容列表">
-          <span aria-hidden>←</span> 内容
+        <Link href={backHref} className="editor-back" aria-label={"返回" + backLabel}>
+          <span aria-hidden>←</span> {backLabel}
         </Link>
 
         <select

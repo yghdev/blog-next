@@ -122,7 +122,7 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
               ? <Link className="btn btn-sm" href="/admin/comments">看全部评论</Link>
               // 一条评论都没有时也必须给出口：原来这里是 undefined，
               // 用户看到说明却无处可去（B 端门禁 14）
-              : <Link className="btn btn-sm" href="/admin">回到内容列表</Link>
+              : <Link className="btn btn-sm" href="/admin">去看文章</Link>
           }
         />
       ) : (

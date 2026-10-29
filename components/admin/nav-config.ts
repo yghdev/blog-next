@@ -21,9 +21,11 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "content",
     title: "内容",
     items: [
-      { href: "/admin", label: "文章与说说", key: "posts" },
+      { href: "/admin", label: "文章", key: "posts" },
+      { href: "/admin/shuoshuo", label: "说说", key: "shuoshuo" },
+      { href: "/admin/pages", label: "页面", key: "pages" },
       { href: "/admin/comments", label: "评论", key: "comments" },
-      { href: "/admin?trash=1", label: "回收站", key: "trash" },
+      { href: "/admin/trash", label: "回收站", key: "trash" },
     ],
   },
   {

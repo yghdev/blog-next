@@ -3,43 +3,58 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Empty, State } from "./ui";
-
-/**
- * Item 带 revision：批量/删除操作必须逐项传 expectedRevision（方案 §5.1）。
- * 没有"用列表渲染时的旧版本顶上"这种兜底 —— 那等于绕过并发检查。
- */
-type Item = { id: number; type: string; title: string; status: string; dateLabel: string; revision: number };
-
-const TYPE_LABEL: Record<string, string> = { post: "文章", page: "页面", shuoshuo: "说说" };
+import { State } from "./ui";
 
 /**
  * 内容列表（B 端设计系统 · 列表页骨架）。
  *
- * 本轮改掉的：
- *  1) 危险颜色 #e5484d 硬编码在行内 style —— 暗色主题下是刺眼的亮红块。
- *     改用 .btn-danger（浅底深字语义色，跟随主题）。
- *  2) 「移入回收站」「彻底删除」点一下就执行，没有任何确认。彻底删除是
- *     不可逆的，必须过 ConfirmDialog 并写清连带影响。
- *  3) 状态原来只是一串灰字，看不出草稿/已发布。改成 State（圆点 + 文案，
- *     不用彩色胶囊：一屏 20 行每行挂个胶囊会变成彩虹，反而扫不出来）。
- *  4) 手机端标题、日期、按钮全挤在一行，溢出后按钮被挤出屏幕。
- *     现在 .data-row 在 ≤820px 自动折行，按钮顶到 48dp。
- *  5) 空列表原来只有一句「还没有内容」，没有出口。现在给出原因 + 新建入口。
+ * 两种行，对应两种信息结构 —— 不是同一套样式换皮：
+ *
+ *   title 变体（文章 / 页面 / 回收站）：标题是这一行的身份，一行读完。
+ *     选择框 → 类型（仅回收站）→ 状态 → 标题 → 日期 → 操作
+ *
+ *   body 变体（说说）：**正文就是身份**。说说通常只有一两句，没有标题，
+ *     如果按标题模型渲染就只能显示「(无标题)」—— 那是把系统的结构缺陷
+ *     丢给用户看。这里正文直接当一号信息（15px / 墨色 / 最多 3 行），
+ *     下面一行放状态、时间、字数。扫读顺序变成「先读到话，再看到元信息」。
+ *
+ * 保留既有契约：
+ *  - 每项带 revision，批量/删除必须逐项传 expectedRevision（不做旧值兜底）
+ *  - 危险操作走 ConfirmDialog，不裸执行
+ *  - 状态用 State（圆点 + 文案），不用彩色胶囊：一屏 20 行挂胶囊会变彩虹
  */
-export function PostList({ items, trash, stepUpRequired }: { items: Item[]; trash: boolean; stepUpRequired: boolean }) {
+type Item = {
+  id: number;
+  type: string;
+  /** 主信息：文章/页面是标题，说说没有标题 */
+  label: string;
+  /** 纯文本摘要（说说用它当正文） */
+  excerpt: string;
+  /** 去空白字数 */
+  chars: number;
+  status: string;
+  dateLabel: string;
+  revision: number;
+  hasDraft?: boolean;
+  hasImage?: boolean;
+};
+
+const TYPE_LABEL: Record<string, string> = { post: "文章", page: "页面", shuoshuo: "说说" };
+
+export function ContentList({ items, trash, stepUpRequired, variant = "title", showType = false }: {
+  items: Item[];
+  trash: boolean;
+  stepUpRequired: boolean;
+  /** title = 标题优先（文章/页面/回收站）；body = 正文优先（说说） */
+  variant?: "title" | "body";
+  /** 是否显示类型标记（回收站里类型混杂，需要；独立页面不需要） */
+  showType?: boolean;
+}) {
   const router = useRouter();
   const [selected, setSelected] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
-  /**
-   * 批量结果条（阶段 04）。
-   *
-   * 为什么不能只显示一句"已完成，影响 N 条"：批量有跳过/冲突/不存在三种
-   * 非成功状态，用户需要知道**哪几条没动、为什么**。只报成功数会让人以为
-   * 全部生效，于是不会去处理剩下的那几条。
-   */
   const [bulkResult, setBulkResult] = useState<
     | null
     | {
@@ -49,13 +64,11 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
   >(null);
   const [needCode, setNeedCode] = useState(false);
   const [code, setCode] = useState("");
-  /* 待确认的破坏性动作。null = 没有弹窗 */
   const [pending, setPending] = useState<
     | null
     | { kind: "bulk-delete" }
     | {
         kind: "purge"; id: number; title: string;
-        /** 影响面，null 表示还在查（方案 §3.5：确认框要列出将删掉什么） */
         comments: number | null; versions: number | null; drafts: number | null;
       }
   >(null);
@@ -68,8 +81,6 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
     setMsg(""); setErr("");
     if (!selected.length) { setErr("请先选择条目"); return; }
     setBusy(true);
-    // 逐项带 expectedRevision：服务端逐条校验并逐条返回结果，
-    // 允许部分成功（方案 §7.1）。不能只传 ids —— 那会退化成"全成全败"。
     const targets = selected
       .map((id) => items.find((it) => it.id === id))
       .filter((it): it is Item => !!it)
@@ -82,7 +93,6 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
     setBusy(false);
     setPending(null);
     if (res.ok) {
-      // 逐项结果结构化呈现：成功/跳过/冲突/不存在分开计数，失败条目给出原因
       const summary = d.summary ?? { total: 0, succeeded: 0, skipped: 0, conflicts: 0, notFound: 0 };
       const problems = (d.results ?? [])
         .filter((r: any) => !r.ok)
@@ -92,21 +102,6 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
       setSelected([]); setCode(""); setNeedCode(false);
       router.refresh();
     } else if (res.status === 428) {
-      /**
-       * 428 分两种，必须分开处理（线上 49 次连续 428 的根因）：
-       *   - STEP_UP_RELOGIN：没启用 TOTP 且登录超过 10 分钟 —— 输入框永远输不对，
-       *     只能重新登录。继续弹"请输入验证码"就是死循环。
-       *   - STEP_UP_REQUIRED：确实需要 6 位码，展示输入框。
-       * 判断依据是服务端返回的 code，不是中文文案。
-       */
-      /**
-       * 无论哪种 428 都**关掉确认弹窗**。
-       *
-       * 早期这里对 delete 会 setPending({kind:"bulk-delete"}) 把弹窗重新打开：
-       * 用户点"移入回收站"-> 428 -> 弹窗又出现 -> 再点 -> 又 428……
-       * 线上 49 次连续 428 就是这个循环，一次选中都没删掉。
-       * 正确做法是先补上验证（或重新登录），再由用户重新发起动作。
-       */
       setPending(null);
       if (d.code === "STEP_UP_RELOGIN") {
         setNeedCode(false);
@@ -141,7 +136,6 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
     setBusy(false);
     setPending(null);
     if (res.ok) {
-      // 说清连带删掉了什么：用户在确认框里看到过的数字，删除后要能对上
       const bits = ["评论 " + d.purgedComments + " 条"];
       if (d.purgedVersions) bits.push("历史版本 " + d.purgedVersions + " 个");
       if (d.purgedDrafts) bits.push("草稿 " + d.purgedDrafts + " 份");
@@ -158,38 +152,23 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
     } else setErr(d.error || "删除失败");
   };
 
-  /**
-   * 打开彻底删除确认框前先查影响面（方案 §3.5）：
-   * 确认框必须列出将删除的历史版本数、草稿和评论影响。
-   * 只写"不可逆"是不够的 —— 用户有权知道具体会掉多少东西。
-   */
   const askPurge = async (id: number, title: string) => {
     setPending({ kind: "purge", id, title, comments: null, versions: null, drafts: null });
     const res = await fetch("/api/admin/posts/" + id + "/restore", { method: "GET" });
     if (!res.ok) return;
     const d = await res.json().catch(() => null);
     if (!d) return;
-    setPending({
-      kind: "purge", id, title,
-      comments: d.comments ?? 0, versions: d.versions ?? 0, drafts: d.drafts ?? 0,
-    });
+    setPending({ kind: "purge", id, title, comments: d.comments ?? 0, versions: d.versions ?? 0, drafts: d.drafts ?? 0 });
   };
 
   const clearSel = () => setSelected([]);
-
-  if (items.length === 0) {
-    return (
-      <Empty
-        title={trash ? "回收站是空的" : "还没有内容"}
-        hint={trash
-          ? "删除的内容会先放进回收站，可以在这里恢复，或者彻底清除。"
-          : "写下第一篇，或者先在设置里检查内容类型筛选是否把结果挡住了。"}
-        actions={trash
-          ? <Link className="btn btn-sm" href="/admin">回到内容列表</Link>
-          : <Link className="btn btn-primary btn-sm" href="/admin/new">新建文章</Link>}
-      />
-    );
-  }
+  /**
+   * 行结构按**条目**决定，不是按页面决定：
+   * 回收站里文章与说说混在一起，如果按页面统一成标题型，
+   * 说说那一行又只剩一段被截断的正文、没有标题可读。
+   * 所以：说说永远走正文型，其它走标题型。
+   */
+  const isBodyItem = (type: string) => variant === "body" || type === "shuoshuo";
 
   return (
     <>
@@ -203,29 +182,18 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
         </div>
       ) : null}
 
-      {/* 批量结果条：分开计数，并列出没成功的具体原因（阶段 04） */}
       {bulkResult ? (
         <div className="bulk-result-bar" role="status">
-          <span className="bulk-result-stat">
-            共 <span className="bulk-result-num">{bulkResult.summary.total}</span> 条
-          </span>
-          <span className="bulk-result-stat">
-            成功 <span className="bulk-result-num ok">{bulkResult.summary.succeeded}</span>
-          </span>
+          <span className="bulk-result-stat">共 <span className="bulk-result-num">{bulkResult.summary.total}</span> 条</span>
+          <span className="bulk-result-stat">成功 <span className="bulk-result-num ok">{bulkResult.summary.succeeded}</span></span>
           {bulkResult.summary.skipped > 0 ? (
-            <span className="bulk-result-stat">
-              跳过 <span className="bulk-result-num warn">{bulkResult.summary.skipped}</span>
-            </span>
+            <span className="bulk-result-stat">跳过 <span className="bulk-result-num warn">{bulkResult.summary.skipped}</span></span>
           ) : null}
           {bulkResult.summary.conflicts > 0 ? (
-            <span className="bulk-result-stat">
-              冲突 <span className="bulk-result-num danger">{bulkResult.summary.conflicts}</span>
-            </span>
+            <span className="bulk-result-stat">冲突 <span className="bulk-result-num danger">{bulkResult.summary.conflicts}</span></span>
           ) : null}
           {bulkResult.summary.notFound > 0 ? (
-            <span className="bulk-result-stat">
-              不存在 <span className="bulk-result-num danger">{bulkResult.summary.notFound}</span>
-            </span>
+            <span className="bulk-result-stat">不存在 <span className="bulk-result-num danger">{bulkResult.summary.notFound}</span></span>
           ) : null}
           {bulkResult.problems.length ? (
             <span className="cmdk-meta" title={bulkResult.problems.map((p) => "ID " + p.id + "：" + p.message).join("\n")}>
@@ -241,7 +209,7 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
 
       {needCode || code ? (
         <div className="filter-bar" style={{ marginBottom: 12 }}>
-          <span style={{ fontSize: ".82rem", color: "var(--text-p3)" }}>两步验证码</span>
+          <span style={{ fontSize: ".82rem", color: "var(--fx-muted)" }}>两步验证码</span>
           <input
             className="input"
             value={code}
@@ -277,52 +245,91 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
           <input type="checkbox" checked={allOn} onChange={() => setSelected(allOn ? [] : items.map((i) => i.id))} />
           <span>全选</span>
         </label>
-        <span>{items.length} 条内容</span>
+        <span>{items.length} 条</span>
       </div>
 
-      {/*
-        行结构：选择框 → 类型 → 状态 → 标题 → 日期 → 行内操作。
-        标题是这一行的一号信息（字号最大、颜色最深、占据剩余宽度），
-        其余全部降级：类型是一行小字、状态是圆点 + 文案、日期最弱且等宽。
-        这里刻意不把状态做成彩色胶囊 —— 一屏 20 行都挂胶囊会变成彩虹，
-        反而扫不出任何东西。
-      */}
-      <div className="data-panel">
+      <div className={"data-panel" + (variant === "body" ? " is-body" : "")}>
         {items.map((p) => {
           const on = selected.includes(p.id);
+          const isBody = isBodyItem(p.type);
+          /**
+           * 选择框的可读名只取前 30 字。
+           * 直接把正文拼进去会让读屏在一条 5000 字的说说上朗读整段 ——
+           * aria-label 是「这是哪一条」的定位信息，不是内容本身。
+           */
+          const short = (p.excerpt || p.label || "这一条").replace(/\s+/g, " ").trim().slice(0, 30);
+          const check = (
+            <input
+              type="checkbox"
+              checked={on}
+              onChange={() => toggle(p.id)}
+              aria-label={"选择 " + short}
+            />
+          );
+
+          if (isBody) {
+            /**
+             * 说说行：正文即身份。
+             * 整块正文都是编辑入口（手机上是 44pt 以上的热区），
+             * 元信息压在下面一行 —— 不把「已发布/日期」插进正文里切断句子。
+             */
+            const body = (
+              <>
+                <span className="shuo-text">{p.excerpt || "（空说说）"}</span>
+                <span className="shuo-meta">
+                  {/* 回收站里的每一条都是已删除：显示「已发布」会让用户以为它还挂在线 */}
+                  <State status={trash ? "trash" : p.status === "published" ? "published" : "draft"} />
+                  {!trash && p.hasDraft && p.status === "published" ? <span className="shuo-flag">有未发布改动</span> : null}
+                  {p.hasImage ? <span className="shuo-flag">含图</span> : null}
+                  <span>{p.chars} 字</span>
+                  <span className="shuo-dot" aria-hidden>·</span>
+                  <span>{p.dateLabel}</span>
+                </span>
+              </>
+            );
+            return (
+              <div key={p.id} className={"data-row content-row is-body" + (on ? " is-selected" : "")}>
+                {check}
+                {showType ? (
+                  <span className="content-type is-body-type" aria-hidden title={TYPE_LABEL[p.type] ?? p.type}>
+                    {(TYPE_LABEL[p.type] ?? p.type).slice(0, 1)}
+                  </span>
+                ) : null}
+                {trash
+                  ? <span className="shuo-main">{body}</span>
+                  : <Link href={"/admin/edit/" + p.id} className="shuo-main">{body}</Link>}
+                {trash ? (
+                  <span className="fx-row-actions">
+                    <button className="btn btn-sm" disabled={busy} onClick={() => restore(p.id)}>恢复</button>
+                    <button className="btn btn-sm btn-danger" disabled={busy} onClick={() => void askPurge(p.id, p.excerpt || "这条说说")}>
+                      彻底删除
+                    </button>
+                  </span>
+                ) : null}
+              </div>
+            );
+          }
+
           return (
             <div key={p.id} className={"data-row content-row" + (on ? " is-selected" : "")}>
-              <input
-                type="checkbox"
-                checked={on}
-                onChange={() => toggle(p.id)}
-                aria-label={"选择 " + (p.title || "无标题")}
-              />
-
-              <span className="content-type" aria-hidden title={TYPE_LABEL[p.type] ?? p.type}>
-                {(TYPE_LABEL[p.type] ?? p.type).slice(0, 1)}
-              </span>
-
+              {check}
+              {showType ? (
+                <span className="content-type" aria-hidden title={TYPE_LABEL[p.type] ?? p.type}>
+                  {(TYPE_LABEL[p.type] ?? p.type).slice(0, 1)}
+                </span>
+              ) : null}
+              <State status={trash ? "trash" : p.status === "published" ? "published" : "draft"} />
               {trash
-                ? <State status="trash" />
-                : <State status={p.status === "published" ? "published" : "draft"} />}
-
-              {trash ? (
-                <span className="data-row-title">{p.title || "(无标题)"}</span>
-              ) : (
-                <Link href={"/admin/edit/" + p.id} className="data-row-title">{p.title || "(无标题)"}</Link>
-              )}
-
+                ? <span className="data-row-title">{p.label}</span>
+                : <Link href={"/admin/edit/" + p.id} className="data-row-title">{p.label}</Link>}
+              {p.hasDraft && p.status === "published" ? <span className="data-row-flag">有未发布改动</span> : null}
               <span className="data-row-meta">{p.dateLabel}</span>
-
               {trash ? (
                 <span className="fx-row-actions">
                   <button className="btn btn-sm" disabled={busy} onClick={() => restore(p.id)}>恢复</button>
-                  <button
-                    className="btn btn-sm btn-danger"
-                    disabled={busy}
-                    onClick={() => void askPurge(p.id, p.title || "(无标题)")}
-                  >彻底删除</button>
+                  <button className="btn btn-sm btn-danger" disabled={busy} onClick={() => void askPurge(p.id, p.label)}>
+                    彻底删除
+                  </button>
                 </span>
               ) : null}
             </div>
@@ -330,7 +337,6 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
         })}
       </div>
 
-      {/* 破坏性动作确认。标题只交代对象，副作用写进描述，按钮是明确动宾。 */}
       <ConfirmDialog
         open={pending?.kind === "bulk-delete"}
         title={"把选中的 " + selected.length + " 条内容移入回收站？"}
@@ -363,7 +369,7 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
                 · 未发布草稿 <strong>{pending.drafts}</strong> 份
               </>
             ) : (
-              <span style={{ color: "var(--text-p3)" }}>正在统计将删除的内容…</span>
+              <span style={{ color: "var(--fx-muted)" }}>正在统计将删除的内容…</span>
             )}
             <br />
             建议先确认备份（每日 04:00 自动跑）。

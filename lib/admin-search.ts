@@ -10,14 +10,18 @@
  *   | 返回     | 摘要（给读者看）             | 不返正文（只给定位用的元信息）  |
  *   | 排序     | 相关度/时间                  | 更新时间倒序（找"我刚才改的"）  |
  *
- * 最要紧的一条是**不返回正文**：命令面板只需要"标题 + 类型 + 状态"来定位，
+ * 最要紧的一条是**不返回整篇正文**：命令面板只需要"标题 + 类型 + 状态"来定位，
  * 回传正文既浪费带宽，也会让"搜一下"变成"把整库内容拉到浏览器里"。
+ * 唯一的例外是说说：它没有标题，若不给一小段正文，结果只能显示「未命名」，
+ * 用户搜到了也认不出是哪一条 —— 所以说说只带出 60 字以内的摘要当展示文案，
+ * 文章与页面仍然一个字都不带。
  *
  * 草稿标题特殊：新文章是壳，posts.title 为空，真实标题在 post_drafts 快照里
  * （方案 §4.2）。所以搜索必须同时匹配草稿快照的标题，否则"搜我刚写的草稿"
  * 会搜不到 —— 那正是这个功能最常见的用法。
  */
 import type Database from "better-sqlite3";
+import { makeExcerpt } from "./posts";
 
 export type AdminSearchType = "post" | "page" | "shuoshuo";
 
@@ -32,7 +36,7 @@ export type AdminSearchHit = {
   hasDraft: boolean;
   updatedAt: string;
   /** 命中的是哪一段（标题/路径/草稿标题），用于解释"为什么它出现在结果里" */
-  matchedIn: "title" | "slug" | "draft";
+  matchedIn: "title" | "slug" | "draft" | "body";
 };
 
 const TYPE_LABEL: Record<AdminSearchType, string> = {
@@ -65,7 +69,7 @@ export function adminSearch(
   const escaped = q.replace(/[\\%_]/g, (m) => "\\" + m);
   const like = "%" + escaped + "%";
 
-  const args: unknown[] = [like, like, like];
+  const args: unknown[] = [like, like, like, like];
   let typeSql = "";
   if (opts.type) {
     typeSql = " AND posts.type = ?";
@@ -75,30 +79,39 @@ export function adminSearch(
   const rows = db.prepare(
     "SELECT posts.id, posts.type, posts.slug, posts.status, posts.updated_at, posts.title, " +
     "  json_extract(d.snapshot_json, '$.title') AS draft_title, " +
+    "  COALESCE(NULLIF(json_extract(d.snapshot_json, '$.content'), ''), posts.content) AS body, " +
     "  (d.post_id IS NOT NULL) AS has_draft " +
     "FROM posts LEFT JOIN post_drafts d ON d.post_id = posts.id " +
     "WHERE posts.deleted_at IS NULL " +           // 回收站一律排除
     "  AND (posts.title LIKE ? ESCAPE '\\' " +
     "       OR posts.slug LIKE ? ESCAPE '\\' " +
-    "       OR json_extract(d.snapshot_json, '$.title') LIKE ? ESCAPE '\\') " +
+    "       OR json_extract(d.snapshot_json, '$.title') LIKE ? ESCAPE '\\' " +
+    "       OR (posts.type = 'shuoshuo' AND posts.content LIKE ? ESCAPE '\\')) " +
     typeSql +
     " ORDER BY posts.updated_at DESC LIMIT ?"
   ).all(...args, limit) as {
     id: number; type: AdminSearchType; slug: string; status: "draft" | "published";
-    updated_at: string; title: string; draft_title: string | null; has_draft: number;
+    updated_at: string; title: string; draft_title: string | null; body: string; has_draft: number;
   }[];
 
   return rows.map((r) => {
     const draftTitle = (r.draft_title ?? "").trim();
     const postsTitle = (r.title ?? "").trim();
-    // 有草稿且草稿标题非空时用它：用户找的是"我刚写的内容"，不是壳的空标题
-    const shown = draftTitle || postsTitle;
+    /**
+     * 说说没有标题：用正文摘要当展示文案。
+     * 否则命令面板里会出现一条叫「(未命名)」的结果 —— 用户搜到了却认不出
+     * 那是自己写的哪一句。文章仍走「草稿标题 > 正式标题」。
+     */
+    const shown = draftTitle || postsTitle ||
+      (r.type === "shuoshuo" ? makeExcerpt(r.body ?? "", 60) : "");
 
     // 解释命中原因：草稿标题命中与 posts 标题命中要能区分开，
     // 否则用户会疑惑"标题明明是 A，为什么搜 B 出来了"
-    const inDraft = draftTitle && draftTitle.toLowerCase().includes(q.toLowerCase());
-    const inTitle = postsTitle && postsTitle.toLowerCase().includes(q.toLowerCase());
-    const matchedIn: AdminSearchHit["matchedIn"] = inDraft ? "draft" : inTitle ? "title" : "slug";
+    const inDraft = !!(draftTitle && draftTitle.toLowerCase().includes(q.toLowerCase()));
+    const inTitle = !!(postsTitle && postsTitle.toLowerCase().includes(q.toLowerCase()));
+    // 说说的命中在正文上；不解释的话用户会以为标题里藏着这个词
+    const matchedIn: AdminSearchHit["matchedIn"] =
+      r.type === "shuoshuo" && !inTitle && !inDraft ? "body" : inDraft ? "draft" : inTitle ? "title" : "slug";
 
     return {
       id: r.id,

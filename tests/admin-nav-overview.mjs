@@ -2,7 +2,7 @@
  * 阶段 02-1 · 侧栏分组导航与概览页。
  *
  * 断言的是"结构和可达性"，不做审美判断。核心几条：
- *   1. **桌面是侧栏**：.admin-sidebar 可见，四组标题常驻可见，8 项齐全（存储已并入设置）
+ *   1. **桌面是侧栏**：.admin-sidebar 可见，四组标题常驻可见，10 项齐全（内容拆成文章/说说/页面，存储已并入设置）
  *   2. 顶栏在桌面隐藏（只服务手机）
  *   3. 「写文章」常驻：桌面侧栏顶部可见，手机移进抽屉顶部
  *   4. 组头是折叠开关：button + aria-expanded + aria-controls，收起后面板高度 0 且 inert，
@@ -84,14 +84,15 @@ try {
   const sideLabels = await page.locator(".admin-side-nav a").evaluateAll((els) =>
     els.map((e) => (e.textContent || "").trim())
   );
-  // 「文章与说说」而不是「内容」：分组标题已经叫「内容」，菜单项再叫「内容」
-  // 会与分组语义打架（内容 > 内容）。名称必须说清这一页管的是什么。
-  for (const want of ["概览", "文章与说说", "评论", "回收站", "媒体", "外链", "日志", "设置"]) {
+  // 2026-10-29：内容拆成「文章 / 说说 / 页面」三项。
+  // 菜单项不能再叫「内容」—— 分组标题已经叫「内容」，会与分组语义打架；
+  // 名称必须说清这一页管的是什么。
+  for (const want of ["概览", "文章", "说说", "页面", "评论", "回收站", "媒体", "外链", "日志", "设置"]) {
     assert.ok(sideLabels.includes(want), "侧栏缺少导航项：" + want + " 实际=" + JSON.stringify(sideLabels));
   }
   assert.ok(!sideLabels.includes("存储"),
     "「存储」已并入设置区，不应再是独立导航项（实际=" + JSON.stringify(sideLabels) + "）");
-  assert.equal(sideLabels.length, 8, "侧栏应恰好 8 个导航项（存储已并入设置），实际=" + JSON.stringify(sideLabels));
+  assert.equal(sideLabels.length, 10, "侧栏应恰好 10 个导航项（文章/说说/页面已拆开，存储已并入设置），实际=" + JSON.stringify(sideLabels));
 
   // 当前页（概览 / 工作台组）必须可见；折叠永远不能把「我在哪」藏起来
   assert.ok(await page.locator(".admin-side-nav a.is-active").isVisible(), "当前页所在组必须展开，选中项应可见");

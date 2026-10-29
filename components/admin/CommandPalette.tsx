@@ -29,7 +29,9 @@ type StaticAction = {
 
 const STATIC_ACTIONS: StaticAction[] = [
   { key: "new", label: "写文章", hint: "新建一篇", href: "/admin/new", keywords: "写文章 新建 创建 编辑 write new" },
-  { key: "posts", label: "内容列表", hint: "文章 / 页面 / 说说", href: "/admin", keywords: "内容 文章 列表 posts content" },
+  { key: "posts", label: "文章", hint: "成篇发布的文章", href: "/admin", keywords: "内容 文章 列表 posts content" },
+  { key: "shuoshuo", label: "说说", hint: "短句与碎片想法", href: "/admin/shuoshuo", keywords: "说说 短句 碎片 shuoshuo" },
+  { key: "pages", label: "页面", hint: "关于 / 归档等独立内容", href: "/admin/pages", keywords: "页面 关于 独立 page" },
   { key: "overview", label: "概览", hint: "继续工作", href: "/admin/overview", keywords: "概览 首页 待办 overview home" },
   { key: "comments", label: "评论", hint: "审核与回复", href: "/admin/comments", keywords: "评论 审核 comments" },
   { key: "media", label: "媒体", hint: "图片与文件", href: "/admin/media", keywords: "媒体 图片 文件 media" },
@@ -240,7 +242,8 @@ export function CommandPalette() {
                         {" · "}
                         {item.hit.status === "published" ? "已发布" : "草稿"}
                         {item.hit.hasDraft ? " · 有未发布改动" : ""}
-                        {item.hit.matchedIn === "draft" ? " · 命中草稿标题" : ""}
+                        {item.hit.matchedIn === "draft" ? " · 命中草稿标题"
+                          : item.hit.matchedIn === "body" ? " · 命中正文" : ""}
                       </span>
                     </span>
                     <span className="cmdk-badge">编辑</span>

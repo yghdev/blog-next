@@ -160,7 +160,7 @@ export default async function AuditPage({ searchParams }: {
             : "首次执行写操作（发布、删除、改设置）后这里才会有内容。登录成功与失败也会记录。"}
           actions={filtered
             ? <Link className="btn btn-sm" href="/admin/audit">看全部日志</Link>
-            : <Link className="btn btn-sm" href="/admin">回到内容列表</Link>}
+            : <Link className="btn btn-sm" href="/admin">回到文章列表</Link>}
         />
       ) : (
         <div className="data-panel">

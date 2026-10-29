@@ -42,12 +42,12 @@ import { useInitialCollapsed } from "./AdminNavContext";
  * 桌面在侧栏顶部（带 Cmd/Ctrl+K 提示，因为命令面板也能新建），
  * 手机在抽屉顶部（整行 48dp）。
  *
- * 分组与名称严格对齐现有路由与真实功能，不改名、不合并、不删除：
- *   - 文章与说说共用 /admin 列表（?type=shuoshuo 筛选），不为了好看拆成两页
- *   - 页面同理（?type=page）
- *   - 回收站是 /admin?trash=1，同属内容区，保留为入口
+ * 分组与名称严格对齐现有路由与真实功能：
+ *   - 2026-10-29 起文章 / 说说 / 页面各自独立成页（/admin、/admin/shuoshuo、
+ *     /admin/pages）：说说没有标题，和文章挤在一个列表里只能显示「无标题」
+ *   - 回收站独立成 /admin/trash（操作集与正常列表不同）
  *   - 存储配置已在阶段 02-5 并入设置，仍不在导航里单列
- * key 与既有页面 active 值保持兼容：内容列表仍叫 posts。
+ * key 与既有页面 active 值保持兼容：文章列表仍叫 posts。
  */
 function Chevron() {
   return (

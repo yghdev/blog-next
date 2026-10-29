@@ -5,9 +5,13 @@ import { getDb } from "@/lib/db";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { PageHeader, Empty, EmptyLine, Figure, SectionHead, State } from "@/components/admin/ui";
 import { formatIn } from "@/lib/time";
+import { labelFor, type ContentType } from "@/lib/admin-content";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "概览" };
+
+const asType = (t: string): ContentType =>
+  t === "shuoshuo" ? "shuoshuo" : t === "page" ? "page" : "post";
 
 /**
  * 概览 = 创作者工作台，不是数据仪表盘。
@@ -33,26 +37,43 @@ export default async function OverviewPage() {
    * 那会让人以为内容没存上。这里用 COALESCE 把草稿标题顶上来。
    */
   const titleExpr = "COALESCE(NULLIF(json_extract(d.snapshot_json,'$.title'),''), NULLIF(posts.title,''))";
+  /**
+   * 说说没有标题 —— 它在这里也必须显示正文，否则概览会出现「(未命名)」。
+   * 取草稿正文优先（草稿才是「我刚写的那句」），长度够喂 labelFor 即可。
+   */
+  const bodyExpr = "COALESCE(NULLIF(json_extract(d.snapshot_json,'$.content'),''), NULLIF(posts.content,''))";
   const joinDraft = "FROM posts LEFT JOIN post_drafts d ON d.post_id = posts.id";
 
   const recent = db.prepare(
-    "SELECT posts.id, " + titleExpr + " AS title, posts.status, posts.updated_at " + joinDraft +
+    "SELECT posts.id, posts.type, " + titleExpr + " AS title, " + bodyExpr + " AS body, " +
+    "posts.status, posts.updated_at " + joinDraft +
     " WHERE posts.deleted_at IS NULL ORDER BY posts.updated_at DESC LIMIT 6"
-  ).all() as { id: number; title: string; status: string; updated_at: string }[];
+  ).all() as { id: number; type: string; title: string; body: string; status: string; updated_at: string }[];
 
   const drafts = db.prepare(
-    "SELECT posts.id, " + titleExpr + " AS title, posts.updated_at " + joinDraft +
+    "SELECT posts.id, posts.type, " + titleExpr + " AS title, " + bodyExpr + " AS body, posts.updated_at " + joinDraft +
     " WHERE posts.status='draft' AND posts.deleted_at IS NULL ORDER BY posts.updated_at DESC LIMIT 8"
-  ).all() as { id: number; title: string; updated_at: string }[];
+  ).all() as { id: number; type: string; title: string; body: string; updated_at: string }[];
+
+  /** 概览与列表页共用同一套文案规则：说说取正文，文章取标题 */
+  const shown = (r: { type: string; title: string; body: string }) => labelFor(asType(r.type), r.title, r.body);
 
   const pending = (db.prepare("SELECT COUNT(*) c FROM comments WHERE status='pending'").get() as { c: number }).c;
   const trash = (db.prepare("SELECT COUNT(*) c FROM posts WHERE deleted_at IS NOT NULL").get() as { c: number }).c;
-  const published = (db.prepare(
-    "SELECT COUNT(*) c FROM posts WHERE status='published' AND deleted_at IS NULL"
-  ).get() as { c: number }).c;
-  const draftCount = (db.prepare(
-    "SELECT COUNT(*) c FROM posts WHERE status='draft' AND deleted_at IS NULL"
-  ).get() as { c: number }).c;
+  /**
+   * 分类型的计数。
+   *
+   * 拆页前这里只有「已发布 / 草稿」两个总数，且都链到 /admin —— 那是唯一
+   * 的列表，数字一定对得上。拆成三条列表后继续显示总数就会骗人：
+   * 「已发布 2」点进去只看到 1 篇文章（另一条是说说）。
+   * 所以改成按类型分别计数，每一格都指向**它自己那条列表**，点开数量吻合。
+   */
+  const countBy = (sql: string) => (db.prepare(sql).get() as { c: number }).c;
+  const typeCounts = {
+    post: countBy("SELECT COUNT(*) c FROM posts WHERE type='post' AND deleted_at IS NULL"),
+    shuoshuo: countBy("SELECT COUNT(*) c FROM posts WHERE type='shuoshuo' AND deleted_at IS NULL"),
+    page: countBy("SELECT COUNT(*) c FROM posts WHERE type='page' AND deleted_at IS NULL"),
+  };
 
   const primary = drafts[0] ?? recent[0];
   const primaryIsDraft = drafts.length > 0;
@@ -70,7 +91,7 @@ export default async function OverviewPage() {
         <section className="continue-card">
           <div className="continue-copy">
             <span className="section-eyebrow">{primaryIsDraft ? "接着上次的草稿" : "回到最近编辑"}</span>
-            <h2>{primary.title || "(未命名草稿)"}</h2>
+            <h2>{shown(primary)}</h2>
             <p>最后编辑 {formatIn(primary.updated_at, "datetime")}</p>
           </div>
           <Link className="btn btn-primary" href={"/admin/edit/" + primary.id}>继续编辑</Link>
@@ -95,7 +116,7 @@ export default async function OverviewPage() {
             </Link>
           ) : null}
           {trash > 0 ? (
-            <Link href="/admin?trash=1">
+            <Link href="/admin/trash">
               <strong>{trash}</strong> 条内容在回收站<span>查看</span>
             </Link>
           ) : null}
@@ -104,10 +125,11 @@ export default async function OverviewPage() {
 
       {/* ── 统计：一行数字，不做彩色卡片 ── */}
       <div className="fx-figure-row" role="group" aria-label="内容概况">
-        <Figure label="已发布" value={published} href="/admin?status=published" />
-        <Figure label="草稿" value={draftCount} href="/admin?status=draft" alert={draftCount > 0} />
+        <Figure label="文章" value={typeCounts.post} href="/admin" />
+        <Figure label="说说" value={typeCounts.shuoshuo} href="/admin/shuoshuo" />
+        <Figure label="页面" value={typeCounts.page} href="/admin/pages" />
         <Figure label="待审评论" value={pending} href="/admin/comments?status=pending" alert={pending > 0} />
-        <Figure label="回收站" value={trash} href="/admin?trash=1" />
+        <Figure label="回收站" value={trash} href="/admin/trash" />
       </div>
 
       {/* ── 下方两栏：草稿优先，最近编辑其次 ── */}
@@ -121,7 +143,7 @@ export default async function OverviewPage() {
             <div className="work-list">
               {drafts.map((d) => (
                 <Link key={d.id} className="work-item" href={"/admin/edit/" + d.id}>
-                  <span className="work-item-title">{d.title || "(未命名草稿)"}</span>
+                  <span className="work-item-title">{shown(d)}</span>
                   <span className="work-item-date">{formatIn(d.updated_at, "date")}</span>
                 </Link>
               ))}
@@ -137,7 +159,7 @@ export default async function OverviewPage() {
             <div className="work-list">
               {recent.map((r) => (
                 <Link key={r.id} className="work-item" href={"/admin/edit/" + r.id}>
-                  <span className="work-item-title">{r.title || "(未命名)"}</span>
+                  <span className="work-item-title">{shown(r)}</span>
                   <State status={r.status === "published" ? "published" : "draft"} />
                   <span className="work-item-date">{formatIn(r.updated_at, "date")}</span>
                 </Link>

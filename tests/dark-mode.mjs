@@ -105,14 +105,15 @@ try {
   assert.deepEqual(bad, [], "暗色下状态徽章文字对比度过低：" + JSON.stringify(bad));
   console.log("PASS 01-B: 暗色下状态徽章文字可读（对比度 >= 3）");
 
-  // 4) PostList 的危险操作仍是 .btn-danger，且暗色下没有亮红块
-  await page.goto(server.base + "/admin", { waitUntil: "networkidle" });
+  // 4) 内容列表的危险操作仍是 .btn-danger，且暗色下没有亮红块
+  // 回收站才有「彻底删除」（危险色）；文章列表默认页只有「移入回收站」在选中后出现
+  await page.goto(server.base + "/admin/trash", { waitUntil: "networkidle" });
   const dangerOk = await page.evaluate(() => {
     const btns = [...document.querySelectorAll(".btn-danger")];
     return btns.every((b) => getComputedStyle(b).backgroundColor !== "rgb(229, 72, 77)");
   });
   assert.ok(dangerOk, "危险按钮不得回到硬编码的 #e5484d 实色");
-  console.log("PASS 01-B: PostList 危险按钮未回退到硬编码红色");
+  console.log("PASS 01-B: 内容列表危险按钮未回退到硬编码红色");
 
   console.log("All 01-B dark mode checks passed.");
 } finally {
