@@ -198,7 +198,15 @@ try {
       await page.request.delete(BASE + "/api/admin/posts/" + postId, { data: { expectedRevision: cur.post.revision } });
     } catch { /* 清理尽力而为 */ }
   }
-  if (keep && postId) console.error("留待人工检查的草稿壳 id=" + postId);
+  // 只有对着**线上**跑才需要留话；隔离实例的库副本下一步就被删了，
+  // 报"留待人工检查"只会让人白跑一趟。
+  if (keep && postId) {
+    console.error(
+      isProd
+        ? "留待人工检查的草稿壳 id=" + postId + "（线上，记得删）"
+        : "隔离实例里留了草稿壳 id=" + postId + "，随数据副本一起销毁，无需处理"
+    );
+  }
   await browser.close();
 }
 
