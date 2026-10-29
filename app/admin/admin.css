@@ -317,23 +317,96 @@
   letter-spacing: 0.04em;
 }
 
-/* ── 侧栏导航：分组标题弱化，选中态「一竖条 + 品牌底」而非整块深色 ── */
-.admin-side-nav { display: flex; flex-direction: column; gap: var(--fx-s5); }
-.admin-side-group { display: flex; flex-direction: column; gap: 1px; }
+/* ── 侧栏导航：组头是「章节标签 + 细线 + 折叠箭头」，子项挂在一条导轨上 ──
+   三层视觉层级，不靠加装饰：
+     组头  12px / 600 / 0.08em，非当前组 --fx-ink-2（8.3:1），右侧拖一条细线吃掉余量
+     子项  13px / 400，缩进挂在 1px 导轨上，明确「属于上一行」
+     选中  品牌浅底 + 2px 竖条压在导轨上，字重加粗；所在组头同步转墨色/品牌线
+   旧版组头是 11px --fx-faint 的不可交互小字，既淡又不像标签；现在它是一枚
+   可点的章节按钮，字号与字重都上来了，但比子项更短更硬，层级反而更清楚。 */
+.admin-side-nav { display: flex; flex-direction: column; gap: var(--fx-s3); }
+.admin-side-group { display: flex; flex-direction: column; }
+
+.admin-side-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s2);
+  width: 100%;
+  min-height: 30px;
+  padding: 0 var(--fx-s3) 0 12px;
+  border: 0;
+  border-radius: var(--fx-r-sm);
+  background: transparent;
+  color: var(--fx-ink-2);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--fx-dur-1) var(--fx-ease), color var(--fx-dur-1) var(--fx-ease);
+}
+.admin-side-group-toggle:hover {
+  /* 比选中态的浅底再淡一档：hover 只表达"这里能点"，不冒充"当前所在" */
+  background: color-mix(in oklab, var(--fx-brand-tint) 60%, transparent);
+  color: var(--fx-ink);
+}
 .admin-side-title {
-  padding: 0 var(--fx-s3);
-  margin-bottom: var(--fx-s2);
-  font-size: var(--fx-fs-micro);
-  font-weight: var(--fx-fw-medium);
-  letter-spacing: 0.12em;
-  color: var(--fx-faint);
-  /* 分组标题只是视觉层次，不进读屏导航流（TSX 里 aria-hidden） */
+  font-size: var(--fx-fs-xs);
+  font-weight: var(--fx-fw-semi);
+  letter-spacing: 0.08em;
+  color: inherit;
+  white-space: nowrap;
+}
+/* 章节细线：吃掉标题与箭头之间的全部余量，把「组」拉成一整行 */
+.admin-side-rule {
+  flex: 1;
+  height: 1px;
+  min-width: var(--fx-s2);
+  background: var(--fx-line);
+  transition: background var(--fx-dur-1) var(--fx-ease);
+}
+.fx-nav-chevron {
+  flex-shrink: 0;
+  color: var(--fx-muted);
+  transition: transform var(--fx-dur-2) var(--fx-ease), color var(--fx-dur-1) var(--fx-ease);
+}
+.admin-side-group-toggle:hover .fx-nav-chevron { color: var(--fx-ink-2); }
+.admin-side-group[data-collapsed="true"] .fx-nav-chevron { transform: rotate(-90deg); }
+
+/* 当前组：组头回到墨色、细线与导轨换品牌色 —— 整组收起时也能看出「我在这」 */
+.admin-side-group[data-current="true"] .admin-side-group-toggle { color: var(--fx-ink); }
+.admin-side-group[data-current="true"] .admin-side-rule { background: var(--fx-brand-line); }
+.admin-side-group[data-current="true"] .admin-side-group-links { border-left-color: var(--fx-brand-line); }
+/* 用户手动收起当前组时，组头左侧补一条品牌竖条：选中项虽然被藏起来，
+   「我在哪一组」仍然留在原地。这是折叠态唯一的颜色线索，不多加别的。 */
+.admin-side-group[data-current="true"][data-collapsed="true"] .admin-side-group-toggle {
+  box-shadow: inset 2px 0 0 var(--fx-brand);
+}
+
+/* 折叠：grid-template-rows 0fr/1fr 可过渡，内容靠 overflow 裁切。
+   收起时 TSX 给内容加 inert，键盘与读屏都不会进入不可见区域。 */
+.admin-side-group-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--fx-dur-2) var(--fx-ease);
+}
+.admin-side-group[data-collapsed="true"] .admin-side-group-body { grid-template-rows: 0fr; }
+/* 真正裁切的那一层：外层负责 0fr/1fr 过渡，内层负责 overflow。
+   两层分开是 grid 折叠的常规写法 —— 直接在 grid 项上 overflow:hidden
+   会把高度算成 0，过渡看起来像「瞬间消失」。 */
+.admin-side-group-clip { min-height: 0; overflow: hidden; }
+.admin-side-group-links {
+  /* 导轨对齐组头文字的左侧，子项文字比组头再缩进一档 */
+  margin: var(--fx-s1) 0 0 7px;
+  padding-left: var(--fx-s3);
+  border-left: 1px solid var(--fx-line);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 .admin-side-nav a {
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 30px;
   padding: var(--fx-s1) var(--fx-s3);
   border-radius: var(--fx-r-sm);
   font-size: var(--fx-fs-sm);
@@ -344,8 +417,8 @@
 }
 .admin-side-nav a:hover { color: var(--fx-ink); background: var(--fx-brand-tint); }
 
-/* 选中态：左侧 2px 品牌竖条 + 品牌浅底 + 提字重。
-   三条线索里只有一条是颜色（竖条），字重与底色同时变化，暗色下也不会丢。 */
+/* 选中态：2px 品牌竖条 + 品牌浅底 + 提字重。
+   竖条压在组导轨上，读起来是「这一组里的这一项」而不是一颗独立胶囊。 */
 .admin-side-nav a.is-active {
   color: var(--fx-ink);
   font-weight: var(--fx-fw-semi);
@@ -1534,17 +1607,62 @@
   .fx-scope .sheet-panel { display: none; }
 }
 
-/* ── 抽屉内的后台导航（手机）── */
-.sheet-nav { display: flex; flex-direction: column; gap: 1px; }
-.sheet-nav-group { display: flex; flex-direction: column; gap: 1px; }
-.sheet-nav-group + .sheet-nav-group { margin-top: var(--fx-s4); }
-.sheet-nav-title {
+/* ── 抽屉内的后台导航（手机）──
+   与侧栏同一套层级：组头是可点的章节按钮（细线 + 箭头），子项挂导轨。
+   手机不做「组头 28px 的紧凑版」：组头热区同样 48dp，否则手指点不中。 */
+.sheet-nav { display: flex; flex-direction: column; gap: var(--fx-s1); }
+.sheet-nav-group { display: flex; flex-direction: column; }
+.sheet-nav-group + .sheet-nav-group { margin-top: var(--fx-s1); }
+.sheet-nav-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s2);
+  width: 100%;
+  min-height: var(--tap-lg);
   padding: 0 var(--fx-s3);
-  margin-bottom: var(--fx-s1);
-  font-size: var(--fx-fs-micro);
-  font-weight: var(--fx-fw-medium);
-  letter-spacing: 0.12em;
-  color: var(--fx-faint);
+  border: 0;
+  border-radius: var(--fx-r-sm);
+  background: transparent;
+  color: var(--fx-ink-2);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.sheet-nav-toggle:active { background: var(--fx-brand-tint); }
+.sheet-nav-title {
+  font-size: var(--fx-fs-xs);
+  font-weight: var(--fx-fw-semi);
+  letter-spacing: 0.08em;
+  color: inherit;
+  white-space: nowrap;
+}
+.sheet-nav-rule {
+  flex: 1;
+  height: 1px;
+  min-width: var(--fx-s2);
+  background: var(--fx-line);
+}
+.sheet-nav-group[data-current="true"] .sheet-nav-toggle { color: var(--fx-ink); }
+.sheet-nav-group[data-current="true"] .sheet-nav-rule { background: var(--fx-brand-line); }
+.sheet-nav-group[data-current="true"] .sheet-nav-links { border-left-color: var(--fx-brand-line); }
+.sheet-nav-group[data-current="true"][data-collapsed="true"] .sheet-nav-toggle {
+  box-shadow: inset 2px 0 0 var(--fx-brand);
+}
+.sheet-nav-group[data-collapsed="true"] .fx-nav-chevron { transform: rotate(-90deg); }
+.sheet-nav-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--fx-dur-2) var(--fx-ease);
+}
+.sheet-nav-group[data-collapsed="true"] .sheet-nav-body { grid-template-rows: 0fr; }
+.sheet-nav-clip { min-height: 0; overflow: hidden; }
+.sheet-nav-links {
+  margin-left: 7px;
+  padding-left: var(--fx-s3);
+  border-left: 1px solid var(--fx-line);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 .sheet-nav a {
   display: flex;
