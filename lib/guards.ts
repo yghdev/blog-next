@@ -8,9 +8,20 @@ import { clientIp } from "./request-ip";
 /** 带 HTTP 语义的错误，route 层统一转成响应 */
 export class HttpError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /**
+   * 机器可读的错误码。
+   *
+   * 为什么补这个字段：428 有两种完全不同的成因 ——
+   *   a) 需要输入两步验证码（用户有 TOTP，给个输入框就行）
+   *   b) 未启用 TOTP 且登录已超过 10 分钟（给输入框也没用，只能重新登录）
+   * 前端此前只看状态码，于是对 (b) 也弹"请输入验证码"，用户怎么输都过不去 ——
+   * 线上 49 次连续 428 就是这么来的。只靠中文 message 分支太脆，所以带 code。
+   */
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
     this.name = "HttpError";
   }
 }
@@ -21,7 +32,8 @@ export const notFound = (m = "资源不存在") => new HttpError(404, m);
 export const conflict = (m = "操作冲突") => new HttpError(409, m);
 export const badRequest = (m: string) => new HttpError(400, m);
 /** 428：需要二次验证（step-up） */
-export const needsStepUp = (m = "此操作需要再次验证两步验证码") => new HttpError(428, m);
+export const needsStepUp = (m = "此操作需要再次验证两步验证码", code = "STEP_UP_REQUIRED") =>
+  new HttpError(428, m, code);
 
 export type AdminContext = {
   user: SessionUser;
@@ -67,7 +79,17 @@ export async function requireStepUp(ctx: AdminContext, code?: string | null): Pr
   if (isFreshAuth(ctx.token, STEP_UP_SECONDS)) return;
 
   if (!ctx.user.totp_enabled || !ctx.user.totp_secret) {
-    throw needsStepUp("请重新登录后再执行此操作（未启用两步验证时，敏感操作要求 10 分钟内登录）");
+    /**
+     * 未启用 TOTP：只能靠"10 分钟内登录过"。
+     *
+     * 这里必须用**另一个 code**（STEP_UP_RELOGIN），前端据此显示"重新登录"，
+     * 而不是给一个永远不可能正确的验证码输入框。线上批量删除连续 428
+     * 就是这一支被当成"请输入验证码"处理的结果。
+     */
+    throw needsStepUp(
+      "这次操作需要重新登录：未启用两步验证时，敏感操作只允许在登录后 10 分钟内进行",
+      "STEP_UP_RELOGIN"
+    );
   }
 
   const input = (code ?? "").trim();
@@ -83,7 +105,7 @@ export async function requireStepUp(ctx: AdminContext, code?: string | null): Pr
     logAudit({ action: "login.ok", userId: ctx.user.id, userName: ctx.user.username, meta: { via: "recovery-code" }, ip: ctx.ip, userAgent: ctx.userAgent });
     return;
   }
-  throw needsStepUp("验证码不正确");
+  throw needsStepUp("验证码不正确", "STEP_UP_BAD_CODE");
 }
 
 /** 从请求体里取可能的验证码（约定字段名 totp，兼容 header） */
@@ -97,11 +119,17 @@ export function stepUpCodeFrom(req: { headers: { get(n: string): string | null }
 /** 统一错误 -> 响应；未预期异常不外泄内部细节 */
 export function errorResponse(e: unknown): NextResponse {
   if (e instanceof HttpError) {
-    return NextResponse.json({ error: e.message, status: e.status }, { status: e.status });
+    return NextResponse.json(
+      { error: e.message, status: e.status, ...(e.code ? { code: e.code } : {}) },
+      { status: e.status }
+    );
   }
   if (e && typeof e === "object" && "status" in e && "message" in e) {
-    const anyE = e as { status: number; message: string };
-    return NextResponse.json({ error: anyE.message, status: anyE.status }, { status: anyE.status });
+    const anyE = e as { status: number; message: string; code?: string };
+    return NextResponse.json(
+      { error: anyE.message, status: anyE.status, ...(anyE.code ? { code: anyE.code } : {}) },
+      { status: anyE.status }
+    );
   }
   // 只记日志，不回传堆栈/SQL 细节（原实现会把 SQLite 原文抛给客户端）
   console.error("[api] unhandled error:", e);

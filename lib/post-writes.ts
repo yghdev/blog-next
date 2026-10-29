@@ -546,6 +546,40 @@ export function publishDraft(input: PublishInput): PublishResult {
 
     // 7. 草稿快照必须可发布：正式 slug 已由调用方校验；这里复核冲突
     const snapshot = JSON.parse(draft.snapshot_json) as Snapshot;
+
+    /**
+     * 内容与线上完全一致 -> 幂等返回，不新增版本。
+     *
+     * 场景：用户点了一次「更新」没反应（网络慢），又点一次；或者发布成功后
+     * 没刷新页面又点了一次。没有这一条，每点一次 revision 就 +1，
+     * 版本历史里会出现一串"内容完全相同"的记录，用户没法用它找回任何东西。
+     * 这里**不做任何写入**，只把当前状态如实返回（revision 用现值）。
+     *
+     * ⚠ 必须限定 status = 'published'：草稿或已下线的文章即使内容与 posts 相同，
+     * 「发布」也必须真的把状态改成 published。漏了这条判断，
+     * 「转草稿后再点发布」会静默什么都不做，用户看到"已发布"但前台仍是 404。
+     */
+    const live = snapshotFromPost(post);
+    if (
+      post.status === "published" &&
+      live.type === snapshot.type &&
+      live.title === snapshot.title &&
+      live.slug === finalSlug &&
+      live.content === snapshot.content &&
+      (live.cover ?? null) === (snapshot.cover ?? null) &&
+      live.comments_enabled === snapshot.comments_enabled &&
+      JSON.stringify(live.categories) === JSON.stringify(snapshot.categories) &&
+      JSON.stringify(live.tags) === JSON.stringify(snapshot.tags)
+    ) {
+      // 草稿已经没有存在意义（内容和线上一致），顺手清掉，避免它继续挡住批量发布
+      db.prepare("DELETE FROM post_drafts WHERE post_id = ?").run(postId);
+      return {
+        ok: true, postId, revision: post.revision,
+        slug: post.slug,
+        snapshotHash: draft.snapshot_hash,
+        replayed: true,
+      };
+    }
     const clash = db.prepare("SELECT id FROM posts WHERE type = ? AND slug = ? AND id != ?")
       .get(post.type, finalSlug, postId) as { id: number } | undefined;
     if (clash) fail("SLUG_CONFLICT", "该 URL 路径已被其他文章占用", { slug: finalSlug });

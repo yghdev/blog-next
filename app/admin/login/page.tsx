@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 /**
  * 后台登录（移动端设计系统 · 参考 04 紧凑表单）。
@@ -12,7 +12,21 @@ import { useRouter } from "next/navigation";
  *      强制放大整页且不会缩回；
  *   3) 主按钮全宽 + 48dp 高，落在拇指可控区，不在顶部 1/3 的够不着区。
  */
-export default function LoginPage() {
+/**
+ * next 参数必须被尊重。
+ *
+ * proxy.ts 把未登录的后台请求重定向成 /admin/login?next=/admin/edit/34，
+ * 但早期登录页从不读它，登录成功一律 push("/admin") —— 用户正在写的那篇文章
+ * 就再也回不去了（线上"登录后总是在列表页"的抱怨即此）。
+ * 只接受站内绝对路径，挡掉 //evil.com 这类开放重定向。
+ */
+function safeNext(raw: string | null): string {
+  if (!raw) return "/admin";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/admin";
+  return raw;
+}
+
+function LoginForm() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
@@ -20,6 +34,8 @@ export default function LoginPage() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = safeNext(searchParams.get("next"));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,7 +48,7 @@ export default function LoginPage() {
     const d = await res.json().catch(() => ({}));
     setBusy(false);
     if (res.ok) {
-      router.push("/admin");
+      router.push(nextPath);
       router.refresh();
     } else {
       setErr(d.error || "登录失败");
@@ -104,5 +120,18 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+/**
+ * useSearchParams 必须包一层 Suspense，否则 Next 在静态预渲染阶段会报
+ * "missing suspense boundary with useSearchParams"（构建直接失败）。
+ * 登录页本身是动态的，这层只是满足框架约束。
+ */
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="login-wrap fx-scope"><div className="login-card">正在加载…</div></div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

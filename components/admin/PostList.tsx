@@ -92,9 +92,29 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
       setSelected([]); setCode(""); setNeedCode(false);
       router.refresh();
     } else if (res.status === 428) {
-      setNeedCode(true);
-      setErr("该操作需要两步验证码，请在下方输入后重试");
-      setPending(action === "delete" ? { kind: "bulk-delete" } : null);
+      /**
+       * 428 分两种，必须分开处理（线上 49 次连续 428 的根因）：
+       *   - STEP_UP_RELOGIN：没启用 TOTP 且登录超过 10 分钟 —— 输入框永远输不对，
+       *     只能重新登录。继续弹"请输入验证码"就是死循环。
+       *   - STEP_UP_REQUIRED：确实需要 6 位码，展示输入框。
+       * 判断依据是服务端返回的 code，不是中文文案。
+       */
+      /**
+       * 无论哪种 428 都**关掉确认弹窗**。
+       *
+       * 早期这里对 delete 会 setPending({kind:"bulk-delete"}) 把弹窗重新打开：
+       * 用户点"移入回收站"-> 428 -> 弹窗又出现 -> 再点 -> 又 428……
+       * 线上 49 次连续 428 就是这个循环，一次选中都没删掉。
+       * 正确做法是先补上验证（或重新登录），再由用户重新发起动作。
+       */
+      setPending(null);
+      if (d.code === "STEP_UP_RELOGIN") {
+        setNeedCode(false);
+        setErr("这次操作需要重新登录后才能执行（未启用两步验证时，敏感操作只允许在登录后 10 分钟内进行）。");
+      } else {
+        setNeedCode(true);
+        setErr("该操作需要两步验证码，请在下方输入后重新执行");
+      }
     } else setErr(d.error || "操作失败");
   };
 
@@ -128,8 +148,13 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
       setMsg("已彻底删除，连带清除" + bits.join("、"));
       router.refresh();
     } else if (res.status === 428) {
-      setNeedCode(true);
-      setErr("彻底删除需要两步验证码，请在下方输入后重试");
+      if (d.code === "STEP_UP_RELOGIN") {
+        setNeedCode(false);
+        setErr("彻底删除需要重新登录后才能执行（未启用两步验证时，敏感操作只允许登录后 10 分钟内进行）。");
+      } else {
+        setNeedCode(true);
+        setErr("彻底删除需要两步验证码，请在下方输入后重试");
+      }
     } else setErr(d.error || "删除失败");
   };
 
@@ -169,7 +194,14 @@ export function PostList({ items, trash, stepUpRequired }: { items: Item[]; tras
   return (
     <>
       {msg ? <div className="notice notice-ok">{msg}</div> : null}
-      {err ? <div className="notice notice-error">{err}</div> : null}
+      {err ? (
+        <div className="notice notice-error">
+          {err}
+          {/重新登录/.test(err) ? (
+            <a className="btn btn-sm" href="/admin/login" style={{ marginLeft: 12 }}>去登录</a>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* 批量结果条：分开计数，并列出没成功的具体原因（阶段 04） */}
       {bulkResult ? (

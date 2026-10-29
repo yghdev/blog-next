@@ -489,3 +489,84 @@ test("本地不可用时给出常驻警告并要求导出/存服务端", () => {
   // 明确告知风险，而不是含糊地"可能有问题"
   assert.match(f.message, /丢失/);
 });
+
+/* ══════════════════════════════════════════════════════════════════
+   回归：2026-10-29 线上「发布后无法继续编辑」事故
+   ══════════════════════════════════════════════════════════════════ */
+
+/** 与上面 identity() 同形，但这个测试里的回调参数也叫 identity，会遮蔽它，故另起一名 */
+function makeIdentity(over: Partial<DraftIdentityLite> = {}): DraftIdentityLite {
+  return { postId: 1, clientDraftId: "cid-1", baseRevision: 2, draftRevision: 1, snapshotHash: "h1", ...over };
+}
+
+test("回归：发布后 afterPublish 生效，第一次自动保存不得拿旧基线", async () => {
+  const clock = fakeTimers();
+  const seen: number[] = [];
+  let engine!: AutosaveEngine;
+  engine = new AutosaveEngine({
+    initialBaseRevision: 1,
+    save: async (_snap, current) => {
+      // 这里模拟 hook 里的取法：identity 优先，否则用引擎自己的 baseRevision
+      seen.push(current?.baseRevision ?? engine.getBaseRevision());
+      return { kind: "ok", identity: makeIdentity({ baseRevision: 2, draftRevision: 1 }) };
+    },
+    persistLocal: () => true,
+    timers: clock.api,
+  });
+
+  engine.update({ content: "v1" });
+  clock.advance(1600);
+  await clock.flush();
+  assert.equal(seen.at(-1), 1, "首次保存应基于打开时的 revision=1");
+
+  // 发布成功：服务端删草稿、posts.revision 变成 2
+  engine.setIdentity(null);
+  engine.setBaseRevision(2);
+
+  engine.update({ content: "发布后继续写" });
+  clock.advance(1600);
+  await clock.flush();
+
+  assert.equal(seen.at(-1), 2, "发布后第一次自动保存必须用新的 revision=2，否则线上必现 409");
+  assert.equal(engine.getState(), "saved");
+  engine.destroy();
+});
+
+test("回归：setIdentity 清空后 getBaseRevision 仍能返回最新值（不会被 initial 顶回去）", () => {
+  const engine = new AutosaveEngine({
+    initialBaseRevision: 1,
+    save: async () => ({ kind: "ok", identity: identity() }),
+    persistLocal: () => true,
+    timers: fakeTimers().api,
+  });
+  assert.equal(engine.getBaseRevision(), 1);
+  engine.setIdentity(identity({ baseRevision: 3, draftRevision: 7 }));
+  assert.equal(engine.getBaseRevision(), 3);
+  engine.setIdentity(null);
+  assert.equal(engine.getBaseRevision(), 3, "作废身份不应把基线退回打开页面时的旧值");
+  engine.setBaseRevision(4);
+  assert.equal(engine.getBaseRevision(), 4);
+  engine.destroy();
+});
+
+test("回归：saveSnapshotNow 把给定快照立刻发出，并返回本次结果", async () => {
+  const clock = fakeTimers();
+  const sent: unknown[] = [];
+  const engine = new AutosaveEngine({
+    save: async (snap) => {
+      sent.push(snap);
+      return { kind: "ok", identity: identity({ draftRevision: 2 }) };
+    },
+    persistLocal: () => true,
+    timers: clock.api,
+  });
+
+  const p = engine.saveSnapshotNow({ content: "点按钮那一刻的正文" });
+  await clock.flush();
+  const outcome = await p;
+
+  assert.equal(sent.length, 1, "按钮保存必须立刻发一次请求，不能被 debounce 拖");
+  assert.deepEqual(sent[0], { content: "点按钮那一刻的正文" });
+  assert.equal(outcome?.kind, "ok", "必须把本次结果交给调用方，发布才能据此决定");
+  engine.destroy();
+});

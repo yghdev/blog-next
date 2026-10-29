@@ -8,20 +8,16 @@ import { videoToEmbed, normalizePastedIframe, SUPPORTED_HINT } from "@/lib/video
 import { mediaSnippet, type MediaKind } from "@/lib/editor-media";
 import {
   loadDraft,
-  saveDraft as apiSaveDraft,
   publishDraft as apiPublishDraft,
-  newClientDraftId,
   newRequestId,
   type DraftIdentity,
 } from "@/lib/draft-client";
 import { canonicalize, hashSnapshot, type Snapshot } from "@/lib/snapshot";
 import {
-  autosaveOnce,
-  observeDraft,
   rebaseDraft as apiRebaseDraft,
 } from "@/lib/draft-client";
-import { AutosaveEngine, classifyReconcile, type AutosaveState } from "@/lib/autosave";
-import { createLocalStore, canClearLocal, localUnavailableFallback, type LocalDraft } from "@/lib/local-draft";
+import { type AutosaveState } from "@/lib/autosave";
+import { type LocalDraft } from "@/lib/local-draft";
 import { SaveStatus, ConflictDialog, RestoreBanner, type ConflictOption } from "./SaveStatus";
 import { VersionPanel } from "./VersionPanel";
 import { useAutosave } from "./useAutosave";
@@ -78,10 +74,13 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
 
   /**
    * 草稿身份（方案 §4.3）。
-   * clientDraftId 在组件生命周期内保持稳定：同一次编辑会话的所有保存
-   * 都用它，服务端据此判断"这是同一个编辑会话的重试"还是"另一处编辑"。
+   *
+   * clientDraftId **只有一份**，住在 useAutosave 里，通过 getClientDraftId() 取。
+   * 早期 Editor 自己也有一个 useRef(newClientDraftId())，于是"编辑器以为的会话"
+   * 与"自动保存实际用的会话"是两个不同 UUID：加载已有草稿后第一次保存必然
+   * DRAFT_FORBIDDEN（该草稿属于另一个编辑会话）—— 线上 403 全部由此而来。
+   * 这里保留 identityRef 只作只读镜像，写入必须经过 api.setIdentity / api.afterPublish。
    */
-  const clientDraftIdRef = useRef<string>(newClientDraftId());
   const identityRef = useRef<DraftIdentity | null>(null);
 
   /* ---------------- 自动保存（阶段 03.2，编排抽到 useAutosave） ---------------- */
@@ -178,7 +177,6 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         const d = res.value.draft;
         // 绑定这个编辑会话的身份：后续保存用草稿自己的 clientDraftId，
         // 否则服务端会认为"另一个会话在改"
-        clientDraftIdRef.current = d.identity.clientDraftId;
         identityRef.current = d.identity;
         // **必须同时告诉状态机**：引擎自己维护一份 identity，
         // 用于算 expectedPostRevision / expectedDraftRevision。
@@ -412,89 +410,91 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
     setBusy(true); setErr(""); setMsg("");
 
     const snapshot = buildSnapshot();
-    const snapshotHash = hashSnapshot(canonicalize(snapshot));
 
-    // 版本信息：身份来自上次成功响应；新文章首次保存时 postId 未知，
-    // expectedPostRevision 用 1（壳的初始 revision），expectedDraftRevision 用 0。
-    const identity = identityRef.current;
-    const postId = identity?.postId ?? initial?.id;
-    const expectedPostRevision = identity?.baseRevision ?? initial?.revision ?? 1;
-    const expectedDraftRevision = identity?.draftRevision ?? 0;
+    /**
+     * 保存走**自动保存引擎**，而不是这里再拼一次请求。
+     *
+     * 早期实现有两条并行的保存通路：本函数直接用 identityRef 调 apiSaveDraft，
+     * 而自动保存引擎自己维护一份 identity。两者各自演进，结果就是
+     * 「点按钮保存」与「等 1.5 秒自动保存」走的是不同的版本号来源 ——
+     * 线上那些"草稿已被其他会话修改"的 409 大多源于此（同一个浏览器，
+     * 却同时扮演了两个"会话"）。现在只有一条通路，版本号只有一份。
+     */
+    const outcome = await api.saveSnapshotNow(snapshot);
+    const saved = outcome;
+    identityRef.current = api.getIdentity();
 
-    const saved = await apiSaveDraft({
-      postId,
-      clientDraftId: clientDraftIdRef.current,
-      snapshot,
-      snapshotHash,
-      expectedPostRevision,
-      expectedDraftRevision,
-    });
-
-    if (!saved.ok) {
+    if (!saved || saved.kind !== "ok") {
       setBusy(false);
-      // 冲突类错误要把服务端现状说清楚，否则用户只会看到"保存失败"
-      if (saved.error.kind === "conflict") {
-        setErr(
-          saved.error.message +
-          "（当前版本 v" + (saved.error.server?.currentPostRevision ?? "?") +
-          "，草稿 v" + (saved.error.server?.currentDraftRevision ?? "?") + "）"
-        );
-        // 保存冲突/失败时**不清本地草稿**（方案 §8.1），刷新后还能恢复
-      } else {
-        setErr(saved.error.message);
+      if (!saved) {
+        setErr("保存没有完成（上一次保存仍在进行，或有冲突待处理），请稍后重试");
+        return;
       }
+      if (saved.kind === "conflict") {
+        setErr("保存冲突：服务端已有更新的草稿或文章版本，请对照后选择保留哪一份");
+        return;
+      }
+      setErr(saved.message || "保存失败");
       return;
     }
 
-    identityRef.current = saved.value.identity;
     setDirty(false);
-
-    // 新文章首次保存成功后接管 URL，后续保存都用 postId
-    if (!postId) {
-      router.replace("/admin/edit/" + saved.value.postId);
-      router.refresh();
-      setBusy(false);
-      setMsg("草稿已保存");
-      return;
-    }
+    const savedPostId = saved.identity.postId;
 
     if (!publish) {
       setBusy(false);
-      setStatus("draft");
+      /**
+       * 存草稿**不改变发布状态**。
+       *
+       * 早期这里无条件 setStatus("draft")：于是一篇已发布的文章只要点一次
+       * 「存草稿」，顶栏按钮就从「更新」变回「发布」，右侧"线上版本"也变成
+       * "尚未发布" —— 用户以为文章掉回草稿了（实际 posts 仍是 published）。
+       * 只有从未发布过的文章才是 draft。
+       */
+      if (status !== "published") setStatus("draft");
       setMsg("草稿已保存");
+      // 新文章首次保存后接管 URL：之后刷新/回退都还在这一篇上
+      if (!initial?.id) {
+        try { router.replace("/admin/edit/" + savedPostId); } catch { /* ignore */ }
+      }
       router.refresh();
       return;
     }
 
-    // 发布：正文取服务端刚确认的草稿
-    const identity2 = identityRef.current!;
+    /**
+     * 发布：用**这次保存返回的**身份，而不是外面再读一次 identityRef。
+     *
+     * 新文章第一次点「发布」时，上一步才刚把 postId 建出来；早期实现
+     * 在创建分支里直接 return 了，于是"点发布"只留下一个草稿壳 ——
+     * 用户看到的是"点了发布但文章还在草稿里"。
+     */
     const requestId = newRequestId();
     const pub = await apiPublishDraft({
-      postId: identity2.postId,
+      postId: savedPostId,
       publishRequestId: requestId,
-      expectedPostRevision: identity2.baseRevision,
-      expectedDraftRevision: identity2.draftRevision,
+      expectedPostRevision: saved.identity.baseRevision,
+      expectedDraftRevision: saved.identity.draftRevision,
       slug: slug || undefined,
     });
 
     setBusy(false);
     if (!pub.ok) {
-      if (pub.error.kind === "conflict") {
-        // 发布冲突同样保留全部本地内容，让用户重新加载后比较
-        setErr(pub.error.message);
-      } else {
-        setErr(pub.error.message);
-      }
+      setErr(pub.error.message);
       return;
     }
 
     setStatus("published");
-    setMsg("已发布");
+    setMsg(pub.value.replayed ? "已发布（本次是重试，服务端此前已成功）" : "已发布");
     if (pub.value.slug) setSlug(pub.value.slug);
-    // 发布后草稿被清理，身份作废；后续编辑会以新的 posts.revision 为基线
+    /**
+     * 发布成功后：服务端已删草稿、posts.revision 已 +1。
+     * 必须把这两件事一起同步给状态机 —— 否则"发布完再改一个字"
+     * 会立刻 409（线上每日必现）。
+     */
+    api.afterPublish(pub.value.revision);
     identityRef.current = null;
     router.refresh();
-  }, [buildSnapshot, initial?.id, initial?.revision, router, slug]);
+  }, [api, buildSnapshot, initial?.id, router, slug]);
 
   /* ---------------- 快捷键 ---------------- */
   useEffect(() => {
@@ -799,9 +799,14 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         postId={initial?.id ?? 0}
         open={versionOpen}
         onClose={() => setVersionOpen(false)}
-        currentDraftRevision={identityRef.current?.draftRevision ?? 0}
-        currentPostRevision={identityRef.current?.baseRevision ?? initial?.revision ?? 1}
-        clientDraftId={clientDraftIdRef.current}
+        /**
+         * 必须用 api.identity（响应式），不能用 identityRef.current：
+         * ref 变化不触发渲染，面板会一直拿着"打开那一刻"的版本号，
+         * 期间只要自动保存过一次，点恢复就 409。
+         */
+        currentDraftRevision={api.identity?.draftRevision ?? 0}
+        currentPostRevision={api.identity?.baseRevision ?? api.getBaseRevision()}
+        clientDraftId={getClientDraftId()}
         onRestored={(snap) => {
           // 恢复后的内容进入编辑器；用户继续编辑或显式发布
           setType(snap.type ?? type);
@@ -814,6 +819,22 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
           setCommentsEnabled(snap.comments_enabled !== 0);
           setDirty(true);
           setMsg("已把所选版本恢复为草稿，发布后才会更新前台");
+          /**
+           * 恢复接口已经把服务端 draftRevision +1；本地身份必须同步，
+           * 否则用户接着编辑时自动保存会拿旧版本号撞 409。
+           * 重读一次草稿身份（而不是在本地 +1）—— 以服务端为准。
+           */
+          const pid = initial?.id;
+          if (pid) {
+            void (async () => {
+              const r = await loadDraft(pid);
+              if (r.ok && r.value.draft) {
+                api.setIdentity(r.value.draft.identity);
+                identityRef.current = r.value.draft.identity;
+                autoResume(r.value.draft.snapshot);
+              }
+            })();
+          }
         }}
       />
 
@@ -850,10 +871,33 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
         }
         onClose={() => setConflict(null)}
         onUseServer={() => {
-          // 以服务端草稿为准：把内容替换掉，再让状态机继续
-          setContent(conflict?.serverDraft ?? "");
+          /**
+           * 以服务端草稿为准：把内容替换掉，再让状态机继续。
+           *
+           * 必须同时把**服务端的草稿身份**装回去（重读一次而不是凭本地猜）：
+           * 冲突往往意味着服务端 draftRevision 已经比我们手里的新，
+           * 只替换正文而继续用旧版本号，下一次保存还会 409。
+           */
+          const serverContent = conflict?.serverDraft ?? "";
+          setContent(serverContent);
           setConflict(null);
-          autoResume();
+          void (async () => {
+            const postId = identityRef.current?.postId ?? initial?.id;
+            if (!postId) { autoResume(); return; }
+            const res = await loadDraft(postId);
+            if (res.ok) {
+              if (res.value.draft) {
+                api.setIdentity(res.value.draft.identity);
+                identityRef.current = res.value.draft.identity;
+              } else {
+                api.setIdentity(null);
+                identityRef.current = null;
+              }
+              autoResume(res.value.draft?.snapshot ?? undefined);
+            } else {
+              autoResume();
+            }
+          })();
         }}
         onKeepLocal={() => {
           // 用我的版本覆盖：显式 rebase，不做字段级合并
@@ -864,13 +908,22 @@ export function Editor({ initial, mode }: { initial?: Initial; mode: "new" | "ed
             if (!postId) { autoResume(snap); return; }
             const r = await apiRebaseDraft({
               postId,
-              clientDraftId: clientDraftIdRef.current,
+              clientDraftId: getClientDraftId(),
               snapshot: snap,
               snapshotHash: hashSnapshot(canonicalize(snap)),
               expectedDraftRevision: identityRef.current?.draftRevision ?? 0,
-              expectedPostRevision: identityRef.current?.baseRevision ?? initial?.revision ?? 1,
+              // 基线必须取引擎的最新值：发布/恢复之后 identityRef 可能是 null，
+              // 而 initial.revision 是"打开页面时"的旧值。
+              expectedPostRevision: api.getBaseRevision(),
             });
             if (r.ok) {
+              /**
+               * 必须走 api.setIdentity，而不是只写 identityRef。
+               * rebase 之后服务端 draftRevision 已经变了；只改本地 ref 会让
+               * 状态机继续拿旧版本号保存，下一次自动保存又 409 ——
+               * 也就是"点了用我的版本覆盖，冲突仍在"。
+               */
+              api.setIdentity(r.value.identity);
               identityRef.current = r.value.identity;
               autoResume(snap);
             } else {

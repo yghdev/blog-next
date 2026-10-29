@@ -162,6 +162,20 @@ const nextConfig: NextConfig = {
      */
     proxyClientMaxBodySize: "20mb",
   },
+  /**
+   * 订阅地址兼容（2026-10-29）。
+   *
+   * nginx 日志里 `GET /feed` 404 共 423 次、`GET /rss` 404 共 48 次，
+   * 绝大多数来自 RSS 阅读器与 RSS 聚合爬虫（BlogInc-RSS-Parser 等）——
+   * 它们默认探测 /feed 与 /rss，而本站只提供 /rss.xml。
+   * 对一个以文章分发为目的的博客，这等于把订阅者挡在门外。
+   */
+  async redirects() {
+    return [
+      { source: "/feed", destination: "/rss.xml", permanent: true },
+      { source: "/rss", destination: "/rss.xml", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

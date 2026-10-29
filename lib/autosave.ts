@@ -68,6 +68,8 @@ export type AutosaveDeps = {
   timers?: TimerApi;
   /** 5xx 最多重试次数（有界退避） */
   maxRetries?: number;
+  /** 打开文章时 posts.revision：没有草稿时首次保存的基线 */
+  initialBaseRevision?: number;
 };
 
 export type AutosaveDetail = {
@@ -93,6 +95,15 @@ export class AutosaveEngine {
   private confirmedSnapshotId = 0;
 
   private identity: DraftIdentityLite | null = null;
+  /**
+   * 当前 posts.revision 的本地副本（草稿基线）。
+   *
+   * 为什么必须单独存一份：发布成功后服务端会删掉草稿身份（identity = null），
+   * 但 posts.revision 已经 +1。如果这时还拿"打开页面时的 revision"去保存，
+   * 第一次自动保存就会 BASE_REVISION_CONFLICT —— 用户看到的是"刚发布完就冲突"。
+   * 所以 identity 为 null 时，expectedPostRevision 必须取这个值，而不是初始值。
+   */
+  private baseRevision = 1;
   private debounceHandle: unknown = null;
   private throttleHandle: unknown = null;
   private inFlight = false;
@@ -114,6 +125,9 @@ export class AutosaveEngine {
       timers: DEFAULT_TIMERS,
       ...deps,
     };
+    if (deps.initialBaseRevision && deps.initialBaseRevision > 0) {
+      this.baseRevision = deps.initialBaseRevision;
+    }
   }
 
   getState(): AutosaveState {
@@ -128,6 +142,39 @@ export class AutosaveEngine {
   /** 由外部在打开文章并读到服务端草稿后注入 */
   setIdentity(identity: DraftIdentityLite | null): void {
     this.identity = identity;
+    if (identity) this.baseRevision = identity.baseRevision;
+  }
+
+  /**
+   * 记录当前 posts.revision。
+   *
+   * 发布成功后由调用方更新：草稿身份会被服务端清掉（identity = null），
+   * 但线上版本号已经变了。不同步这一条，发布后的第一次自动保存必然 409。
+   */
+  setBaseRevision(revision: number): void {
+    if (Number.isInteger(revision) && revision > 0) this.baseRevision = revision;
+  }
+
+  /** 当前已知的 posts.revision（identity 存在时以草稿基线为准） */
+  getBaseRevision(): number {
+    return this.identity?.baseRevision ?? this.baseRevision;
+  }
+
+  /**
+   * 等当前在飞的请求落地（上限 15s）。
+   *
+   * 发布前需要"先确认服务端草稿就是屏幕上这份"，而自动保存可能正在飞。
+   * 不等待就直接发发布请求，服务端拿到的草稿可能是上一次的 ——
+   * 这正是"点发布，发出去的却是几个字之前的内容"的成因。
+   */
+  async waitIdle(timeoutMs = 15000): Promise<void> {
+    const started = Date.now();
+    while (this.inFlight) {
+      if (Date.now() - started > timeoutMs) return;
+      // 用真实定时器而不是注入的 timers：这里是"等网络"，不是状态机的计时语义，
+      // 测试里的假时钟不该影响它（否则 waitIdle 在测试中永远不返回）。
+      await new Promise<void>((r) => setTimeout(r, 50));
+    }
   }
 
   /**
@@ -176,6 +223,43 @@ export class AutosaveEngine {
   saveNow(): void {
     this.clearDebounce();
     void this.runSave();
+  }
+
+  /** 立即保存并等它落地（发布前必须先确保服务端草稿=最新内容） */
+  async saveNowAsync(): Promise<SaveOutcome | null> {
+    this.clearDebounce();
+    if (this.destroyed) return null;
+
+    /**
+     * 有界重试：正在飞的那一次刚落地时，可能紧接着又起了一次（queued 补发），
+     * 于是这一枪仍会撞上 inFlight。重试几次而不是直接放弃 ——
+     * 否则用户在"边打字边点发布"时会看到一个莫名其妙的"保存没有完成"。
+     */
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (this.inFlight) {
+        await this.waitIdle();
+        continue;
+      }
+      if (this.latest === null) return null;
+      // 冲突/未知/失败态不擅自越过：那需要用户先做决定（方案 §8.2）
+      if (this.state === "conflict" || this.state === "unknown") return null;
+      const outcome = await this.runSave(this.latest);
+      if (outcome) return outcome;
+    }
+    return null;
+  }
+
+  /**
+   * 用指定快照立即保存并返回结果（编辑器的「存草稿 / 发布」按钮用）。
+   *
+   * 为什么不能直接调用私有 runSave：按钮要拿到**这次**的结果来决定是否继续发布。
+   * 只触发 saveNow 再查状态是竞态 —— 状态可能还没更新到 saved。
+   */
+  async saveSnapshotNow(snapshot: unknown): Promise<SaveOutcome | null> {
+    this.latest = snapshot;
+    this.localSnapshotId += 1;
+    this.scheduleLocalPersist();
+    return this.saveNowAsync();
   }
 
   /** 用户处理完冲突后继续（重新读取或 rebase 成功后调用） */
@@ -253,12 +337,21 @@ export class AutosaveEngine {
    * 这不是性能优化 —— 并发两个保存请求会让服务端收到两份不同快照，
    * 后到的那个可能反而更旧，用户的输入顺序就被打乱了。
    */
-  private async runSave(): Promise<void> {
-    if (this.destroyed || this.inFlight) return;
-    if (this.latest === null) return;
+  private async runSave(override?: unknown): Promise<SaveOutcome | null> {
+    if (this.destroyed) return null;
+    if (this.inFlight) {
+      /**
+       * 已经有一个请求在飞：不能并发（会打乱写入顺序），
+       * 但**这次调用不能假装成功**。若调用方是「请等这次保存落地」，
+       * 它得到的应该是"还在飞"，由调用方决定等还是重试。
+       */
+      if (override !== undefined) this.latest = override;
+      return null;
+    }
+    const snapshotAtSend = override ?? this.latest;
+    if (snapshotAtSend === null) return null;
 
     this.inFlight = true;
-    const snapshotAtSend = this.latest;
     const snapshotIdAtSend = this.localSnapshotId;
     this.sentSnapshot = snapshotAtSend;
     this.setState("saving");
@@ -284,10 +377,10 @@ export class AutosaveEngine {
         if (this.localSnapshotId > snapshotIdAtSend) {
           this.setState("queued");
           void this.runSave();
-          return;
+          return outcome;
         }
         this.setState("saved");
-        return;
+        return outcome;
       }
 
       case "conflict": {
@@ -298,7 +391,7 @@ export class AutosaveEngine {
           sentSnapshotHash: this.sentSnapshotHash ?? undefined,
           message: "草稿版本冲突，需要你确认后继续",
         });
-        return;
+        return outcome;
       }
 
       case "timeout": {
@@ -309,7 +402,7 @@ export class AutosaveEngine {
           sentSnapshotHash: this.sentSnapshotHash ?? undefined,
           message: outcome.message,
         });
-        return;
+        return outcome;
       }
 
       case "retryable": {
@@ -317,7 +410,7 @@ export class AutosaveEngine {
         if (this.retries > this.deps.maxRetries) {
           this.flushLocalNow();
           this.setState("failed", { message: "服务端连续失败，请稍后手动重试" });
-          return;
+          return outcome;
         }
         // 有界指数退避：1s、2s、4s…（上限 8s）
         const wait = Math.min(1000 * 2 ** (this.retries - 1), 8000);
@@ -327,7 +420,7 @@ export class AutosaveEngine {
           this.debounceHandle = null;
           void this.runSave();
         }, wait);
-        return;
+        return outcome;
       }
 
       case "invalid":
@@ -339,9 +432,10 @@ export class AutosaveEngine {
           sentSnapshot: this.sentSnapshot,
           message: outcome.message,
         });
-        return;
+        return outcome;
       }
     }
+    return outcome;
   }
 }
 

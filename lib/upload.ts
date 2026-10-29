@@ -63,7 +63,7 @@ export function looksLikeMarkup(buf: Buffer): boolean {
   return head.startsWith("<!doctype") || head.startsWith("<html") || head.startsWith("<svg") || head.startsWith("<?xml") || head.startsWith("<script");
 }
 
-export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 与 nginx client_max_body_size 12m 留出余量
+export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // 见 deploy/nginx-blog.conf：nginx 统一 20m（图片/视频共用一条）
 export const DAILY_UPLOAD_LIMIT = 100;           // 按天配额，防被拿来当图床
 
 /** 服务端决定落盘相对路径（年/月 + 随机名），与客户端文件名无关 */

@@ -1,9 +1,9 @@
 "use client";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Snapshot } from "@/lib/snapshot";
 import { canonicalize, hashSnapshot } from "@/lib/snapshot";
-import { AutosaveEngine, type AutosaveState } from "@/lib/autosave";
-import { autosaveOnce, loadDraft, newClientDraftId, rebaseDraft as apiRebaseDraft, type DraftIdentity } from "@/lib/draft-client";
+import { AutosaveEngine, type AutosaveState, type SaveOutcome } from "@/lib/autosave";
+import { autosaveOnce, newClientDraftId, rebaseDraft as apiRebaseDraft, type DraftIdentity } from "@/lib/draft-client";
 import { createLocalStore, type LocalDraft } from "@/lib/local-draft";
 
 /**
@@ -41,6 +41,8 @@ export type AutosaveApi = {
   mark: (override?: Partial<Snapshot>) => void;
   /** 立即保存（Cmd/Ctrl+S） */
   saveNow: () => void;
+  /** 用指定快照立即保存，并返回本次结果（发布按钮用） */
+  saveSnapshotNow: (snapshot: Snapshot) => Promise<SaveOutcome | null>;
   /** 立即把内存快照落本地（pagehide/visibilitychange） */
   flushLocal: () => void;
   /** 冲突处理后恢复自动保存 */
@@ -49,8 +51,17 @@ export type AutosaveApi = {
   keepLocal: (snapshot: Snapshot) => Promise<{ ok: boolean; message?: string }>;
   /** 应用从服务端读到的草稿身份 */
   setIdentity: (identity: DraftIdentity | null) => void;
-  /** 当前身份（只读用途，如传给版本面板） */
+  /**
+   * 发布成功后调用：服务端删了草稿、posts.revision 变了。
+   * 必须同时把"身份作废 + 新基线"同步给状态机，否则下一次自动保存就会 409。
+   */
+  afterPublish: (newPostRevision: number) => void;
+  /** 当前身份（响应式，供版本面板等需要"保存后自动刷新"的 UI 使用） */
+  identity: DraftIdentity | null;
+  /** 当前身份（只读用途） */
   getIdentity: () => DraftIdentity | null;
+  /** 当前 posts.revision（没有草稿身份时也能取到，避免用打开页面时的旧值） */
+  getBaseRevision: () => number;
   /** clientDraftId（版本恢复接口需要） */
   getClientDraftId: () => string;
   /** 本地存储不可用（界面需常驻警告） */
@@ -63,6 +74,14 @@ export type AutosaveApi = {
 
 export function useAutosave(input: UseAutosaveInput): AutosaveApi {
   const identityRef = useRef<DraftIdentity | null>(null);
+  /**
+   * identity 的响应式副本。
+   *
+   * 为什么要多一份 state：identityRef 变化不触发重渲染，于是"版本历史"面板
+   * 拿到的 draftRevision 会一直停在面板打开那一刻 —— 期间发生任何一次自动保存，
+   * 点"恢复为草稿"就会 409（草稿已被修改）。线上那次 restore-version 409 即此。
+   */
+  const [identityView, setIdentityView] = useState<DraftIdentity | null>(null);
   const clientDraftIdRef = useRef<string>(newClientDraftId());
   const localUnavailableRef = useRef(false);
 
@@ -84,18 +103,28 @@ export function useAutosave(input: UseAutosaveInput): AutosaveApi {
 
   if (!engineRef.current && typeof window !== "undefined") {
     engineRef.current = new AutosaveEngine({
+      initialBaseRevision: input.initialRevision,
       save: async (snapshot, identity) => {
         const snap = snapshot as Snapshot;
+        /**
+         * expectedPostRevision 的三级来源，顺序不能换：
+         *   1) engine 的 identity（有草稿时，它就是草稿的基线）
+         *   2) engine 自己记的 baseRevision（发布后 identity 被清空，但 revision 已 +1）
+         *   3) 打开页面时的 initialRevision（新文章首次保存）
+         * 早期实现只有 1 和 3，于是"发布成功后继续编辑"第一枪就 409 ——
+         * 服务端 revision 已是 2，客户端还在喊 1。
+         */
         const outcome = await autosaveOnce({
           postId: identity?.postId ?? input.postId,
           clientDraftId: clientDraftIdRef.current,
           snapshot: snap,
           snapshotHash: hashSnapshot(canonicalize(snap)),
-          expectedPostRevision: identity?.baseRevision ?? input.initialRevision ?? 1,
+          expectedPostRevision: identity?.baseRevision ?? engineRef.current?.getBaseRevision() ?? input.initialRevision ?? 1,
           expectedDraftRevision: identity?.draftRevision ?? 0,
         });
         if (outcome.kind === "ok") {
           identityRef.current = outcome.identity;
+          setIdentityView(outcome.identity);
           // 新文章首次保存后接管 URL，后续都用 postId
           if (!input.postId && outcome.identity.postId) {
             onPostCreatedRef.current?.(outcome.identity.postId);
@@ -172,6 +201,12 @@ export function useAutosave(input: UseAutosaveInput): AutosaveApi {
   }, []);
 
   const saveNow = useCallback(() => { engineRef.current?.saveNow(); }, []);
+  /** 用当前编辑器内容立即保存一次，并拿到这次的结果（发布按钮据此决定是否继续） */
+  const saveSnapshotNow = useCallback(async (snapshot: Snapshot) => {
+    const engine = engineRef.current;
+    if (!engine) return null;
+    return engine.saveSnapshotNow(snapshot);
+  }, []);
   const flushLocal = useCallback(() => { engineRef.current?.flushLocalNow(); }, []);
 
   const resume = useCallback((snapshot?: Snapshot) => {
@@ -180,10 +215,40 @@ export function useAutosave(input: UseAutosaveInput): AutosaveApi {
 
   const setIdentity = useCallback((identity: DraftIdentity | null) => {
     identityRef.current = identity;
-    // 必须同时同步给引擎：它自己维护一份 identity 用于算 expected 版本。
-    // 只更新本地 ref 会让引擎以为"还没有草稿"，首次保存就撞 409，
-    // 表面上完全像一个版本冲突。
+    setIdentityView(identity);
+    /**
+     * clientDraftId 也必须跟着切。
+     *
+     * 草稿与 clientDraftId 是**一对一绑定**的（服务端 DRAFT_FORBIDDEN 校验）。
+     * 早期这里只同步了 identityRef，没同步 hook 自己的 clientDraftIdRef，
+     * 于是编辑器加载到别人（或上一个会话）建的草稿后，第一次自动保存
+     * 会拿一个全新的 UUID 去更新 —— 服务端只能回「该草稿属于另一个编辑会话」。
+     * 线上所有 DRAFT_FORBIDDEN 都是这么来的：不是并发，是自己人不认自己人。
+     */
+    if (identity) clientDraftIdRef.current = identity.clientDraftId;
+    // 同时同步给引擎：它自己维护一份 identity 用于算 expected 版本。
+    // 只更新 ref 不同步引擎，会让它以为"还没有草稿"（draftRevision=0），
+    // 首次保存就撞 409，表面上完全像一个版本冲突。
     engineRef.current?.setIdentity(identity);
+  }, []);
+
+  /**
+   * 发布成功后调用。
+   *
+   * 这一步是"发布完继续写"能正常工作的前提：
+   *   1) 服务端把草稿删了 -> 本地身份必须一起作废，否则下一次保存会带着
+   *      已不存在的 draftRevision 去更新，服务端只能回 DRAFT_NOT_FOUND；
+   *   2) posts.revision 已经 +1 -> 引擎的基线必须跟上，否则第一次自动保存
+   *      就是 BASE_REVISION_CONFLICT。
+   * 早期版本两条都没做，线上表现为"刚发布完，随便改一个字就提示冲突"。
+   */
+  const afterPublish = useCallback((newPostRevision: number) => {
+    identityRef.current = null;
+    setIdentityView(null);
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.setIdentity(null);
+    engine.setBaseRevision(newPostRevision);
   }, []);
 
   const keepLocal = useCallback(async (snapshot: Snapshot): Promise<{ ok: boolean; message?: string }> => {
@@ -202,6 +267,7 @@ export function useAutosave(input: UseAutosaveInput): AutosaveApi {
     });
     if (!r.ok) return { ok: false, message: r.error.message };
     identityRef.current = r.value.identity;
+    setIdentityView(r.value.identity);
     engineRef.current?.setIdentity(r.value.identity);
     engineRef.current?.resume(snapshot);
     return { ok: true };
@@ -232,26 +298,20 @@ export function useAutosave(input: UseAutosaveInput): AutosaveApi {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** 打开已有文章时加载服务端草稿 */
-  useEffect(() => {
-    if (!input.postId) return;
-    let cancelled = false;
-    (async () => {
-      const res = await loadDraft(input.postId!);
-      if (cancelled || !res.ok || !res.value.draft) return;
-      const d = res.value.draft;
-      // 绑定这个编辑会话的身份：后续保存用草稿自己的 clientDraftId，
-      // 否则服务端会认为"另一个会话在改"
-      clientDraftIdRef.current = d.identity.clientDraftId;
-      setIdentity(d.identity);
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input.postId]);
+  /**
+   * 打开已有文章时**不再**在这里独立拉一次草稿。
+   *
+   * 早期 Editor 与本 hook 各拉一次 GET /draft（线上日志里同一秒成对出现），
+   * 两边都写 clientDraftId / identity。只要两次响应之间隔了一次自动保存，
+   * 编辑器里显示的内容与状态机持有的版本号就来自两份不同的响应，
+   * 于是"自己跟自己的另一个会话冲突"。现在只由 Editor 拉一次并注入。
+   */
 
   return {
-    mark, saveNow, flushLocal, resume, keepLocal, setIdentity,
+    mark, saveNow, saveSnapshotNow, flushLocal, resume, keepLocal, setIdentity, afterPublish,
+    identity: identityView,
     getIdentity: () => identityRef.current,
+    getBaseRevision: () => engineRef.current?.getBaseRevision() ?? input.initialRevision ?? 1,
     getClientDraftId: () => clientDraftIdRef.current,
     isLocalUnavailable: () => localUnavailableRef.current,
     clearLocal: (clientDraftId: string, postId: number | null) => {
