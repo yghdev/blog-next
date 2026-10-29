@@ -18,7 +18,7 @@ export const metadata = { title: "文章" };
  * 各处「回到内容列表」引用，改路由只会让书签失效。
  */
 export default async function PostsPage({ searchParams }: {
-  searchParams: Promise<{ page?: string; status?: string; q?: string; type?: string }>;
+  searchParams: Promise<{ page?: string; status?: string; q?: string; type?: string; trash?: string }>;
 }) {
   const user = await currentUser();
   if (!user) redirect("/admin/login");
@@ -30,16 +30,24 @@ export default async function PostsPage({ searchParams }: {
    * 一堆文章并以为内容没了，所以按 308 带到新地址，筛选条件一并保留。
    * 未知 / 空 type 仍按文章列表渲染（那是这个路由本来的语义）。
    */
-  const legacyType = sp.type;
-  if (legacyType === "page" || legacyType === "shuoshuo") {
+  /**
+   * 旧链接兼容：拆页前 /admin?type=shuoshuo 是「说说」的筛选视图，
+   * /admin?trash=1 是回收站。两者都可能已被收藏或在别处引用。
+   * 直接忽略参数会让用户看到一堆文章，并以为内容丢了 ——
+   * 所以按 308 带到新地址，筛选条件一并保留。
+   * 未知 / 空 type 仍按文章列表渲染（那是这个路由本来的语义）。
+   */
+  const legacy = (target: string) => {
     const u = new URLSearchParams();
     if (sp.status) u.set("status", sp.status);
     if (sp.q) u.set("q", sp.q);
     if (sp.page && sp.page !== "1") u.set("page", sp.page);
     const qs = u.toString();
-    const target = legacyType === "page" ? "/admin/pages" : "/admin/shuoshuo";
     permanentRedirect(target + (qs ? "?" + qs : ""));
-  }
+  };
+  if (sp.trash === "1") legacy("/admin/trash");
+  if (sp.type === "page") legacy("/admin/pages");
+  if (sp.type === "shuoshuo") legacy("/admin/shuoshuo");
 
   return (
     <AdminShell active="posts" username={user.username}>
