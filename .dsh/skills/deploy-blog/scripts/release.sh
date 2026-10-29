@@ -22,7 +22,11 @@
 #
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# 项目根用 git 解析，不数 "../"：脚本挪位置（比如以后放进 scripts/）时
+# 相对层级会静默错成 .dsh/ 或 skills/，而那时报错信息是"找不到 tsc"，
+# 指不回真正的原因 —— 本次就踩过一次。
+ROOT="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel 2>/dev/null || true)"
+[ -n "$ROOT" ] || ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 HOST="${DEPLOY_HOST:-aliyun-ecs}"
 BASE="${DEPLOY_BASE:-https://blog.yghsite.cn}"
 ARCHIVE="$ROOT/dist-upload.tar.gz"
