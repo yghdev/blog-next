@@ -23,6 +23,17 @@ export type Snapshot = {
   title: string;
   slug: string;
   content: string;
+  /**
+   * 自定义摘要（可选）。
+   *
+   * 为什么要进快照而不是走 PATCH 元数据：摘要属于"这篇草稿的一部分"，
+   * 必须和正文一起原子保存、一起参与冲突检测。走另一条接口会出现
+   * "正文存了、摘要没存"的半份草稿。
+   *
+   * 可选是为了兼容历史快照：早期 snapshot_json 没有这个字段，
+   * canonicalize 对 undefined 不会写进 JSON，因此旧哈希一个字节都不变。
+   */
+  excerpt?: string;
   cover: string | null;
   categories: string[];
   tags: string[];
@@ -35,6 +46,7 @@ const FIELD_ORDER: (keyof Snapshot)[] = [
   "title",
   "slug",
   "content",
+  "excerpt",
   "cover",
   "categories",
   "tags",
@@ -106,6 +118,13 @@ export function parseSnapshot(raw: unknown): ParseResult {
   if (!("cover" in o)) return { ok: false, error: "快照缺少字段 cover（可为 null）" };
   if (o.cover !== null && typeof o.cover !== "string") return { ok: false, error: "快照 cover 必须是字符串或 null" };
 
+  // excerpt：可选。出现时必须是字符串；历史快照没有该字段，保持 undefined
+  // （写回时 canonicalize 不会生成 "excerpt" 键，旧哈希因此不变）。
+  if ("excerpt" in o && o.excerpt !== undefined) {
+    if (typeof o.excerpt !== "string") return { ok: false, error: "快照 excerpt 必须是字符串" };
+    if (o.excerpt.length > 300) return { ok: false, error: "摘要不能超过 300 个字符" };
+  }
+
   const categories = asStringArray(o.categories);
   if (!categories) return { ok: false, error: "快照 categories 必须是字符串数组" };
   const tags = asStringArray(o.tags);
@@ -122,6 +141,7 @@ export function parseSnapshot(raw: unknown): ParseResult {
       title: o.title as string,
       slug: o.slug as string,
       content: o.content as string,
+      excerpt: typeof o.excerpt === "string" ? o.excerpt : undefined,
       cover: o.cover as string | null,
       categories,
       tags,

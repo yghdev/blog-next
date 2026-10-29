@@ -89,6 +89,8 @@ export type PostRowLite = {
   title: string;
   slug: string;
   content: string;
+  /** posts.excerpt：发布时由正文自动截取，或由编辑器写入的自定义摘要 */
+  excerpt: string;
   status: "draft" | "published";
   categories: string;
   tags: string;
@@ -163,11 +165,25 @@ export function snapshotFromPost(post: PostRowLite): Snapshot {
     title: post.title,
     slug: post.slug,
     content: post.content,
+    // 只有"和自动截取结果不同"的 excerpt 才算自定义摘要。
+    // 不这么区分，已发布文章重新打开时会把自己那段自动摘要当成用户填的，
+    // 发布幂等比较也会因此永远判定"内容有变化"。
+    excerpt: customExcerptOf(post),
     cover: post.cover,
     categories: parse(post.categories),
     tags: parse(post.tags),
     comments_enabled: (post.comments_enabled ? 1 : 0) as 0 | 1,
   };
+}
+
+/**
+ * 取自定义摘要：posts.excerpt 与正文自动截取一致时视为"未自定义"，返回 undefined。
+ * 编辑器据此决定摘要框是空的（显示自动提取提示）还是带着用户写过的内容。
+ */
+export function customExcerptOf(post: Pick<PostRowLite, "content" | "excerpt">): string | undefined {
+  const saved = (post.excerpt ?? "").trim();
+  if (!saved) return undefined;
+  return saved === makeExcerpt(post.content, 160) ? undefined : saved;
 }
 
 /* --------------------------- 草稿：保存 --------------------------- */
@@ -566,6 +582,7 @@ export function publishDraft(input: PublishInput): PublishResult {
       live.title === snapshot.title &&
       live.slug === finalSlug &&
       live.content === snapshot.content &&
+      (live.excerpt ?? "") === (snapshot.excerpt ?? "") &&
       (live.cover ?? null) === (snapshot.cover ?? null) &&
       live.comments_enabled === snapshot.comments_enabled &&
       JSON.stringify(live.categories) === JSON.stringify(snapshot.categories) &&
@@ -606,7 +623,9 @@ export function publishDraft(input: PublishInput): PublishResult {
       "categories = ?, tags = ?, cover = ?, published_at = ?, updated_at = ?, revision = ?, comments_enabled = ? " +
       "WHERE id = ? AND revision = ?"
     ).run(
-      snapshot.type, snapshot.title, finalSlug, snapshot.content, makeExcerpt(snapshot.content, 160),
+      // 摘要：编辑器填了就用它（卡片与 og:description 的来源），留空才自动截取。
+      snapshot.type, snapshot.title, finalSlug, snapshot.content,
+      (snapshot.excerpt ?? "").trim() || makeExcerpt(snapshot.content, 160),
       JSON.stringify(snapshot.categories), JSON.stringify(snapshot.tags), snapshot.cover,
       publishedAt, now, nextRevision, snapshot.comments_enabled,
       postId, post.revision

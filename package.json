@@ -20,7 +20,7 @@
     "verify:assets": "node scripts/verify-assets.mjs",
     "test:next": "node tests/next-integration.mjs",
     "test:browser": "node tests/browser-split.mjs",
-    "test:integration": "npm run test:next && npm run test:browser && npm run test:ui && npm run test:dark && npm run test:admin && npm run test:content && npm run test:comments && npm run test:media && npm run test:settings && npm run test:autosave && npm run test:editor && npm run test:publish && npm run test:media-editor && npm run test:cmdk",
+    "test:integration": "npm run test:next && npm run test:browser && npm run test:ui && npm run test:dark && npm run test:admin && npm run test:content && npm run test:comments && npm run test:media && npm run test:settings && npm run test:autosave && npm run test:editor && npm run test:workbench && npm run test:publish && npm run test:media-editor && npm run test:cmdk",
     "test:ui": "node tests/ui-kit.mjs",
     "test:dark": "node tests/dark-mode.mjs",
     "test:admin": "node tests/admin-nav-overview.mjs",
@@ -30,6 +30,7 @@
     "test:settings": "node tests/admin-settings.mjs",
     "test:autosave": "node tests/autosave-browser.mjs",
     "test:editor": "node tests/editor-v2-browser.mjs",
+    "test:workbench": "node tests/editor-workbench-browser.mjs",
     "test:publish": "node tests/editor-publish-regression.mjs",
     "test:media-editor": "node tests/editor-media-browser.mjs",
     "test:cmdk": "node tests/command-palette-browser.mjs"

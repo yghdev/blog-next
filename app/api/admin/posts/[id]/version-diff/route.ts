@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/guards";
 import { db, handleWrite, noStoreJson, parsePostId } from "@/lib/admin-route";
+import { customExcerptOf } from "@/lib/post-writes";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export const GET = handleWrite(async (req: NextRequest, { params }: { params: Pr
 
   const conn = db();
   const post = conn.prepare("SELECT * FROM posts WHERE id = ?").get(postId) as
-    | { id: number; revision: number; title: string; content: string; slug: string;
+    | { id: number; revision: number; title: string; content: string; slug: string; excerpt: string;
         categories: string; tags: string; cover: string | null; comments_enabled: number; type: string }
     | undefined;
   if (!post) return noStoreJson({ error: "文章不存在", code: "POST_NOT_FOUND", status: 404 }, { status: 404 });
@@ -62,6 +63,8 @@ export const GET = handleWrite(async (req: NextRequest, { params }: { params: Pr
         revision: "current",
         snapshot: {
           type: post.type, title: post.title, slug: post.slug, content: post.content,
+          // 与 snapshotFromPost 同口径：自动截取的摘要不冒充"用户自定义"
+          excerpt: customExcerptOf(post),
           cover: post.cover,
           categories: safeParse(post.categories), tags: safeParse(post.tags),
           comments_enabled: post.comments_enabled ? 1 : 0,

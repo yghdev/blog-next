@@ -96,5 +96,8 @@ jobs:
       - name: EditorV2 与版本体验（四项退出门槛）
         run: npm run test:editor
 
+      - name: 写作工作台（布局 / 工具栏 / 三模式 / 专注 / 摘要闭环）
+        run: npm run test:workbench
+
       - name: 命令面板与后台搜索（阶段 04）
         run: npm run test:cmdk

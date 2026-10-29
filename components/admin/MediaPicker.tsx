@@ -13,7 +13,7 @@ import { mediaSnippet, type MediaKind } from "@/lib/editor-media";
  * 一次点击。
  *
  * 三个刻意的取舍：
- *   1. **挂在 portal 上而不是页面里**：编辑器有 `editor-aside` 的 sticky 容器，
+ *   1. **挂在 portal 上而不是页面里**：编辑器右栏是 sticky 且带自己的滚动容器，
  *      在它内部放浮层会被裁切；portal 到 body 顺带拿到 `.fx-scope` 作用域。
  *   2. **只做插入，不做管理**：删除、扫描孤儿这些仍归 /admin/media 管。
  *      一个「选择器」不该长出第二个管理界面。

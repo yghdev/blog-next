@@ -739,6 +739,29 @@ test("snapshot: title/content are not trimmed during canonicalization", () => {
   assert.equal(JSON.parse(json).content, "\n\n正文\n\n");
 });
 
+test("snapshot: excerpt 是可选字段，历史快照的哈希不受影响", () => {
+  const legacy = {
+    type: "post" as const, title: "T", slug: "s", content: "c",
+    cover: null, categories: [], tags: [], comments_enabled: 1 as const,
+  };
+  const json = snapshotMod.canonicalize(legacy);
+  // 没有 excerpt 键时 canonicalize 不得凭空写一个 —— 否则所有历史快照哈希都会变
+  assert.ok(!json.includes("excerpt"), "无 excerpt 时不得生成该键：" + json);
+
+  const withExcerpt = snapshotMod.parseSnapshot({ ...legacy, excerpt: "手写摘要" });
+  assert.equal(withExcerpt.ok, true);
+  if (withExcerpt.ok) assert.equal(withExcerpt.snapshot.excerpt, "手写摘要");
+
+  // 出现但类型不对要拒
+  const bad = snapshotMod.parseSnapshot({ ...legacy, excerpt: 42 });
+  assert.equal(bad.ok, false);
+
+  // 留空字符串是合法的"没有自定义摘要"
+  const empty = snapshotMod.parseSnapshot({ ...legacy, excerpt: "" });
+  assert.equal(empty.ok, true);
+  if (empty.ok) assert.equal(empty.snapshot.excerpt, "");
+});
+
 test("snapshot: parseSnapshot rejects missing cover and wrong types", () => {
   const noCover = snapshotMod.parseSnapshot({
     type: "post", title: "t", slug: "s", content: "c", categories: [], tags: [], comments_enabled: 1,

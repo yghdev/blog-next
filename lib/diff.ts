@@ -114,6 +114,7 @@ export type Snapshot = {
   title?: string;
   slug?: string;
   content?: string;
+  excerpt?: string;
   cover?: string | null;
   categories?: string[];
   tags?: string[];
@@ -133,6 +134,11 @@ export function diffSnapshotFields(a: Snapshot, b: Snapshot): FieldDiff[] {
   const rows: FieldDiff[] = [
     { field: "title", label: "标题", from: fmt(a.title), to: fmt(b.title), changed: a.title !== b.title },
     { field: "slug", label: "URL 路径", from: fmt(a.slug), to: fmt(b.slug), changed: a.slug !== b.slug },
+    {
+      field: "excerpt", label: "摘要",
+      from: fmt(a.excerpt), to: fmt(b.excerpt),
+      changed: (a.excerpt ?? "") !== (b.excerpt ?? ""),
+    },
     { field: "cover", label: "封面", from: fmt(a.cover), to: fmt(b.cover), changed: (a.cover ?? null) !== (b.cover ?? null) },
     { field: "categories", label: "分类", from: fmt(a.categories), to: fmt(b.categories), changed: fmt(a.categories) !== fmt(b.categories) },
     { field: "tags", label: "标签", from: fmt(a.tags), to: fmt(b.tags), changed: fmt(a.tags) !== fmt(b.tags) },
