@@ -86,8 +86,14 @@ echo "产物版本：$VERSION · reproducible=$REPRO"
 # tar 必须在 dist 内部打包：服务端解包后要**直接**看到 server.js
 rm -f "$ARCHIVE"
 tar czf "$ARCHIVE" -C dist .
-tar tzf "$ARCHIVE" | grep -qx './server.js' || die "归档里没有 ./server.js，层级打错了"
-tar tzf "$ARCHIVE" | grep -qx './.build-info.json' || die "归档里没有版本戳"
+# 目录清单先整体取下来再判断。
+# 不能写 `tar tzf | grep -q`：grep 命中即退出会给 tar 发 SIGPIPE，
+# 在 set -o pipefail 下这条管道整体判定失败 —— 于是"检查通过"被读成
+# "层级打错了"。本次实跑踩到：tar 报 stdout: write error，脚本却说是层级问题。
+LISTING="$(tar tzf "$ARCHIVE")" || die "归档读不出来：$ARCHIVE"
+grep -qx './server.js' <<<"$LISTING" || die "归档里没有 ./server.js，层级打错了"
+grep -qx './.build-info.json' <<<"$LISTING" || die "归档里没有版本戳"
+grep -q '^\./node_modules/' <<<"$LISTING" || die "归档里没有 node_modules，build:dist 可能没跑"
 
 SUM="$(sha256sum "$ARCHIVE" | cut -d' ' -f1)"
 SIZE="$(du -h "$ARCHIVE" | cut -f1)"
