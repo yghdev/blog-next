@@ -22,10 +22,17 @@
 #   3. 端口只绑 127.0.0.1，不对外开放；外部通过 ssh 隧道访问。
 #   4. 临时管理员只写进**副本**，用完随目录一起删。
 #   5. UPLOAD_DIR 指向 /tmp 下的空目录，冒烟不往真实图床写文件。
+#   6. 实例用 systemd-run 起成**临时 unit**，不用 `sudo ... &`。
+#      原因（实跑踩到）：`sudo -u blog ... &` 起的进程会继承 ssh 会话的
+#      stdout/stderr 管道，ssh 要等所有持有管道的进程退出才返回 —— 于是
+#      `ssh host 'bash -s -- up'` 明明打完了输出却一直挂着，直到超时。
+#      套 setsid / nohup / </dev/null 都无效（管道仍被 node 继承）。
+#      临时 unit 还能顺带拿到独立 cgroup：stop 一次收掉整棵树，不留孤儿。
 set -euo pipefail
 
 ROOT=/opt/blog/current
 STATE=/tmp/blog-staging.state
+UNIT=blog-staging-smoke
 PORT="${STAGING_PORT:-8091}"
 DATA_DIR_PROD=/var/lib/blog
 
@@ -59,6 +66,7 @@ case "${1:-}" in
     [ -f "$DATA_DIR_PROD/blog.db" ] || die "找不到生产库 $DATA_DIR_PROD/blog.db"
 
     TMP="$(mktemp -d /tmp/blog-staging-XXXXXX)"
+    UNIT="${STAGING_UNIT:-blog-staging-smoke}"
     UPLOADS="$TMP/uploads"
     mkdir -p "$UPLOADS"
 
@@ -83,33 +91,34 @@ JS
     ( cd "$ROOT" && sudo -u blog /usr/bin/node "$TMP/mkadmin.mjs" "$TMP/blog.db" "$USERNAME" "$PW" ) \
       || die "临时管理员写入失败"
 
-    # 起进程：端口只绑回环，数据目录指向副本。
-    # setsid：把实例放进独立进程组，down 时整组一起收，不留孤儿子进程。
-    ( cd "$ROOT" && setsid sudo -u blog env \
-        NODE_ENV=production PORT="$PORT" HOSTNAME=127.0.0.1 \
-        DATA_DIR="$TMP" UPLOAD_DIR="$UPLOADS" TZ=UTC \
-        /usr/bin/node server.js > "$TMP/server.log" 2>&1 < /dev/null & )
+    # 起进程：临时 systemd unit，端口只绑回环，数据目录指向副本。
+    # 用 unit 而不是 `sudo ... &`：见文件头第 6 条（ssh 会挂住 / 孤儿进程）。
+    systemd-run --unit="$UNIT" --uid=blog --gid=blog --working-directory="$ROOT" \
+      --setenv=NODE_ENV=production --setenv=PORT="$PORT" --setenv=HOSTNAME=127.0.0.1 \
+      --setenv=DATA_DIR="$TMP" --setenv=UPLOAD_DIR="$UPLOADS" --setenv=TZ=UTC \
+      --collect /usr/bin/node server.js >/dev/null 2>&1 \
+      || die "systemd-run 起不来（unit 名 $UNIT 是否已被占用？）"
 
     for _ in $(seq 1 30); do
       curl -fsS -o /dev/null --max-time 1 "http://127.0.0.1:$PORT/api/healthz" 2>/dev/null && break
       sleep 1
     done
-    curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/api/healthz" \
-      || { tail -20 "$TMP/server.log"; die "临时实例没起来"; }
+    if ! curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$PORT/api/healthz" 2>/dev/null; then
+      journalctl -u "$UNIT" -n 20 --no-pager 2>/dev/null | tail -20
+      systemctl stop "$UNIT" 2>/dev/null || true
+      die "临时实例没起来"
+    fi
 
-    # **必须记监听端口的那个进程**，不能记 `$!`。
-    # `sudo -u blog ... node &` 的 $! 是 sudo 的 PID，kill 它只会让 node 被
-    # 过继给 init 继续跑：端口仍被占、临时库被删掉但它还开着 fd。
-    # 本次实跑踩到过一次，表现为"down 说删干净了，8091 却还在响应"。
+    # 记监听端口的 PID 并核对 DATA_DIR：这是"这个进程是我的副本"的唯一凭据。
+    # （不记 $! —— 那是 systemd-run 客户端的 PID，与 node 无关。）
     NODE_PID="$(listener_pid "$PORT")"
     [ -n "${NODE_PID:-}" ] || die "拿不到临时实例的 PID（端口 $PORT）"
-    # 双重确认：这个 PID 的 DATA_DIR 必须就是本次的副本，绝不是生产库
-    ACTUAL_DATA="$(tr '\0' '\n' < "/proc/$NODE_PID/environ" | sed -n 's/^DATA_DIR=//p')"
+    ACTUAL_DATA="$(tr '\0' '\n' < "/proc/$NODE_PID/environ" 2>/dev/null | sed -n 's/^DATA_DIR=//p')"
     [ "$ACTUAL_DATA" = "$TMP" ] || die "PID $NODE_PID 的 DATA_DIR=$ACTUAL_DATA，不是本次副本，拒绝接管"
 
     umask 077
-    printf 'TMP=%s\nPID=%s\nPORT=%s\nUSERNAME=%s\nPASSWORD=%s\n' \
-      "$TMP" "$NODE_PID" "$PORT" "$USERNAME" "$PW" > "$STATE"
+    printf 'TMP=%s\nPID=%s\nUNIT=%s\nPORT=%s\nUSERNAME=%s\nPASSWORD=%s\n' \
+      "$TMP" "$NODE_PID" "$UNIT" "$PORT" "$USERNAME" "$PW" > "$STATE"
     chmod 600 "$STATE"
 
     log "临时实例已就绪（端口 $PORT，数据目录 $TMP）"
@@ -124,40 +133,37 @@ JS
     # 允许两种入口：正常 down（有 state 文件），以及"上次崩在清理中间"的孤儿清理。
     # 孤儿也能清，是因为 up 一旦成功就必然在 /proc/<pid>/environ 留下可核对的
     # DATA_DIR —— 那才是"这个进程是我的"的唯一凭据，state 文件只是缓存。
-    TMP=""; PID=""; PORT="${STAGING_PORT:-8091}"
+    TMP=""; PID=""; UNIT=""; PORT="${STAGING_PORT:-8091}"
+    UNIT_DEFAULT=blog-staging-smoke
     if [ -f "$STATE" ]; then
       # shellcheck disable=SC1090
       . "$STATE"
       PORT="${PORT:-$STAGING_PORT}"
+      UNIT="${UNIT:-$UNIT_DEFAULT}"
     else
       log "没有 state 文件，尝试按端口清孤儿（仅当 DATA_DIR 是 /tmp 副本）"
     fi
 
-    # 优先用记录下来的 PID；没有就用端口反查
-    if [ -z "${PID:-}" ] || ! kill -0 "$PID" 2>/dev/null; then
-      PID="$(listener_pid "$PORT")"
+    # 停 unit（整棵树一起收）。没有 state 时按默认 unit 名兜底。
+    if systemctl is-active --quiet "${UNIT:-$UNIT_DEFAULT}" 2>/dev/null; then
+      systemctl stop "${UNIT:-$UNIT_DEFAULT}" 2>/dev/null || true
+      log "已停止临时 unit ${UNIT:-$UNIT_DEFAULT}"
     fi
 
-    if [ -n "${PID:-}" ] && kill -0 "$PID" 2>/dev/null; then
-      ACTUAL_DATA="$(tr '\0' '\n' < "/proc/$PID/environ" 2>/dev/null | sed -n 's/^DATA_DIR=//p')"
-      case "$ACTUAL_DATA" in
-        /tmp/blog-staging-*)
-          # 进程组一起收（setsid 起的，pgid == pid）
-          kill -TERM -- "-$PID" 2>/dev/null || kill -TERM "$PID" 2>/dev/null || true
-          sleep 2
-          kill -0 "$PID" 2>/dev/null && { kill -KILL -- "-$PID" 2>/dev/null || kill -KILL "$PID" 2>/dev/null || true; sleep 1; }
-          log "已停止临时实例 PID=$PID"
-          ;;
-        "")
-          log "!! PID $PID 的环境读不到，拒绝 kill（可能是别的进程）"
-          exit 1
-          ;;
-        *)
-          log "!! PID $PID 的 DATA_DIR=$ACTUAL_DATA 不是 /tmp 副本，拒绝 kill"
-          log "   如果要停生产服务，请用 systemctl stop blog"
-          exit 1
-          ;;
-      esac
+    # 兜底：unit 没起成但端口还占着 —— 只当 DATA_DIR 确实是 /tmp 副本时才 kill
+    if curl -fsS -o /dev/null --max-time 1 "http://127.0.0.1:$PORT/api/healthz" 2>/dev/null; then
+      PID="$(listener_pid "$PORT")"
+      if [ -n "${PID:-}" ]; then
+        ACTUAL_DATA="$(tr '\0' '\n' < "/proc/$PID/environ" 2>/dev/null | sed -n 's/^DATA_DIR=//p')"
+        case "$ACTUAL_DATA" in
+          /tmp/blog-staging-*)
+            kill -TERM "$PID" 2>/dev/null || true; sleep 2
+            kill -0 "$PID" 2>/dev/null && kill -KILL "$PID" 2>/dev/null || true
+            log "已停止残留进程 PID=$PID"
+            ;;
+          *) log "!! PID $PID 的 DATA_DIR=${ACTUAL_DATA:-读不到}，拒绝 kill"; exit 1 ;;
+        esac
+      fi
     fi
 
     # 删目录前再确认端口真的不响应了 —— 顺序反过来会出现
@@ -181,7 +187,7 @@ JS
   status)
     if [ -f "$STATE" ]; then
       . "$STATE"
-      printf '临时实例：端口 %s，PID %s，目录 %s\n' "$PORT" "$PID" "$TMP"
+      printf '临时实例：unit %s，端口 %s，PID %s，目录 %s\n' "${UNIT:-?}" "$PORT" "$PID" "$TMP"
       curl -s --max-time 2 "http://127.0.0.1:$PORT/api/healthz" | head -c 200; echo
     else
       log "没有临时实例"

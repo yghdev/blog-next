@@ -132,8 +132,13 @@ node scripts/verify-assets.mjs "$BASE"
 
 # ── 7. 收尾 ──────────────────────────────────────────────────────────
 step "7/7 收尾"
-ssh -o BatchMode=yes "$HOST" "rm -f $REMOTE" || true
-echo "已删除服务器上的上传归档"
+# 清掉本机上传的归档，以及历史遗留的 blog-dist-*.tar.gz。
+# 每个包约 100MB，发几次就能吃掉 1G —— /tmp 在系统盘上，满了会连带
+# 拖垮 SQLite 的 WAL 写入（那是不报错、只变慢的那种故障）。
+ssh -o BatchMode=yes "$HOST" "rm -f /tmp/blog-dist-*.tar.gz" || true
+echo "已清理服务器上 /tmp/blog-dist-*.tar.gz"
+DF="$(ssh -o BatchMode=yes "$HOST" "df -h /opt | tail -1" || true)"
+echo "磁盘：$DF"
 echo
 echo "发布完成：$VERSION → $BASE"
 echo "回滚：ssh $HOST '/opt/blog/deploy.sh --rollback'"

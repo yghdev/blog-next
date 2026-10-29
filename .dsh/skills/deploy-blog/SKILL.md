@@ -31,6 +31,10 @@ whenToUse: 用户说"上线""发布""部署""发版""推到服务器""更新线�
 3. **数据目录永远指 `/var/lib/blog`。** 任何临时实例、脚本、调试进程，`DATA_DIR`
    都必须指向副本；把临时实例指到生产库是**不可逆**的事故。
 
+`staging.sh down` 会先读 `/proc/<pid>/environ` 核对 `DATA_DIR` 是不是
+`/tmp/blog-staging-*`，不是就拒绝 kill 并提示用 `systemctl stop blog`。
+state 文件只是缓存：**"这个进程是不是我的"唯一凭据是它的 DATA_DIR**。
+
 ## 一、一条命令的正常路径
 
 ```bash
@@ -174,7 +178,21 @@ ssh <host> '/opt/blog/deploy.sh --list'       # 看现有版本与当前指向
 | `scripts/staging.sh` | 生产库副本 + 临时实例的 up/down/status | 服务器（root） |
 
 依赖：本机有 `ssh` 到 `DEPLOY_HOST`（默认 `aliyun-ecs`，root）、`scp`、
-Playwright Chromium（`npx playwright install chromium`）。
+Playwright Chromium（`npx playwright install chromium`）；服务器有 `systemd-run`
+（systemd 231+，本机是 255）。
+
+### 隔离实例为什么用 systemd-run
+
+不是审美选择。`sudo -u blog ... node server.js &` 起出来的进程会继承 SSH
+会话的 stdout/stderr 管道，**ssh 要等所有持有管道的进程退出才返回** ——
+命令明明打完了输出，`ssh host 'bash -s -- up'` 却一直挂着直到超时。
+实测 `setsid`、`nohup`、`</dev/null` 全都无效（管道还是被 node 继承）。
+
+改成 `systemd-run --unit=blog-staging-smoke --collect ...` 之后：
+
+- ssh 立刻返回（5 秒级，不再挂）
+- 实例有自己的 cgroup，`systemctl stop` 一次收掉整棵树，不留孤儿
+- 进程崩了也不会留一堆僵尸（`--collect` 自动清理失败的 unit）
 
 ## 六、报告格式
 

@@ -69,9 +69,12 @@ try {
   check("管理员登录", login.ok(), "HTTP " + login.status());
   if (!login.ok()) throw new Error("登录失败，后续无法继续：" + (await login.text()));
 
+  // page.request 默认跟随跳转，所以 status 会是 200（登录页本身）。
+  // 判据必须是"最终落在登录页"，只看状态码会把"被挡"误判成"放行"。
   const anon = await browser.newContext();
   const anonRes = await anon.request.get(BASE + "/admin");
-  check("未登录访问后台被挡", anonRes.status() === 307 || anonRes.status() === 302 || anonRes.url().includes("/admin/login"), "HTTP " + anonRes.status());
+  const landed = anonRes.url();
+  check("未登录访问后台被挡", landed.includes("/admin/login"), "最终 URL " + landed);
   await anon.close();
 
   /* ── 2. 编辑器渲染（改版后最容易坏的一层） ── */
