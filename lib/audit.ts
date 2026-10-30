@@ -9,7 +9,7 @@ export type AuditAction =
   | "post.publish" | "post.unpublish" | "post.bulk"
   | "post.draft.save" | "post.draft.discard" | "post.draft.rebase" | "post.restore_version"
   | "comment.approve" | "comment.spam" | "comment.delete" | "comment.bulk" | "comment.reply"
-  | "upload.create" | "media.delete" | "media.orphans"
+  | "upload.create" | "media.delete" | "media.orphans" | "media.migrate" | "media.bulk"
   | "settings.update"
   | "storage.update" | "storage.test"
   | "links.create" | "links.update" | "links.delete"

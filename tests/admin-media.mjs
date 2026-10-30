@@ -1,5 +1,5 @@
 /**
- * 阶段 02-4 · 媒体库。
+ * 阶段 02-4（媒体库） + 02-6（批量 / 排序 / 预览）。
  *
  * 断言的都是"重构前确实坏掉、且不靠肉眼就能看出坏没坏"的点：
  *   1. 第 121 张之后仍可达 —— 原来页面硬编码 LIMIT 120，API 却支持分页
@@ -7,9 +7,14 @@
  *   3. "未引用"筛选用的是真实引用关系（被引用的图不能出现在未引用里）
  *   4. 空状态必须给出口（B 端门禁 14），包括"筛选后为空"这种
  *   5. 裂图与孤儿分块呈现，且截断时明说"仅列前 N 个"（API 回传有 200 上限）
- *   6. 竖图按真实比例预览，不再被裁成 110px 横条
- *   7. 375px 无横向溢出；超长路径能断行
- *   8. 被引用的图删除按钮禁用（防止误删把文章打掉图）
+ *   6. 缩略图统一 4:3 预览带 + contain：竖图不被裁掉，行高不参差
+ *   7. 375px 无横向溢出；操作热区达标（触屏没有 hover，入口必须常驻）
+ *   8. 被引用的图不能删（菜单项禁用；单条与批量两条路径口径一致）
+ *   9. 排序（最新/最早/最大/最小）落到 URL、切换不丢筛选、非法值安全降级
+ *  10. 多选与浮动批量条：未选隐藏、勾选出现、全选本页、取消清空
+ *  11. 批量删除逐项判定：被引用的跳过并报告，未引用的真的删掉
+ *  12. 大图预览：点击打开、左右键切换、Esc 关闭、滚动锁释放
+ *  13. 操作入口默认隐藏（减少 96 个常驻按钮），悬停/聚焦才浮现
  */
 import assert from "node:assert/strict";
 import path from "node:path";
@@ -132,24 +137,48 @@ try {
   assert.ok(emptyLinks > 0, "空状态必须给出口链接（B 端门禁 14），实际 0 个");
   console.log("PASS phase02-4: 筛选无结果的空状态有出口（" + emptyLinks + " 个链接）");
 
-  /* ---------- 6. 被引用的图：删除禁用 ---------- */
+  /* ---------- 6. 被引用的图：删除入口禁用 + 说明原因 ----------
+     02-6 起删除收进右上角「更多」菜单：先打开菜单再断言。
+     这里同时验证「菜单默认不显示」—— 那正是本轮的视觉精简目标。 */
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(server.base + "/admin/media?q=q0.png", { waitUntil: "networkidle" });
-  const delBtn = page.locator(".media-card .btn-danger").first();
+  const card = page.locator(".media-card").first();
+  const actions = card.locator(".media-actions");
+  assert.equal(await actions.evaluate((el) => getComputedStyle(el).opacity), "0",
+    "未悬停时卡片操作应隐藏（视觉精简），实际仍在常驻显示");
+  await card.hover();
+  await page.waitForTimeout(200);
+  await card.locator(".media-kebab").click();
+  const delBtn = page.locator(".media-card .media-menu .media-menu-item.is-danger").first();
   const disabled = await delBtn.isDisabled();
-  assert.equal(disabled, true, "被文章引用的图，删除按钮必须是禁用状态");
+  assert.equal(disabled, true, "被文章引用的图，删除菜单项必须是禁用状态");
   const title = await delBtn.getAttribute("title");
   assert.match(title || "", /引用/, "禁用原因要写在 title 里，否则用户不知道为什么点不动： " + title);
-  console.log("PASS phase02-4: 被引用图片的删除按钮禁用且说明原因");
+  const delText = (await delBtn.innerText()).trim();
+  assert.match(delText, /引用/, "菜单项文案本身也要说明被引用，不能只靠 title：" + delText);
+  console.log("PASS phase02-4: 被引用图片的删除入口禁用且写明引用原因（菜单默认隐藏）");
 
-  /* ---------- 7. 竖图按真实比例预览（旧实现一律裁成 110px 横条） ---------- */
+  /* ---------- 7. 竖图不被裁切，且网格行高一致 ----------
+     02-6 把「按每张图真实宽高比撑高」改成「统一 4:3 预览带 + object-fit:contain」：
+     前者会让同一行卡片高低参差、短图下方出现大片空白（截图走查实测）。
+     contain 保证整张图完整可见 —— 「竖图被裁掉大半」这个原始缺陷仍然不能回来。 */
   await page.goto(server.base + "/admin/media?storage=qiniu", { waitUntil: "networkidle" });
-  const box = await page.locator(".media-thumb").first().boundingBox();
+  const firstThumb = page.locator(".media-thumb").first();
+  const box = await firstThumb.boundingBox();
   assert.ok(box, "缩略图容器应可见");
-  const w = box.width, h = box.height;
-  // 数据是 800x1200 竖图，容器比例应接近 2:3 而不是固定 110px 高
-  const ratio = h / w;
-  assert.ok(ratio > 1.1, "竖图应按真实比例预览（高 > 宽），实际 ratio=" + ratio.toFixed(2) + " " + JSON.stringify(box));
-  console.log("PASS phase02-4: 竖图按真实宽高比预览（" + Math.round(w) + "×" + Math.round(h) + "）");
+  const ratio = box.height / box.width;
+  assert.ok(Math.abs(ratio - 3 / 4) < 0.06,
+    "缩略图预览带应为统一的 4:3（行高一致），实际 ratio=" + ratio.toFixed(2));
+
+  const fit = await firstThumb.locator("img").evaluate((img) => getComputedStyle(img).objectFit);
+  assert.equal(fit, "contain", "竖图必须完整显示（contain），不能被裁切");
+
+  // 竖图与横图的预览带高度必须完全一致：这是"行不参差"的硬判据
+  const heights = await page.locator(".media-thumb").evaluateAll((els) =>
+    els.slice(0, 5).map((e) => Math.round(e.getBoundingClientRect().height))
+  );
+  assert.equal(new Set(heights).size, 1, "同一页所有缩略图高度必须一致，实际：" + heights.join(","));
+  console.log("PASS phase02-4: 缩略图统一 4:3 预览带 + contain（竖图不裁切，行高一致 " + heights[0] + "px）");
 
   /* ---------- 8. 375px 不溢出 + 超长路径能断行 ---------- */
   await page.setViewportSize({ width: 375, height: 800 });
@@ -159,11 +188,144 @@ try {
     sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth,
   }));
   assert.ok(overflow.sw <= overflow.cw + 1, "375px 横向溢出：" + JSON.stringify(overflow));
-  // 移动端操作热区 >= 44
-  const btnBox = await page.locator(".media-card .media-actions .btn").first().boundingBox();
+  // 移动端操作热区 >= 44：触屏没有 hover，更多菜单键必须常驻
+  const btnBox = await page.locator(".media-card .media-kebab").first().boundingBox();
   assert.ok(btnBox && btnBox.height >= 44,
-    "手机上操作按钮热区应 >= 44dp，实际 " + (btnBox && btnBox.height));
+    "手机上「更多」操作键热区应 >= 44dp，实际 " + (btnBox && btnBox.height));
+  const actionsOpacity = await page.locator(".media-card .media-actions").first()
+    .evaluate((el) => getComputedStyle(el).opacity);
+  assert.equal(actionsOpacity, "1", "触屏设备上操作入口不能靠 hover 才出现");
   console.log("PASS phase02-4: 375px 无溢出（" + overflow.sw + "/" + overflow.cw + "），操作热区 " + Math.round(btnBox.height) + "dp");
+
+  /* ---------- 8b. 排序：按体积/时间落到 URL，且 SQL 顺序真的生效 ---------- */
+  await page.setViewportSize({ width: 1280, height: 900 });
+
+  // 数据：q0..q39 体积 1000..1039，l0..l14 体积 2000..2014。
+  // 「文件最大」首页第一条必须是 2014 字节的 l14，而不是最新的那张。
+  await page.goto(server.base + "/admin/media?sort=largest", { waitUntil: "networkidle" });
+  const largestNames = await page.locator(".media-name").evaluateAll((els) => els.map((e) => e.textContent || ""));
+  assert.equal(largestNames[0], "l14.png", "按体积降序时首条应为最大的 l14.png，实际：" + largestNames[0]);
+  // 体积文本会四舍五入（2000..2014 字节都显示 "2 KB"），所以按文件名核对顺序：
+  // 最大值 l14（2014）→ l13 → l12，末位才是最小的 q0（1000）。
+  assert.deepEqual(largestNames.slice(0, 3), ["l14.png", "l13.png", "l12.png"],
+    "「文件最大」应按体积降序，实际前三条：" + largestNames.slice(0, 3).join(","));
+  // 55 条 / 每页 48 条：最大的 15 张本机图 + 33 张七牛图在首页，最小的 q0 在第 2 页末位
+  await page.goto(server.base + "/admin/media?sort=largest&page=2", { waitUntil: "networkidle" });
+  const largestTail = await page.locator(".media-name").evaluateAll((els) => els.map((e) => e.textContent || ""));
+  assert.equal(largestTail[largestTail.length - 1], "q0.png", "降序末位应为最小的 q0.png，实际：" + largestTail[largestTail.length - 1]);
+
+  await page.goto(server.base + "/admin/media?sort=smallest", { waitUntil: "networkidle" });
+  const smallestFirst = (await page.locator(".media-name").first().textContent())?.trim();
+  assert.equal(smallestFirst, "q0.png", "按体积升序时首条应为最小的 q0.png，实际：" + smallestFirst);
+
+  // 排序值必须写进 URL，且切换排序时保留当前筛选
+  await page.goto(server.base + "/admin/media?storage=local&sort=largest", { waitUntil: "networkidle" });
+  const sortValue = await page.locator(".media-sort select").inputValue();
+  assert.equal(sortValue, "largest", "排序下拉应回显 URL 里的排序值");
+  await page.locator(".media-sort select").selectOption("oldest");
+  await page.waitForURL(/sort=oldest/, { timeout: 8000 });
+  const keptFilter = new URL(page.url()).searchParams.get("storage");
+  assert.equal(keptFilter, "local", "切换排序不得丢掉存储位置筛选，实际：" + page.url());
+
+  // 未知排序值退回默认，而不是拼进 SQL
+  await page.goto(server.base + "/admin/media?sort=;DROP+TABLE+media--", { waitUntil: "networkidle" });
+  assert.equal(await page.locator(".media-card").count(), 48, "非法排序值应安全退回默认排序，页面仍正常");
+  console.log("PASS phase02-4: 排序生效（最大 l14 / 最小 q0），URL 可回显、切换不丢筛选、非法值安全降级");
+
+  /* ---------- 8c. 批量选择与批量操作条 ---------- */
+  await page.goto(server.base + "/admin/media?storage=unused", { waitUntil: "networkidle" });
+  assert.equal(await page.locator(".media-bulkbar").count(), 0, "未选择时批量条必须完全不渲染");
+
+  await page.locator(".media-card .media-check input").first().check();
+  await page.waitForSelector(".media-bulkbar");
+  const bulkText = await page.locator(".media-bulkbar-count").innerText();
+  assert.match(bulkText, /已选\s*1\s*张/, "批量条要明确告知选中数量，实际：" + bulkText);
+  const bulkBtns = await page.locator(".media-bulkbar .btn").count();
+  assert.ok(bulkBtns >= 3, "批量条应含迁移/删除/取消选择，实际按钮数 " + bulkBtns);
+
+  // 全选本页：48 张
+  await page.locator(".media-list-meta .select-all input").check();
+  await page.waitForTimeout(150);
+  const allCount = await page.locator(".media-card.is-selected").count();
+  assert.equal(allCount, 48, "全选本页应选中 48 张，实际 " + allCount);
+  assert.match(await page.locator(".media-bulkbar-count").innerText(), /已选\s*48\s*张/);
+
+  // 取消选择后批量条消失、选中态清空
+  await page.locator(".media-bulkbar .btn-ghost").click();
+  await page.waitForTimeout(150);
+  assert.equal(await page.locator(".media-bulkbar").count(), 0, "取消选择后批量条应消失");
+  assert.equal(await page.locator(".media-card.is-selected").count(), 0, "取消选择后卡片选中态应清空");
+  console.log("PASS phase02-4: 多选与批量条（未选隐藏 / 选中出现 / 全选 48 / 取消清空）");
+
+  /* ---------- 8d. 批量删除：跳过被引用项，删除成功项 ---------- */
+  // 先干净地造两条：一条未引用（可删），一条被文章引用（必须跳过）
+  const D3 = (await import("better-sqlite3")).default;
+  db = new D3(path.join(server.dataDir, "blog.db"));
+  const insBulk = db.prepare(
+    "INSERT INTO media (path, filename, mime, size, width, height, sha256) VALUES (?, ?, 'image/png', 1234, 10, 10, NULL)"
+  );
+  fs.writeFileSync(path.join(webRoot, "cdn", "BULK_FREE.png"), PNG);
+  fs.writeFileSync(path.join(webRoot, "cdn", "BULK_USED.png"), PNG);
+  const freeId = Number(insBulk.run("/cdn/BULK_FREE.png", "BULK_FREE.png").lastInsertRowid);
+  const usedId = Number(insBulk.run("/cdn/BULK_USED.png", "BULK_USED.png").lastInsertRowid);
+  db.prepare(
+    "INSERT INTO posts (type, title, slug, content, status, created_at, updated_at) VALUES ('post', ?, ?, ?, 'published', ?, ?)"
+  ).run("BULK_REF", "bulk-ref", "![x](/cdn/BULK_USED.png)", new Date(now).toISOString(), new Date(now).toISOString());
+  db.close();
+  db = null;
+
+  const bulkResp = await page.request.post(server.base + "/api/admin/media/bulk", {
+    data: { action: "delete", ids: [freeId, usedId] },
+  });
+  assert.equal(bulkResp.status(), 200, await bulkResp.text());
+  const bulkJson = await bulkResp.json();
+  assert.equal(bulkJson.summary.succeeded, 1, "未引用的那张应删除成功，实际：" + JSON.stringify(bulkJson.summary));
+  assert.equal(bulkJson.summary.skipped, 1, "被引用的那张应跳过，实际：" + JSON.stringify(bulkJson.summary));
+  const usedResult = bulkJson.results.find((r) => r.id === usedId);
+  assert.equal(usedResult?.code, "MEDIA_IN_USE", "跳过原因必须是「仍被引用」，实际：" + JSON.stringify(usedResult));
+
+  // 删除确实是删了：记录不在了，而被引用的那张还在
+  db = new D3(path.join(server.dataDir, "blog.db"));
+  const stillFree = db.prepare("SELECT id FROM media WHERE id = ?").get(freeId);
+  const stillUsed = db.prepare("SELECT id FROM media WHERE id = ?").get(usedId);
+  db.close();
+  db = null;
+  assert.equal(stillFree, undefined, "未被引用的图片记录应被删除");
+  assert.ok(stillUsed, "被引用的图片记录必须保留（不能因为批量而绕开安全规则）");
+  console.log("PASS phase02-4: 批量删除逐项判定（1 成功 / 1 因被引用跳过），安全规则不被批量绕过");
+
+  /* ---------- 8d-2. 单条删除沿用同一套引用规则（不能只守住批量口） ---------- */
+  const singleUsed = await page.request.delete(server.base + "/api/admin/media/" + usedId);
+  assert.equal(singleUsed.status(), 409, "单条删除被引用的图必须 409");
+  assert.match((await singleUsed.json()).error || "", /引用/, "单条删除的报错要说清是引用问题");
+  console.log("PASS phase02-4: 单条删除同样拒绝被引用的图（与批量口径一致）");
+
+  /* ---------- 8e. 大图预览：点击缩略图打开，左右键切换，Esc 关闭 ---------- */
+  await page.goto(server.base + "/admin/media?storage=qiniu", { waitUntil: "networkidle" });
+  const clickedSrc = await page.locator(".media-thumb-btn img").nth(2).getAttribute("src");
+  await page.locator(".media-thumb-btn").nth(2).click();
+  await page.waitForSelector(".media-lightbox");
+  const lbTitle = (await page.locator(".media-lightbox-title").innerText()).trim();
+  const lbCount = (await page.locator(".media-lightbox-count").innerText()).trim();
+  assert.match(lbCount, /^3 \/ \d+$/, "预览应显示当前序号与总数，实际：" + lbCount);
+  // standalone 的静态文件清单在启动时固定，运行期写进 public 的测试图片会 404，
+  // 因此这里断言「预览的是同一张图」而不是像素加载成功。
+  assert.equal(await page.locator(".media-lightbox-stage img").getAttribute("src"), clickedSrc,
+    "预览大图的 src 应与被点击的缩略图一致");
+
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(150);
+  const lbTitle2 = (await page.locator(".media-lightbox-title").innerText()).trim();
+  assert.notEqual(lbTitle2, lbTitle, "右方向键应切到下一张，实际仍为 " + lbTitle2);
+  assert.match((await page.locator(".media-lightbox-count").innerText()).trim(), /^4 \/ \d+$/);
+
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator(".media-lightbox").count(), 0, "Esc 应关闭预览");
+  // 关闭后滚动锁定必须解除（否则整页卡在 fixed 状态，滚不动）
+  const bodyPos = await page.evaluate(() => getComputedStyle(document.body).position);
+  assert.notEqual(bodyPos, "fixed", "预览关闭后必须解除滚动锁定，实际 body position=" + bodyPos);
+  console.log("PASS phase02-4: 大图预览（打开/序号/同一张图/右方向键/Esc/滚动锁释放）");
 
   /* ---------- 9. 扫描结果：裂图与孤儿分块，且明说截断 ---------- */
   await page.setViewportSize({ width: 1280, height: 900 });

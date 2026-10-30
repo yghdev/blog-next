@@ -119,6 +119,28 @@ export const IconEyeOff = (p: P) => (
 export const IconSearch = (p: P) => (
   <Svg {...p}><circle cx="9" cy="9" r="4.6" /><path d="m12.6 12.6 3.9 3.9" /></Svg>
 );
+/** 更多：三点菜单（卡片操作收进下拉时用） */
+export const IconMore = (p: P) => (
+  <Svg {...p}>
+    <circle cx="4.6" cy="10" r="1.05" fill="currentColor" stroke="none" />
+    <circle cx="10" cy="10" r="1.05" fill="currentColor" stroke="none" />
+    <circle cx="15.4" cy="10" r="1.05" fill="currentColor" stroke="none" />
+  </Svg>
+);
+/** 复制：两张错开的纸 */
+export const IconCopy = (p: P) => (
+  <Svg {...p}>
+    <path d="M7 7V4.5h8.5V13H13" />
+    <path d="M4.5 7h8.5v8.5H4.5z" />
+  </Svg>
+);
+/** 云上传：迁移到 CDN 的动作图标 */
+export const IconCloudUp = (p: P) => (
+  <Svg {...p}>
+    <path d="M6.4 14.5a3.2 3.2 0 0 1-.2-6.4 4.1 4.1 0 0 1 7.9-1 3.4 3.4 0 0 1 1.5 6.5" />
+    <path d="M10 16.5v-6M7.6 12.6 10 10.2l2.4 2.4" />
+  </Svg>
+);
 export const IconColumns = (p: P) => (
   <Svg {...p}><path d="M3.5 4.5h13v11h-13zM10 4.5v11" /></Svg>
 );

@@ -3604,6 +3604,499 @@ body.editor-focus-mode .editor-headline { padding-top: var(--fx-s6); }
   overflow-wrap: anywhere;
 }
 
+/* ── 媒体 ──
+   这一页的目标是「清理」而不是「欣赏」：缩略图是主角，其余信息能扫读即可。
+   卡片常驻的控件只有「多选框 + 引用数 + 更多菜单键」三件，
+   复制/删除/迁移都在菜单里 —— 48 张卡片上 96 个按钮正是上一版的视觉噪音来源。 */
+.media-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--fx-s3);
+  flex-wrap: wrap;
+  margin-bottom: var(--fx-s3);
+}
+.media-toolbar .seg-tabs { margin-bottom: 0; }
+.media-search { display: flex; align-items: center; gap: var(--fx-s2); margin-left: auto; }
+.media-search input { min-width: 12em; }
+.media-clear { font-size: var(--fx-fs-xs); color: var(--fx-brand); text-decoration: none; }
+.media-clear:hover { text-decoration: underline; }
+
+/* 排序：与搜索同一行、紧贴其右。select 用全局 .input 皮肤，不另造控件 */
+.media-sort { display: inline-flex; align-items: center; }
+.media-sort .input {
+  width: auto;
+  min-width: 7.3em;
+  min-height: var(--fx-control-h-sm);
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: var(--fx-fs-xs);
+}
+
+/* 网格上方的全选行：与内容列表同一套「轻量计数」语言，不做浮条 */
+.media-list-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s4);
+  min-height: 30px;
+  padding: 0 var(--fx-s2);
+  margin-bottom: var(--fx-s2);
+  color: var(--fx-faint);
+  font-size: var(--fx-fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+.media-list-meta .select-all { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.media-list-hint { margin-left: auto; }
+@media (max-width: 640px) {
+  /* 手机上「共 N 张」不该换行把全选挤走：让它在全选右侧换行，而不是压扁全选热区 */
+  .media-list-meta { flex-wrap: wrap; row-gap: 2px; }
+  .media-list-hint { margin-left: 0; }
+  .media-list-meta .select-all { min-height: var(--tap); }
+}
+
+/* 扫描结果：裂图（真会让文章掉图）与孤儿（可清理）分块呈现 */
+.media-scan {
+  padding: var(--fx-s3) var(--fx-s4);
+  margin-bottom: var(--fx-s4);
+  border: 1px solid var(--fx-line);
+  border-radius: var(--fx-r-md);
+  background: var(--fx-sunken);
+}
+.media-scan-head { display: flex; align-items: baseline; gap: var(--fx-s2); flex-wrap: wrap; margin-bottom: var(--fx-s2); }
+.media-scan-head strong { font-size: var(--fx-fs-sm); color: var(--fx-ink); }
+.media-scan-stat { flex: 1; font-size: var(--fx-fs-xs); color: var(--fx-faint); font-variant-numeric: tabular-nums; }
+.media-scan-block { margin-bottom: var(--fx-s3); }
+.media-scan-block:last-child { margin-bottom: 0; }
+/* 裂图块用危险色左侧条：视觉层级比孤儿高一级 */
+.media-scan-block.is-missing { padding-left: var(--fx-s3); border-left: 2px solid var(--fx-danger-line); }
+.media-scan-title { margin-bottom: var(--fx-s1); font-size: var(--fx-fs-sm); font-weight: var(--fx-fw-semi); color: var(--fx-ink-2); }
+.media-scan-block.is-missing .media-scan-title { color: var(--fx-danger); }
+.media-scan-hint { margin-bottom: var(--fx-s1); font-size: var(--fx-fs-xs); line-height: var(--fx-lh-base); color: var(--fx-faint); text-wrap: pretty; }
+.media-scan-list {
+  max-height: 168px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fx-fs-micro);
+  line-height: 1.75;
+  color: var(--fx-muted);
+  list-style: none;
+  /* 路径是超长无空格串，必须能断，否则窄屏横向溢出 */
+  overflow-wrap: anywhere;
+}
+.media-scan-more { margin-top: var(--fx-s1); font-size: var(--fx-fs-micro); color: var(--fx-faint); }
+
+/* 网格：缩略图优先，信息压缩到三行 */
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: var(--fx-s3);
+}
+.media-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  /* 不裁切：右上角菜单要能伸出卡片（缩略图自己裁圆角，见下）。
+     卡片本身没有 overflow:hidden，所以菜单不会被切掉半个。 */
+  border: 1px solid var(--fx-line);
+  border-radius: var(--fx-r-md);
+  background: var(--fx-surface);
+  /* 悬停只提边框，不做位移：网格里整体位移会显得抖 */
+  transition: border-color var(--fx-dur-1) var(--fx-ease), box-shadow var(--fx-dur-1) var(--fx-ease);
+}
+/* 菜单打开时把卡片抬到同层网格之上，否则下一行的卡片会盖住菜单 */
+.media-card.is-menu-open { z-index: 30; }
+.media-card:hover,
+.media-card:focus-within { border-color: var(--fx-brand-line); }
+/* 选中态：品牌色描边 + 极浅底，不盖半透明遮罩 —— 遮罩会让缩略图本身变暗，
+   用户反而看不清自己选了哪一张。 */
+.media-card.is-selected {
+  border-color: var(--fx-brand);
+  box-shadow: 0 0 0 1px var(--fx-brand);
+}
+.media-thumb {
+  position: relative;
+  width: 100%;
+  /* 统一预览带：行高一致才能横向比对文件名与体积。
+     图片用 object-fit: contain 完整显示（竖图两侧留底色，不裁切）——
+     上一版按真实宽高比撑高，结果同一行卡片高低不齐、短图下方一片空白。
+     aspect-ratio 会被内容撑开，所以里面的按钮用绝对定位占满，不参与撑高。 */
+  aspect-ratio: 4 / 3;
+  border-radius: calc(var(--fx-r-md) - 1px) calc(var(--fx-r-md) - 1px) 0 0;
+  background: var(--fx-sunken);
+}
+.media-thumb img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* 缩略图整块可点（打开大图），但它是 <button> 而不是 div：
+   Tab 能到、Enter/Space 能开，读屏能念出「预览 xxx」。 */
+.media-thumb-btn {
+  position: absolute;
+  inset: 0;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: zoom-in;
+}
+.media-thumb-btn:focus-visible { outline-offset: -3px; }
+
+/* 多选框：左上角常驻，白底以保证任意缩略图上都看得见 */
+.media-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--fx-line-strong);
+  border-radius: var(--fx-r-xs);
+  background: var(--fx-raised);
+  cursor: pointer;
+  /* 平时半隐：不选中时它是"可选"而不是"待办"，压到 0.82 仍清晰可见 */
+  opacity: 0.82;
+  transition: opacity var(--fx-dur-1) var(--fx-ease), border-color var(--fx-dur-1) var(--fx-ease);
+}
+.media-check:hover,
+.media-card:hover .media-check,
+.media-card:focus-within .media-check,
+.media-card.is-selected .media-check { opacity: 1; }
+.media-check input { margin: 0; }
+.media-card.is-selected .media-check { border-color: var(--fx-brand); }
+
+.media-refs {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 0 6px;
+  border: 1px solid var(--fx-line-strong);
+  border-radius: var(--fx-r-xs);
+  background: var(--fx-raised);
+  font-size: var(--fx-fs-micro);
+  color: var(--fx-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 更多菜单：hover / 聚焦 / 菜单打开时才出现；触屏设备由媒体查询常驻（见文末） */
+.media-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition: opacity var(--fx-dur-1) var(--fx-ease), transform var(--fx-dur-1) var(--fx-ease);
+}
+.media-card:hover .media-actions,
+.media-card:focus-within .media-actions,
+.media-card.is-menu-open .media-actions { opacity: 1; transform: none; }
+.media-kebab {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--fx-line-strong);
+  border-radius: var(--fx-r-sm);
+  background: var(--fx-raised);
+  color: var(--fx-muted);
+  cursor: pointer;
+  transition: background var(--fx-dur-1) var(--fx-ease), color var(--fx-dur-1) var(--fx-ease);
+}
+.media-kebab:hover { background: var(--fx-brand-tint); color: var(--fx-ink); }
+.media-kebab[aria-expanded="true"] { background: var(--fx-brand-tint); color: var(--fx-brand-ink); border-color: var(--fx-brand-line); }
+
+/* 下拉：右对齐到菜单键，最小 9em —— 比图标按钮宽，但不至于盖住缩略图主体。
+   浮层不带阴影外扩的祖先裁切问题：卡片有 overflow:hidden，所以菜单挂在
+   .media-thumb 内部会被裁掉。这里用绝对定位 + 卡片自身不减 overflow 的方式：
+   菜单贴在卡片内，最大宽度受卡片限制（168px 起），因此文案要短。 */
+.media-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  min-width: 9.5em;
+  padding: var(--fx-s1);
+  border: 1px solid var(--fx-line-strong);
+  border-radius: var(--fx-r-md);
+  background: var(--fx-raised);
+  box-shadow: var(--fx-shadow-2);
+  animation: fx-dialog-in var(--fx-dur-1) var(--fx-ease);
+}
+.media-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--fx-r-xs);
+  background: transparent;
+  color: var(--fx-ink-2);
+  font-family: inherit;
+  font-size: var(--fx-fs-xs);
+  text-align: left;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.media-menu-item:hover,
+.media-menu-item:focus-visible { background: var(--fx-brand-tint); color: var(--fx-ink); }
+.media-menu-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.media-menu-item.is-danger { color: var(--fx-danger); }
+.media-menu-item.is-danger:hover { background: var(--fx-danger-bg); color: var(--fx-danger); }
+.media-menu-sep { display: block; height: 1px; margin: 4px 6px; background: var(--fx-line); }
+
+.media-meta { padding: var(--fx-s2) var(--fx-s3) var(--fx-s3); }
+.media-name { overflow: hidden; font-size: var(--fx-fs-xs); color: var(--fx-ink-2); text-overflow: ellipsis; white-space: nowrap; }
+/* 体积 / 尺寸一行、日期一行：每张卡都恰好两行，网格行高才不会参差。
+   三样挤在一行时日期会被省略成「2026年1…」，反而看不出新旧。 */
+.media-sub,
+.media-date {
+  overflow: hidden;
+  font-size: var(--fx-fs-micro);
+  color: var(--fx-faint);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.media-sub { margin-top: 2px; }
+.media-date { margin-top: 1px; }
+.media-tags { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: var(--fx-s2); }
+/* 「未引用」是清理时最想找的状态：一行小字，不占胶囊位 */
+.media-free { font-size: var(--fx-fs-micro); color: var(--fx-faint); }
+.media-free::before { content: ""; display: inline-block; width: 4px; height: 4px; margin-right: 4px; border-radius: 50%; background: currentColor; vertical-align: 2px; }
+
+.media-foot { display: flex; align-items: center; gap: var(--fx-s3); flex-wrap: wrap; margin-top: var(--fx-s5); }
+.media-count { font-size: var(--fx-fs-xs); color: var(--fx-faint); font-variant-numeric: tabular-nums; }
+.media-foot .pager { margin-top: 0; margin-left: auto; }
+
+/* 批量条：选中才出现，贴在视口底部中央。
+   为什么 fixed 而不是跟列表排在一起：48 张卡片的网格可能比两屏还长，
+   批量按钮如果排在页脚，用户勾完第一屏还得滚到底才能执行。 */
+.media-bulkbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--fx-s4) + var(--safe-bottom));
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s2);
+  flex-wrap: wrap;
+  max-width: min(94vw, 720px);
+  padding: var(--fx-s2) var(--fx-s2) var(--fx-s2) var(--fx-s4);
+  border: 1px solid var(--fx-brand-line);
+  border-radius: var(--fx-r-lg);
+  background: var(--fx-raised);
+  box-shadow: var(--fx-shadow-2);
+  transform: translateX(-50%);
+  animation: media-bulkbar-in var(--fx-dur-2) var(--fx-ease);
+}
+@keyframes media-bulkbar-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.media-bulkbar-count {
+  font-size: var(--fx-fs-sm);
+  color: var(--fx-ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.media-bulkbar-count strong { color: var(--fx-brand-ink); }
+.media-bulkbar-warn {
+  display: block;
+  font-size: var(--fx-fs-micro);
+  font-style: normal;
+  color: var(--fx-warn);
+  font-weight: var(--fx-fw-normal);
+}
+.media-bulkbar-fill { flex: 1; }
+/* 浮条占据视口底部，选中时给页面补一段留白，最后一行卡片不会被压住 */
+.media-bulkbar-spacer { height: var(--fx-s9); }
+@media (max-width: 640px) { .media-bulkbar-spacer { height: calc(var(--fx-s9) + var(--tap)); } }
+
+/* 批量删除的两步验证码：放在确认弹窗的 children 里，不另开一层 */
+.media-code-row { display: flex; align-items: center; gap: var(--fx-s2); margin-top: var(--fx-s3); }
+.media-code-row label { font-size: var(--fx-fs-xs); color: var(--fx-muted); white-space: nowrap; }
+.media-code-row .input { min-height: var(--fx-control-h-sm); font-size: var(--fx-fs-xs); }
+
+/* ── 大图预览 ──
+   弹窗本体比常规 ConfirmDialog 宽得多：预览的价值就是"看清楚"，
+   460px 的正文弹窗会把横图压成邮票。高度用 dvh 并留出上下各一行的空间。
+
+   选择器必须带上 .dialog-mask：全局遮罩规则是 `.fx-scope .dialog-mask`
+   （两个类），只写 .media-lightbox-mask 会被它的 38vh 顶部内边距覆盖 ——
+   实测弹窗被推到屏幕下半截，底部操作区直接出画。 */
+.fx-scope.dialog-mask.media-lightbox-mask,
+.fx-scope .dialog-mask.media-lightbox-mask {
+  align-items: center;
+  padding: var(--fx-s5);
+}
+.media-lightbox {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 1080px);
+  max-height: min(92dvh, 900px);
+  padding: var(--fx-s3) var(--fx-s3) var(--fx-s3);
+  border: 1px solid var(--fx-line-strong);
+  border-radius: var(--fx-r-xl);
+  background: var(--fx-raised);
+  box-shadow: var(--fx-shadow-3);
+  outline: none;
+  animation: fx-dialog-in var(--fx-dur-2) var(--fx-ease);
+}
+.media-lightbox-head {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s3);
+  padding: 0 var(--fx-s1) var(--fx-s2);
+  border-bottom: 1px solid var(--fx-line);
+}
+.media-lightbox-title-wrap { min-width: 0; flex: 1; }
+.media-lightbox-title {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: var(--fx-fs-md);
+  font-weight: var(--fx-fw-semi);
+  color: var(--fx-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.media-lightbox-sub {
+  margin-top: 2px;
+  font-size: var(--fx-fs-micro);
+  color: var(--fx-faint);
+  font-variant-numeric: tabular-nums;
+}
+.media-lightbox-count {
+  flex-shrink: 0;
+  font-size: var(--fx-fs-xs);
+  color: var(--fx-faint);
+  font-variant-numeric: tabular-nums;
+}
+.media-lightbox-close {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--fx-r-sm);
+  background: transparent;
+  color: var(--fx-muted);
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.media-lightbox-close:hover { background: var(--fx-sunken); color: var(--fx-ink); }
+.media-lightbox-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  padding: var(--fx-s3) 0;
+  background: var(--fx-sunken);
+  border-radius: var(--fx-r-md);
+  overflow: hidden;
+}
+.media-lightbox-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(92dvh - 210px);
+  object-fit: contain;
+}
+.media-lightbox-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 64px;
+  border: 1px solid var(--fx-line-strong);
+  border-radius: var(--fx-r-md);
+  background: color-mix(in oklab, var(--fx-raised) 88%, transparent);
+  color: var(--fx-ink-2);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--fx-dur-1) var(--fx-ease);
+}
+.media-lightbox-nav:hover { background: var(--fx-raised); }
+.media-lightbox-nav.is-prev { left: var(--fx-s2); }
+.media-lightbox-nav.is-next { right: var(--fx-s2); }
+.media-lightbox-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s2);
+  flex-wrap: wrap;
+  padding: var(--fx-s2) var(--fx-s1) 0;
+  border-top: 1px solid var(--fx-line);
+  margin-top: var(--fx-s2);
+}
+.media-lightbox-refs { font-size: var(--fx-fs-xs); color: var(--fx-muted); }
+.media-lightbox-refs.is-free { color: var(--fx-faint); }
+.media-lightbox-spacer { flex: 1; }
+
+@media (max-width: 640px) {
+  .media-search { width: 100%; margin-left: 0; }
+  .media-search input { flex: 1; min-width: 0; }
+  .media-sort { width: 100%; }
+  .media-sort .input { width: 100%; min-height: var(--tap); font-size: 16px; }
+  .media-grid { grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: var(--fx-s2); }
+  /* 触屏没有 hover：菜单键常驻并撑到 44dp，操作仍然可达 */
+  .media-actions { opacity: 1; transform: none; }
+  .media-kebab { width: var(--tap); height: var(--tap); }
+  .media-menu { min-width: 10.5em; }
+  .media-menu-item { min-height: var(--tap); }
+  .media-check { opacity: 1; width: 30px; height: 30px; top: 6px; left: 6px; }
+  .media-check input { width: 18px; height: 18px; }
+  /* 手机上批量条排成两行：第一行「已选 N 张 + 取消」，第二行两个动作等宽。
+     不这么做的话四个元素会挤成三行、把"取消选择"折到最下面。 */
+  .media-bulkbar {
+    left: var(--fx-s3);
+    right: var(--fx-s3);
+    bottom: calc(var(--fx-s3) + var(--safe-bottom));
+    max-width: none;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--fx-s2);
+    padding: var(--fx-s3);
+    transform: none;
+  }
+  .media-bulkbar-count { grid-column: 1; grid-row: 1; }
+  .media-bulkbar .btn-ghost { grid-column: 2; grid-row: 1; }
+  .media-bulkbar .btn:not(.btn-ghost) { grid-row: 2; min-height: var(--tap); }
+  .media-bulkbar .btn:nth-of-type(1) { grid-column: 1; }
+  .media-bulkbar .btn:nth-of-type(2) { grid-column: 2; }
+  .media-bulkbar-fill { display: none; }
+  .fx-scope.dialog-mask.media-lightbox-mask,
+  .fx-scope .dialog-mask.media-lightbox-mask { padding: 0; align-items: stretch; }
+  .media-lightbox {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+  .media-lightbox-stage { border-radius: 0; }
+  .media-lightbox-stage img { max-height: calc(100dvh - 220px); }
+  .media-lightbox-nav { width: 44px; height: 72px; }
+  .media-lightbox-foot .btn { min-height: var(--tap); }
+}
+
+/* 触屏设备（含横屏平板）没有 hover：卡片操作必须常驻，否则永远点不到菜单键 */
+@media (hover: none) {
+  .media-actions { opacity: 1; transform: none; }
+}
+
 /* ── 媒体 ── */
 .media-toolbar {
   display: flex;
