@@ -25,5 +25,18 @@ out.audit = db.prepare("DELETE FROM audit_log WHERE created_at < ?").run(daysAgo
 // 回收站超过 30 天的彻底删除（连带评论，与后台"彻底删除"语义一致）
 out.trash = db.prepare("DELETE FROM posts WHERE deleted_at IS NOT NULL AND deleted_at < ?").run(daysAgo(30)).changes;
 
+/**
+ * 访客事件**不删**（2026-10-30）。
+ *
+ * 当前量级：日均个位数 PV，一年约 2200 行、十年 2 万行 —— SQLite 毫无压力，
+ * 而原始事件一旦删掉，UV / 来源 / 任意区间重算就永久失去能力
+ * （累计值无法反推「上个月有多少访客」）。
+ *
+ * 什么时候才需要加保留期：hits 超过约 50 万行，或需要保留超过 3 年。
+ * 那时正确的做法是先建一张按天的汇总表，再删原始行 —— 而不是直接 DELETE。
+ * 另外注意：SQLite 删行后文件不会自动变小（WAL + 未开 auto_vacuum），
+ * 单纯 DELETE 只会让库越来越碎，备份体积不会下降。
+ */
+
 console.log(new Date().toISOString(), "pruned", JSON.stringify(out));
 db.close();

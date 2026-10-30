@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { ScrollReset } from "@/components/ScrollReset";
 import { MobileNav } from "@/components/MobileNav";
-import { Analytics } from "@/components/Analytics";
+import { VisitorBeacon } from "@/components/VisitorBeacon";
 import { PwaRegister } from "@/components/PwaRegister";
 import { MobileKeyboardGuard } from "@/components/MobileKeyboardGuard";
 import { getSettings } from "@/lib/settings";
@@ -83,7 +83,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {/* 全站页脚：备案号与页脚文字此前只有后台能填、前台没渲染 */}
           <FrontOnly><SiteFooter /></FrontOnly>
         </SidebarSheetProvider>
-        <Analytics />
+        {/* 访客埋点：必须在 FrontOnly 内 —— 后台页面不该被统计，
+            管理员自己的前台浏览由接口层按 session 排除（见 app/api/hit） */}
+        <FrontOnly><VisitorBeacon /></FrontOnly>
         <PwaRegister />
         {/* 软键盘弹起时把聚焦的输入框滚到视口中部，防止手机上打字看不见 */}
         <MobileKeyboardGuard />

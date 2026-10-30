@@ -10,6 +10,18 @@ export function hashToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+/**
+ * 带密钥的哈希，用于「不可逆但可复现」的访客标识（lib/visitor-stats.ts）。
+ *
+ * 为什么不能用上面的 hashToken（裸 SHA-256）：
+ * IPv4 只有 2^32 种取值，UA 的取值空间也远小于穷举成本 ——
+ * 裸哈希可以在几分钟内把一张 visitor 表反查成真实 IP 列表。
+ * HMAC 把密钥作为唯一未知量，没有 settings 里的 stats:secret 就无法反查。
+ */
+export function hmac(key: string, data: string): string {
+  return crypto.createHmac("sha256", key).update(data).digest("hex");
+}
+
 /** 恢复码：人可抄写的分组格式（大写字母 + 数字，去除易混字符） */
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 export function generateRecoveryCode(): string {

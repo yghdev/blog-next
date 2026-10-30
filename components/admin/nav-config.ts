@@ -43,6 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "系统",
     items: [
       { href: "/admin/audit", label: "日志", key: "audit", icon: "log" },
+      { href: "/admin/visitors", label: "访客", key: "visitors", icon: "eye" },
       { href: "/admin/settings", label: "设置", key: "settings", icon: "settings" },
     ],
   },

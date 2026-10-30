@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { listPosts } from "@/lib/posts";
+import { listPosts, postHref } from "@/lib/posts";
 import { toUtcIso } from "@/lib/time";
 
 const SITE = process.env.SITE_URL || "https://blog.yghsite.cn";
@@ -18,7 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   ];
   for (const p of posts) {
     entries.push({
-      url: SITE + "/" + encodeURIComponent(p.slug),
+      url: SITE + postHref(p),
       lastModified: toUtcIso(p.updated_at) ? new Date(toUtcIso(p.updated_at)!) : new Date(),
       priority: 0.8,
     });

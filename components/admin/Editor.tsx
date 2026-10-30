@@ -1037,14 +1037,17 @@ export function Editor({ initial, mode, initialType, facets }: {
 
                   {mode === "edit" ? (
                     <div className="editor-field">
-                      <label className="editor-field-label" htmlFor="editor-slug">URL 路径</label>
+                      <label className="editor-field-label" htmlFor="editor-slug">旧地址标识</label>
                       <input
                         id="editor-slug"
                         className="input"
                         value={slug}
                         onChange={(e) => { setSlug(e.target.value); mark({ slug: e.target.value }); }}
                       />
-                      <span className="editor-field-hint">改动会自动为旧地址保留 301 跳转。</span>
+                      <span className="editor-field-hint">
+                        正式地址是 <code>/p/{initial?.id ?? "…"}</code>（按编号，改标题不受影响）。
+                        这里只决定「/旧标识」是否仍能访问；改动会自动为它保留 301 跳转。
+                      </span>
                     </div>
                   ) : null}
                 </>

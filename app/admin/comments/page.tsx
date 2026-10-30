@@ -64,7 +64,8 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
     "LIMIT ? OFFSET ?"
   ).all(...args, PAGE, (page - 1) * PAGE) as {
     id: number; author: string; email: string; url: string; content: string; status: string;
-    created_at: string; ip: string; parent_id: number | null; post_title: string; post_slug: string;
+    created_at: string; ip: string; parent_id: number | null; post_id: number;
+    post_title: string; post_slug: string;
   }[];
 
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -135,7 +136,7 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
                 <div className="comment-item-head">
                   <strong className="comment-author-name">{c.author}</strong>
                   <Badge tone={st.tone} dot>{st.text}</Badge>
-                  <Link className="comment-item-post" href={"/" + encodeURIComponent(c.post_slug)}>
+                  <Link className="comment-item-post" href={"/p/" + c.post_id}>
                     {c.post_title}
                   </Link>
                   <span className="comment-item-meta">{formatIn(c.created_at, "datetime")}</span>

@@ -104,7 +104,7 @@ export default async function OverviewPage() {
     if (r.status !== "published") return null;
     if (r.type !== "post" && r.type !== "page") return null;
     if (!r.slug || r.slug.startsWith("draft-")) return null;
-    return "/" + encodeURIComponent(r.slug);
+    return r.type === "page" ? "/" + encodeURIComponent(r.slug) : "/p/" + r.id;
   };
 
   return (

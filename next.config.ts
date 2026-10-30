@@ -14,19 +14,18 @@ import type { NextConfig } from "next";
 const CSP_MODE = process.env.CSP_MODE === "enforce" ? "enforce" : "report-only";
 
 /**
- * 统计脚本的源。
+ * CSP 里的外部源。
  *
- * 坑点：next.config.ts 是在**构建期**求值的，而 NEXT_PUBLIC_UMAMI_SRC 是
- * systemd 在运行期注入的 —— 构建机上根本没有这个变量，于是 CSP 里漏掉了
- * umami 的源，一旦把 CSP 从 Report-Only 切成 enforce，统计上报会被直接拦掉。
+ * ⚠️ 曾经踩过的坑（保留，因为换任何第三方脚本都会再遇到一次）：
+ * next.config.ts 是在**构建期**求值的，而域名往往是 systemd 在**运行期**
+ * 注入的环境变量 —— 构建机上没有这个变量，于是 CSP 里漏掉了那个源。
+ * 此时如果 CSP 是 Report-Only，一切看起来正常；一旦切成 enforce，
+ * 脚本会被静默拦掉（页面不报错，只是那个功能没了）。
+ * 所以这里的源一律**给默认值兜住**，再用环境变量覆盖。
  *
- * 这里有两条路：
- *   a) 构建时注入（要求构建机也配同一组环境变量，容易忘）
- *   b) 给一个**默认值**兜住，再用环境变量覆盖（本次采用）
- * 选 b，因为统计域名是固定的，忘配也不会静默失效。
+ * 2026-10-30：访客统计改成自建埋点（同源 /api/hit），不再需要 Umami 的源；
+ * 继续放行一个用不到的域名只会扩大攻击面，故移除。
  */
-const UMAMI_SRC = process.env.NEXT_PUBLIC_UMAMI_SRC || "https://umami.yghsite.cn/script.js";
-
 function originOf(src: string): string {
   try {
     return new URL(src).origin;
@@ -35,23 +34,20 @@ function originOf(src: string): string {
   }
 }
 
-// 构建期拿不到环境变量时，至少把已知的统计域名放行，避免 enforce 后统计失效
 const EXTRA_ORIGINS = (process.env.CSP_EXTRA_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
-const umamiOrigin = originOf(UMAMI_SRC);
 
 /**
  * 评论系统（Artalk）的源。
- * 与 Umami 同理：构建期拿不到运行期环境变量，所以给默认值兜底。
  * 若漏了这里，CSP 一旦切 enforce，评论区的脚本/接口会被直接拦掉 ——
  * 而且不会报错，只会"评论区空白"，非常难查。
  */
 const ARTALK_SRC = process.env.NEXT_PUBLIC_ARTALK_SRC || "https://artalk.yghsite.cn";
 const artalkOrigin = originOf(ARTALK_SRC);
 
-const allowedOrigins = [...new Set([umamiOrigin, artalkOrigin, ...EXTRA_ORIGINS].filter(Boolean))];
+const allowedOrigins = [...new Set([artalkOrigin, ...EXTRA_ORIGINS].filter(Boolean))];
 
 export function buildCsp(extra: { scriptSrc?: string[]; styleSrc?: string[] } = {}) {
   const scriptSrc = ["'self'", "'unsafe-inline'", ...allowedOrigins, ...(extra.scriptSrc ?? [])];

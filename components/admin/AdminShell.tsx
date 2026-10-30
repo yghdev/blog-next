@@ -9,7 +9,7 @@ import { NAV_COLLAPSE_COOKIE, NAV_GROUPS, readCollapsedCookie } from "./nav-conf
 import { useInitialCollapsed } from "./AdminNavContext";
 import {
   IconArchive, IconChat, IconComment, IconExternal, IconGrid, IconLog,
-  IconMedia, IconNote, IconPage, IconPen, IconSliders,
+  IconMedia, IconNote, IconPage, IconPen, IconSliders, IconEye,
 } from "./editor-icons";
 
 /**
@@ -77,6 +77,7 @@ const NAV_ICONS: Record<string, (p: { size?: number; className?: string }) => Re
   media: IconMedia,
   external: IconExternal,
   log: IconLog,
+  eye: IconEye,
   settings: IconSliders,
 };
 

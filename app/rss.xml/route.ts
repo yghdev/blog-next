@@ -1,4 +1,4 @@
-import { listPosts, parseJsonArray, makeExcerpt } from "@/lib/posts";
+import { listPosts, parseJsonArray, makeExcerpt, postHref, legacySlugPath } from "@/lib/posts";
 import { getSettings } from "@/lib/settings";
 import { toUtcIso } from "@/lib/time";
 
@@ -20,8 +20,16 @@ export async function GET() {
     const iso = toUtcIso(p.published_at || p.created_at);
     return "\n    <item>" +
       "<title>" + esc(p.title) + "</title>" +
-      "<link>" + SITE + "/" + encodeURIComponent(p.slug) + "</link>" +
-      '<guid isPermaLink="true">' + SITE + "/" + encodeURIComponent(p.slug) + "</guid>" +
+      "<link>" + SITE + postHref(p) + "</link>" +
+      /**
+       * guid 必须**保持旧值**（旧的 slug 地址），即使它现在只是 308 跳转。
+       *
+       * RSS 阅读器用 guid 判断「这条我见过没有」。2026-10-30 把文章地址
+       * 从 /中文slug 换成 /p/<id> 时，如果顺手把 guid 也换掉，
+       * 所有订阅者下次刷新会看到**全部历史文章重新变成未读**。
+       * link 换成新地址即可，guid 一旦发布就必须永久稳定。
+       */
+      '<guid isPermaLink="true">' + SITE + legacySlugPath(p) + "</guid>" +
       "<pubDate>" + (iso ? new Date(iso).toUTCString() : "") + "</pubDate>" +
       "<description>" + esc(p.excerpt || makeExcerpt(p.content)) + "</description>" +
       parseJsonArray(p.categories).map((c) => "<category>" + esc(c) + "</category>").join("") +

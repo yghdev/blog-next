@@ -73,6 +73,13 @@ export const getPageBySlugCached = unstable_cache(
   { revalidate: TTL, tags: [TAGS.posts] }
 );
 
+/** 按 id 取文章/页面：`/p/<id>` 的规范地址走这里（id 是主键，天然稳定） */
+export const getPostByIdCached = unstable_cache(
+  async (rawId: string | number) => posts.getPostById(rawId),
+  ["post:by-id"],
+  { revalidate: TTL, tags: [TAGS.posts] }
+);
+
 /* -------------------------------- 统计 -------------------------------- */
 
 export const getSiteStatsCached = unstable_cache(
@@ -90,17 +97,20 @@ export const getTagCloudCached = unstable_cache(
 export const getViewsMapCached = unstable_cache(
   async () => {
     const m = stats.getViewsMap();
-    // Map 不能跨进程序列化，转成数组
+    // Map 不能跨进程序列化，转成数组。key 是 post_id（不是路径）：
+    // 路径有中文编码的两种形态，id 没有。
     return [...m.entries()];
   },
   ["stats:views"],
-  { revalidate: TTL, tags: [TAGS.stats] }
+  // 浏览量单独 60 秒：内容缓存是 300 秒，但「我刚发的文章 5 分钟没数字」
+  // 看起来就像统计坏了。其余统计数据仍走 300 秒。
+  { revalidate: 60, tags: [TAGS.stats] }
 );
 
 export const getPageViewsCached = unstable_cache(
-  async (path: string) => stats.getPageViews(path),
+  async (path: string, postId?: number | null) => stats.getPageViews(path, postId),
   ["stats:pageviews"],
-  { revalidate: TTL, tags: [TAGS.stats] }
+  { revalidate: 60, tags: [TAGS.stats] }
 );
 
 /* -------------------------------- 设置 -------------------------------- */

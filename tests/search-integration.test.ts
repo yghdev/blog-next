@@ -70,19 +70,35 @@ test("settings 默认值可用，写入后可读且缓存被失效", () => {
   assert.equal(settingsMod.getRawSetting("site_title"), "测试站点");
 });
 
-test("Umami 数值从本地 settings 读取，不再在渲染路径请求外部服务", () => {
-  // 未同步时应显示占位符
-  assert.equal(statsMod.getSiteStats().find((s) => s.label === "访问")?.value, "—");
+test("浏览量来自 hits 表 + 历史基线，渲染路径不请求外部服务", () => {
+  /**
+   * 2026-10-30 换数据源：Umami 的聚合值不再参与运行期展示。
+   * 侧栏也去掉了「访问」—— 那个数字的口径换过三次，标签却始终只有两个字。
+   */
+  assert.equal(
+    statsMod.getSiteStats().find((s) => s.label === "访问"),
+    undefined,
+    "侧栏不再显示口径不清的「访问」"
+  );
 
-  settingsMod.setStatValue("umami:total", "12345");
-  assert.equal(statsMod.getSiteStats().find((s) => s.label === "访问")?.value, "1.2w", "12345 -> 1.2w");
+  const db = dbMod.getDb();
+  const postId = (db.prepare("SELECT id FROM posts WHERE slug = 'hough'").get() as { id: number }).id;
 
-  settingsMod.setStatValue("umami:path:/hough", "77");
-  assert.equal(statsMod.getPageViews("/hough"), 77);
-  assert.equal(statsMod.getPageViews("/nope"), null, "未同步的路径返回 null");
+  // 一条真实 hit：path 用解码后的中文也行、编码态也行，归一化后必须同一个 key
+  db.prepare(
+    "INSERT INTO hits (path, post_id, visitor, is_entry, ref_host, ref_kind, day, created_at) " +
+    "VALUES (?, ?, 'v1', 1, '', 'direct', ?, ?)"
+  ).run("/hough", postId, timeMod.dateKeyIn(timeMod.nowIso()), timeMod.nowIso());
+
+  assert.equal(statsMod.getPageViews("/hough", postId), 1, "按 post_id 命中 1 条");
+  assert.equal(statsMod.getPageViews("/nope", null), null, "一条都没有时返回 null 而不是 0");
+
+  // 历史基线叠加：模拟上线前的 umami 数值被迁移冻结
+  settingsMod.setStatValue("stats:baseline:post:" + postId, "77");
+  assert.equal(statsMod.getPageViews("/hough", postId), 78, "本地 1 条 + 历史基线 77");
 
   const map = statsMod.getViewsMap();
-  assert.equal(map.get("/hough"), 77, "首页批量取用一次查询");
+  assert.equal(map.get(postId), 78, "首页批量取一次查询即可，key 是 post_id");
 });
 
 test("cleanup", () => {

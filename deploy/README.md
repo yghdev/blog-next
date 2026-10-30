@@ -139,24 +139,44 @@ curl -sk -o /dev/null -w '%{http_code}\n' https://blog.yghsite.cn/
 
 ---
 
-## 六、Umami 统计
+## 六、访客统计
 
-| 项 | 值 |
+2026-10-30 起改为**自建埋点**，数据在 `blog.db` 的 `hits` 表里，
+随每日备份一起走，不再依赖外部服务。后台入口：`/admin/visitors`。
+
+| 指标 | 口径 |
 |---|---|
-| 地址 | https://umami.yghsite.cn |
-| 部署 | Docker Compose，`/opt/umami/` |
-| 内存 | umami 320MB + db 180MB，实测约 344MB |
-| 数据卷 | `umami-db-data` |
+| 访问量 PV | 每次浏览记 1（含切换前的历史基线） |
+| 访客 UV | `HMAC(secret, IP+UA家族)` 去重，**近似值** |
+| 访问次数 | 30 分钟无活动切一次 |
+| 来源 | 只记会话落地页的来源域名 |
+
+关键点：
+
+- **不存 IP**、不种追踪 Cookie；UA 抹掉版本号（否则浏览器一升级就算新访客）
+- 管理员（带有效后台会话）的访问**完全不记录**
+- 爬虫 UA 在写入前过滤
+- 历史数据：迁移 0013 把旧的 `settings['umami:*']` 冻结成 `stats:baseline:*`
+
+### Umami（已停用，保留作历史）
+
+Umami 容器目前仍可保留，用于核对切换前的历史数字；**它不再参与前台展示**。
 
 ```bash
 cd /opt/umami
 docker compose ps
-docker logs -f umami
-docker compose restart
 ```
 
-> **注意**：Umami 数据**不在博客备份里**，如需备份要单独处理。
-> 统计属于可再生的分析数据，暂未纳入每日备份。
+确认新数据稳定后可以下线：
+
+```bash
+sudo systemctl disable --now umami-sync.timer
+cd /opt/umami && docker compose down      # 数据卷保留，确认无误后再删
+```
+
+> **注意**：Umami 数据**不在博客备份里**。`settings` 里的 `umami:*` 与
+> `stats:baseline:*` 在 `blog.db` 里，**在**备份里 —— 下线 Umami 前请确认
+> 这两个键都在（`sqlite3 /var/lib/blog/blog.db "select key from settings where key like 'umami:%' or key like 'stats:%'"`）。
 
 ---
 

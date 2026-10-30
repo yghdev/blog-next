@@ -393,6 +393,155 @@ export const MIGRATIONS: Migration[] = [
       // "部分文章有基线"的启动状态。
     },
   },
+
+  {
+    name: "0013_visitor_stats",
+    up: (db) => {
+      /**
+       * 自建访客统计（2026-10-30）。
+       *
+       * 为什么不再只靠 Umami 的聚合值：
+       *   ① sync-umami.mjs 把「近 365 天滚动窗口」写成 umami:total，
+       *      站龄满一年后这个数字会开始往下掉，而侧栏标签写的是「访问」；
+       *   ② 聚合值存在 settings 这个 KV 表里，没有时间维度、不能算 UV、
+       *      不能做来源归因 —— 想加任何一个都要改同步脚本和表结构；
+       *   ③ Umami 是 Docker 里的 344MB 邻居，且不在每日备份里。
+       *
+       * 这张表只存**事件**，所有指标都是查询时聚合出来的（见 lib/visitor-stats.ts）。
+       * 它和内容在同一个 blog.db 里，因此自动进 blog-backup。
+       */
+      db.exec(
+        "CREATE TABLE IF NOT EXISTS hits (" +
+        "  id            INTEGER PRIMARY KEY AUTOINCREMENT," +
+        // 归一化路径：以 / 开头、无 query、无尾斜杠、已解码。
+        // 归一化函数与读取侧共用 lib/visitor-stats.ts 的 normalizePath()。
+        "  path          TEXT    NOT NULL," +
+        // 能对上文章/页面就填（服务端解析，不信客户端）。slug 会改，id 不会。
+        "  post_id       INTEGER," +
+        // HMAC(stats:secret, ip|ua) 的前 16 位 —— 不可逆、不含原始 IP
+        "  visitor       TEXT    NOT NULL," +
+        // 这条是否为新会话的第一条（30 分钟无活动切一次）。
+        // 一列同时服务「访问次数 = SUM(is_entry)」与「来源只认会话入口」。
+        "  is_entry      INTEGER NOT NULL DEFAULT 1," +
+        "  ref_host      TEXT    NOT NULL DEFAULT ''," +
+        "  ref_kind      TEXT    NOT NULL DEFAULT 'direct'," +
+        // YYYY-MM-DD，写入时按展示时区算好。
+        // 不存的话就得用 date(created_at) 聚合 —— 那会让 idx_hits_day 失效，
+        // 而 SQLite 也没有时区库可用。
+        "  day           TEXT    NOT NULL," +
+        "  created_at    TEXT    NOT NULL" +
+        ")"
+      );
+      db.exec("CREATE INDEX IF NOT EXISTS idx_hits_day ON hits(day)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_hits_post_day ON hits(post_id, day)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_hits_path_day ON hits(path, day)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_hits_visitor ON hits(visitor, created_at)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_hits_entry ON hits(is_entry, day)");
+
+      /**
+       * 访客标识的密钥。
+       *
+       * 用 `ON CONFLICT DO NOTHING` 而不是先查后插：两个进程同时跑首次迁移时，
+       * 后者撞主键不报错、也不会覆盖前者 —— 密钥必须只有一个，否则同一个访客
+       * 在不同请求里会算出不同 id，UV 直接翻倍。
+       */
+      const putIfAbsent = db.prepare(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING"
+      );
+      putIfAbsent.run("stats:secret", crypto.randomBytes(32).toString("hex"));
+
+      /**
+       * 冻结 Umami 的历史基线。
+       *
+       * 换数据源时若什么都不做，上线当天所有文章的「N 次浏览」会归零 ——
+       * 这是最容易被读者发现的问题。但也不能伪造 hit 行：那条假记录会污染
+       * COUNT(DISTINCT visitor)（UV +1）、SUM(is_entry)（访问次数 +1）与来源报表。
+       * 所以基线只作为「读取时相加的常量」存在，不参与任何事件级指标。
+       *
+       * 线上实测（2026-10-30）说明这里必须比"按理说"更小心：
+       *   · umami:total = 1192，但所有 umami:path 加起来只有 279 ——
+       *     total 含大量未进 path 榜（Top 500 之外、已删除页面、旧 WP 地址）的访问。
+       *     所以**两者不能互相替代**，也不能用路径和去校验总量。
+       *   · 70 个 path 里有 26 个是 /admin*（旧统计没排除管理员），
+       *     这些绝不能变成文章浏览量。
+       *   · 有 5 个带 `#atk-comment-N` 锚点的重复键（评论区锚点被当成独立页面），
+       *     归一化后要与主路径**合并**而不是互相覆盖。
+       */
+      const total = db.prepare("SELECT value FROM settings WHERE key = 'umami:total'").get() as
+        | { value: string }
+        | undefined;
+      const totalN = total ? Number(total.value) : NaN;
+
+      /**
+       * 全站基线 = umami:total − 其中属于后台的访问。
+       *
+       * 为什么要减：本站从今天起**排除管理员**（这是明确需求），
+       * 而历史上没排除，`/admin*` 的 111 次全被计进了 total。
+       * 不减的话，新系统第一天就多背了 111 次自己后台点击的账。
+       */
+      const adminSum = db.prepare(
+        "SELECT COALESCE(SUM(CAST(value AS INTEGER)), 0) AS s FROM settings " +
+        "WHERE key LIKE 'umami:path:/admin%' AND value GLOB '[0-9]*'"
+      ).get() as { s: number };
+      const baselineTotal = Number.isFinite(totalN) ? Math.max(0, Math.trunc(totalN) - adminSum.s) : 0;
+      if (baselineTotal > 0) {
+        putIfAbsent.run("stats:baseline:total", String(baselineTotal));
+      }
+
+      /**
+       * 每篇内容的基线：**同一个路径的多个形态要累加**。
+       *
+       * 归一化规则和运行期 lib/visitor-stats.ts 的 normalizePath 保持一致
+       * （去 `#...`、去 query、去尾斜杠）。但这里不能 import 那个模块 ——
+       * 迁移必须只依赖 Node 内置能力，否则脚本与运行时的依赖图会纠缠。
+       */
+      const normKey = (raw: string): string => {
+        let s = raw;
+        const h = s.indexOf("#");
+        if (h >= 0) s = s.slice(0, h);
+        const q = s.indexOf("?");
+        if (q >= 0) s = s.slice(0, q);
+        if (s.length > 1) s = s.replace(/\/+$/, "");
+        return s;
+      };
+
+      const paths = db.prepare("SELECT key, value FROM settings WHERE key LIKE 'umami:path:%'").all() as
+        { key: string; value: string }[];
+
+      // 归一化路径 -> 累计值（合并锚点重复键）
+      const merged = new Map<string, number>();
+      for (const p of paths) {
+        const rawPath = p.key.slice("umami:path:".length);
+        const path = normKey(rawPath);
+        // 后台路径不属于任何内容；就算硬塞进来也只会污染
+        if (/^\/(admin|api|_next)(\/|$)/.test(path)) continue;
+        const n = Number(p.value);
+        if (!Number.isFinite(n) || n <= 0) continue;
+        merged.set(path, (merged.get(path) ?? 0) + Math.trunc(n));
+      }
+
+      const bySlug = db.prepare(
+        "SELECT id FROM posts WHERE '/' || slug = ? AND deleted_at IS NULL LIMIT 1"
+      );
+      /**
+       * 旧 WordPress 的日期路径（`/2026/04/20/十大排序算法`）要额外试一次末段匹配。
+       * 迁移到 Next 时 slug 换掉了前缀，这 11 个键（共 20 次浏览）若不做兜底
+       * 就永远挂在一个打不开的路径上 —— 文章页的数字会莫名其妙少几条。
+       * 只试最后一次，不做模糊匹配：模糊匹配会把浏览量错记到别的文章上，
+       * 那比少记几条更糟。
+       */
+      const legacyDate = /^\/\d{4}\/\d{2}\/\d{2}\/(.+)$/;
+      for (const [path, n] of merged) {
+        let hit = bySlug.get(path) as { id: number } | undefined;
+        if (!hit) {
+          const m = legacyDate.exec(path);
+          if (m) hit = bySlug.get("/" + m[1]) as { id: number } | undefined;
+        }
+        const key = hit ? "stats:baseline:post:" + hit.id : "stats:baseline:path:" + path;
+        putIfAbsent.run(key, String(n));
+      }
+    },
+  },
 ];
 
 export function currentVersion(db: Database.Database): string | null {

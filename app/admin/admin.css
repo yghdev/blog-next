@@ -5213,3 +5213,64 @@ body.editor-focus-mode .editor-headline { padding-top: var(--fx-s6); }
   .fx-picker-item { min-height: var(--tap); }
   .fx-picker-foot .btn { min-height: var(--tap); }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   访客页（/admin/visitors，2026-10-30）
+   ──────────────────────────────────────────────────────────────────────
+   这一页只有三种元素：一行数字、一张 14 根柱子的图、两个排行。
+   刻意不引图表库（项目零图表依赖，为 14 根 <rect> 加 200KB 不值），
+   也刻意不铺卡片底 —— 按设计系统 §1，一屏里的统计靠细线组织就够了。
+   ══════════════════════════════════════════════════════════════════════ */
+.fx-scope .visit-chart { margin-top: var(--fx-s4); }
+
+.fx-scope .visit-chart svg {
+  display: block;
+  width: 100%;
+  height: 132px;
+  color: var(--fx-brand);
+}
+
+.fx-scope .visit-chart .bar { fill: currentColor; }
+/* 零访问的日子：只留一条贴地的淡线，与"数据缺失"区分开 */
+.fx-scope .visit-chart .bar.is-empty { fill: var(--fx-line-strong); }
+
+.fx-scope .visit-chart-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--fx-s2);
+  font-size: var(--fx-fs-xs);
+  color: var(--fx-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 两个榜：宽屏并排，≤900px 叠成一栏。
+   用 auto-fit 而不是写死两列 —— 侧栏收起时容器会变宽，能自动适应。 */
+.fx-scope .visit-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--fx-s7);
+  margin-top: var(--fx-s7);
+}
+
+/* 来源行右侧的类别小字：弱化到几乎只剩提示作用 */
+.fx-scope .visit-kind {
+  margin-left: var(--fx-s2);
+  font-size: var(--fx-fs-xs);
+  color: var(--fx-faint);
+}
+
+/* 口径说明：正文宽度限制在 ~64 字符，长段落横跨整屏很难读 */
+.fx-scope .visit-notes {
+  max-width: 68ch;
+  margin-top: var(--fx-s3);
+  color: var(--fx-ink-2);
+  font-size: var(--fx-fs-sm);
+  line-height: 1.75;
+}
+.fx-scope .visit-notes p { margin: 0 0 var(--fx-s3); }
+.fx-scope .visit-notes b { color: var(--fx-ink); font-weight: var(--fx-fw-semi); }
+
+@media (max-width: 820px) {
+  .fx-scope .visit-chart svg { height: 96px; }
+  .fx-scope .visit-notes { font-size: var(--fx-fs-base); }
+}

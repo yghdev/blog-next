@@ -70,7 +70,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               {hits.map((h) => (
                 <PostCard
                   key={h.id}
-                  href={"/" + encodeURIComponent(h.slug)}
+                  href={"/p/" + h.id}
                   title={h.title}
                   excerpt={h.excerpt}
                   date={h.date}

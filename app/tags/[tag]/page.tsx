@@ -3,7 +3,7 @@ import { Animations } from "@/components/Animations";
 import { RightBar } from "@/components/RightBar";
 import { PostCard } from "@/components/PostCard";
 import { getDb } from "@/lib/db";
-import { makeExcerpt, parseJsonArray, decodeSlug } from "@/lib/posts";
+import { makeExcerpt, parseJsonArray, decodeSlug, postHref } from "@/lib/posts";
 import { listPostsCached } from "@/lib/cached";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,7 @@ export default async function TagPage({ params }: { params: Promise<{ tag: strin
             {posts.map((p) => (
               <PostCard
                 key={p.id}
-                href={`/${encodeURIComponent(p.slug)}`}
+                href={postHref(p)}
                 title={p.title}
                 excerpt={p.excerpt || makeExcerpt(p.content)}
                 date={p.published_at || p.created_at}

@@ -3,7 +3,7 @@ import { PostCard } from "@/components/PostCard";
 import { Animations } from "@/components/Animations";
 import { SearchBox } from "@/components/SearchBox";
 import { RightBar } from "@/components/RightBar";
-import { parseJsonArray, makeExcerpt, readingTime } from "@/lib/posts";
+import { parseJsonArray, makeExcerpt, readingTime, postHref } from "@/lib/posts";
 import { listPostsCached, countPostsCached, getViewsMapCached } from "@/lib/cached";
 
 export const dynamic = "force-dynamic";
@@ -43,13 +43,13 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
               posts.map((p) => (
                 <PostCard
                   key={p.id}
-                  href={`/${encodeURIComponent(p.slug)}`}
+                  href={postHref(p)}
                   title={p.title}
                   excerpt={p.excerpt || makeExcerpt(p.content)}
                   date={p.published_at || p.created_at}
                   categories={parseJsonArray(p.categories)}
                   readingTime={readingTime(p.content)}
-                  views={viewsMap.get("/" + p.slug)}
+                  views={viewsMap.get(p.id)}
                 />
               ))
             )}

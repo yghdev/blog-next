@@ -36,6 +36,9 @@ export async function GET() {
       fts: hasFts(db),
       posts: c("SELECT COUNT(*) c FROM posts WHERE status = 'published' AND deleted_at IS NULL"),
       comments: c("SELECT COUNT(*) c FROM comments WHERE status = 'approved'"),
+      // 访客事件总数：部署后核对「埋点是否真的在写」用，
+      // 比去后台翻页面快，也不暴露任何访客信息
+      hits: c("SELECT COUNT(*) c FROM hits"),
       db: dbPath(),
       site: s.siteTitle,
       rss: mem.rss,

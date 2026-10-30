@@ -10,6 +10,32 @@ export function decodeSlug(slug: string): string {
   }
 }
 
+/**
+ * 文章/页面的规范地址（2026-10-30 起）。
+ *
+ * 为什么不再用 slug 当 URL：
+ *   本站 slug 是中文，浏览器里会变成 `/%E5%8D%9A%E5%AE%A2%E8%BF%81...` ——
+ *   粘贴分享时又长又难读，且「编码态」与「解码态」两种形态在全站并存，
+ *   统计、缓存、比对都要各自处理一遍。
+ *
+ * 现在文章统一走 `/p/<id>`：
+ *   - 纯 ASCII，短，不会因为编码产生第二种形态
+ *   - id 是主键，改标题/改 slug 都不会断链，也不需要查别名表
+ *   - `comments` 的 pageKey 仍然用旧 slug（`/博客迁移记录`），历史评论不丢
+ *
+ * 页面（type=page）**保留语义化路径**（/about 这种）：它们的地址本身有含义，
+ * 且不像文章那样频繁新增，没有必要编号化。
+ */
+export function postHref(post: { id: number; type?: string; slug: string }): string {
+  if (post.type === "page") return "/" + encodeURIComponent(post.slug);
+  return "/p/" + post.id;
+}
+
+/** 旧地址（/中文slug）的编码形态。目前只有 RSS 的 guid 需要它 —— 见 app/rss.xml/route.ts */
+export function legacySlugPath(post: { slug: string }): string {
+  return "/" + encodeURIComponent(post.slug);
+}
+
 /** Next 16 的 revalidateTag 需要第二个 profile 参数 */
 export const REVALIDATE_PROFILE = "max";
 
@@ -40,10 +66,14 @@ export function countPosts(): number {
 }
 
 /**
- * B8：按 slug 查文章；未命中则查别名（返回 { alias: true, slug }），由页面 301。
+ * 按 slug 查文章；未命中则查别名（返回 `redirectTo` + 目标文章），由页面 308。
  * 同时要求 status='published' —— 草稿不可被外部访问。
+ *
+ * `redirectTo` 现在是**目标文章对象**而不是 slug 字符串：
+ * 文章规范地址已改成 `/p/<id>`，只拿 slug 无法拼出规范地址
+ * （页面类内容仍走 slug，两条规则不同，必须由 postHref 决定）。
  */
-export function resolveSlug(rawSlug: string): { post?: Post; redirectTo?: string } {
+export function resolveSlug(rawSlug: string): { post?: Post; redirectTo?: Post } {
   const db = getDb();
   const slug = decodeSlug(rawSlug);
   const post = db.prepare(
@@ -58,10 +88,10 @@ export function resolveSlug(rawSlug: string): { post?: Post; redirectTo?: string
   if (page) return { post: page };
 
   const alias = db.prepare(
-    "SELECT p.slug FROM post_aliases a JOIN posts p ON p.id = a.post_id " +
+    "SELECT p.* FROM post_aliases a JOIN posts p ON p.id = a.post_id " +
     "WHERE a.slug = ? AND p.status = 'published' AND p.deleted_at IS NULL"
-  ).get(slug) as { slug: string } | undefined;
-  if (alias) return { redirectTo: alias.slug };
+  ).get(slug) as Post | undefined;
+  if (alias) return { redirectTo: alias };
 
   return {};
 }
@@ -72,6 +102,20 @@ export function getPostBySlug(rawSlug: string): Post | undefined {
   return db.prepare(
     "SELECT * FROM posts WHERE type = 'post' AND slug = ? AND status = 'published' AND " + ALIVE
   ).get(slug) as Post | undefined;
+}
+
+/**
+ * 按主键取一篇已发布内容（文章或页面）—— `/p/<id>` 的规范地址用这个。
+ *
+ * 要求 published 且未删除：草稿与回收站的内容不能被外部用编号猜到。
+ * （编号是自增的、可枚举的，所以这条过滤不是可选项。）
+ */
+export function getPostById(rawId: string | number): Post | undefined {
+  const id = Number(rawId);
+  if (!Number.isInteger(id) || id <= 0) return undefined;
+  return getDb().prepare(
+    "SELECT * FROM posts WHERE id = ? AND status = 'published' AND " + ALIVE
+  ).get(id) as Post | undefined;
 }
 
 /**

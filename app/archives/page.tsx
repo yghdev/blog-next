@@ -4,6 +4,7 @@ import { Animations } from "@/components/Animations";
 import { RightBar } from "@/components/RightBar";
 import { listArchivesCached } from "@/lib/cached";
 import { dateKeyIn } from "@/lib/time";
+import { postHref } from "@/lib/posts";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "归档" };
@@ -46,7 +47,7 @@ export default async function ArchivesPage() {
                       <span className="date">
                         {dateKeyIn(p.published_at || p.created_at).slice(5).replace("-", "/")}
                       </span>
-                      <Link href={"/" + encodeURIComponent(p.slug)}>{p.title}</Link>
+                      <Link href={postHref(p)}>{p.title}</Link>
                     </div>
                   ))}
                 </div>
