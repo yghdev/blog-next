@@ -264,6 +264,27 @@ test("基线：只加在 PV 上，不污染 UV / 访问次数 / 来源", () => {
   assert.equal(v.getTopSources(10, "all")[0].hits, 1, "基线不出现在来源里");
 });
 
+test("基线只加在「全部」区间：选「今天」不该看到历史总量", () => {
+  /**
+   * 回归测试。第一版把基线**无条件**加进 getSummary，
+   * 于是选「今天」也显示 1081 —— 那个数字显然不是今天的访问量。
+   * 基线描述的是「过去累计多少」，只属于「全部」这一个区间。
+   */
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("INSERT INTO settings (key, value) VALUES ('stats:baseline:total', '1000') " +
+    "ON CONFLICT(key) DO UPDATE SET value = '1000'").run();
+
+  const id = seedPost("range-test");
+  v.recordHit({ path: "/p/" + id, ip: "7.7.7.7", ua: "Mozilla/5.0 Chrome/120.0" });
+
+  assert.equal(v.getSummary("all").pv, 1001, "全部 = 实时 1 + 历史 1000");
+  assert.equal(v.getSummary("today").pv, 1, "今天只有今天真实发生的 1 次，不带历史");
+  assert.equal(v.getSummary("7d").pv, 1, "7 天同理");
+  assert.equal(v.getSummary("30d").pv, 1, "30 天同理");
+
+  db.prepare("DELETE FROM settings WHERE key = 'stats:baseline:total'").run();
+});
+
 test("cleanup", () => {
   dbMod.closeDb();
   fs.rmSync(TMP, { recursive: true, force: true });

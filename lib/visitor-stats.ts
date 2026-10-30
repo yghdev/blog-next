@@ -314,10 +314,19 @@ export function getSummary(range: Range): Summary {
     "COALESCE(SUM(is_entry), 0) AS visits FROM hits" + w.sql
   ).get(...w.args) as { pv: number; uv: number; visits: number };
 
+  /**
+   * 基线**只在「全部」区间加**。
+   *
+   * 第一版是无条件相加，于是选「今天」也会显示 1081 —— 那个数字显然不是
+   * 今天的访问量。基线描述的是「很久以前（Umami 时代）累计了多少」，
+   * 它不属于任何一个具体日期，唯一说得通的去处就是「全部」。
+   *
+   * 「今天 / 7 天 / 30 天」一律只看 hits 表里真实落在该区间的事件。
+   */
+  const withBaseline = range === "all";
+
   return {
-    // 基线只加在「访问总量」这一个维度上：它是唯一有历史数据的指标。
-    // UV / 访问次数 / 来源都没有历史可补，硬加会凭空造出一个不存在的访客。
-    pv: row.pv + baselineTotal(),
+    pv: row.pv + (withBaseline ? baselineTotal() : 0),
     pvLocal: row.pv,
     uv: row.uv,
     visits: row.visits,

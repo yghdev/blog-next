@@ -542,6 +542,46 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+
+  {
+    name: "0014_hits_import_key",
+    up: (db) => {
+      /**
+       * 给 hits 加导入去重键（2026-10-30）。
+       *
+       * 为什么不在 0013 里直接写：0013 已经部署到线上了，改它**不会**在
+       * 已应用的库上生效（schema_version 里已标记完成）。迁移只能追加，
+       * 这是这套机制最基本的约定 —— 违反它就会出现「本地对着新 DDL 开发、
+       * 线上库还是旧结构」的静默漂移。
+       *
+       * 用途：把 Umami 的历史事件导入 hits 时用它去重（`umami:<event_id>`）。
+       * 本站实时事件的 import_key 为 NULL，不参与唯一约束 ——
+       * 所以这个部分索引对正常写入没有任何影响。
+       */
+      addColumn(db, "hits", "import_key", "TEXT");
+      db.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_hits_import " +
+        "ON hits(import_key) WHERE import_key IS NOT NULL"
+      );
+
+      /**
+       * 把「路径汇总式基线」降级为「只补差额」。
+       *
+       * 0013 的基线是把 umami:path 的汇总相加得到的（279 条量级）。
+       * 后来发现 Umami 的 website_event 表里有**完整事件**（1203 条，
+       * 后台 550 / 非后台 653），汇总值只是 Top500 截断后的残影 ——
+       * 279 明显少于真实的 653。
+       *
+       * 所以正确顺序是：先把 653 条事件真正导入 hits（见
+       * scripts/import-umami-events.mjs），再把基线**归零**，
+       * 否则全站 PV = 事件 653 + 基线 1081 = 重复计算。
+       *
+       * 这里把基线的处置权交给导入脚本：脚本成功导入后会写
+       * `stats:baseline:total = 0` 并留下 `stats:imported:umami` 标记。
+       * 迁移本身不删数据 —— 万一脚本没跑，基线仍是唯一的历史来源。
+       */
+    },
+  },
 ];
 
 export function currentVersion(db: Database.Database): string | null {
