@@ -212,6 +212,26 @@ if (!DRY) {
     "INSERT INTO settings (key, value) VALUES ('stats:baseline:total', '0') " +
     "ON CONFLICT(key) DO UPDATE SET value = '0'"
   ).run();
+
+  /**
+   * 按文章的基线同样要归零（2026-10-31 修）。
+   *
+   * 第一版只清了全站基线，漏了 `stats:baseline:post:<id>`，
+   * 结果单篇文章的「N 次浏览」= 导入的事件 + 旧基线，被算了两遍：
+   * 「博客迁移记录」显示 71 次，而实际是 59 次事件（那 12 是重复的）。
+   *
+   * 为什么可以整体归零而不是逐篇扣减：这些基线的来源就是 Umami 的
+   * `umami:path:*` 汇总，而该汇总与事件表描述的是**同一批访问**
+   * （汇总只是 Top500 截断后的残影，所以数值更小）。既然真实事件已经
+   * 全量导入，汇总就没有任何"额外"信息了。
+   */
+  const perPost = db.prepare(
+    "UPDATE settings SET value = '0' WHERE key LIKE 'stats:baseline:post:%'"
+  ).run();
+  const perPath = db.prepare(
+    "UPDATE settings SET value = '0' WHERE key LIKE 'stats:baseline:path:%'"
+  ).run();
+  console.log("  已归零按文章基线 " + perPost.changes + " 条、按路径基线 " + perPath.changes + " 条");
   db.prepare(
     "INSERT INTO settings (key, value) VALUES ('stats:imported:umami', ?) " +
     "ON CONFLICT(key) DO UPDATE SET value = excluded.value"
