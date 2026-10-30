@@ -6,7 +6,8 @@
  *   2. 旧地址 /admin/storage 是 308 永久跳转，不是 404（书签不能变死路）
  *   3. 站点表单：dirty 才可保存，保存后变"已保存"；未保存提示出现
  *   4. 友链文本框已从前台生效链路里移除（保存了也不生效的输入框不该留在表单里）
- *   5. 外链表单在**发请求前**拦住空名称与非 http(s) 链接，并说明原因
+ *   5. 外链表单默认收起、点开才展开；在**发请求前**拦住空名称与非 http(s) 链接，
+ *      并说明原因；列表的搜索与「已显示 / 已隐藏」筛选真的生效
  *   6. 日志动作筛选是链接且翻页不丢筛选（原来翻页会静默丢掉 action）
  *   7. 375px 三页都不横向溢出
  */
@@ -77,6 +78,14 @@ try {
     if (r.url().includes("/api/admin/links") && r.method() !== "GET") requestSent = true;
   });
 
+  // 5-pre. 表单默认收起：首屏先出列表，点「添加外链」才展开
+  assert.equal(await page.locator(".link-form-body").isHidden(), true,
+    "新增表单默认应收起，把「已有外链」让到首屏");
+  await page.locator(".link-compose-trigger").click();
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator(".link-form-body").isVisible(), true, "点「添加外链」后表单应展开");
+  assert.equal(await page.locator(".link-compose-trigger").count(), 0, "展开后入口带应换成表单标题栏");
+
   // 5a. 全空点添加
   await page.locator(".link-form-actions .btn-primary").click();
   await page.waitForTimeout(300);
@@ -107,14 +116,41 @@ try {
   await page.waitForTimeout(500);
   const after = await page.locator(".link-row").count();
   assert.equal(after, before + 1, "保存后列表应多 1 条（" + before + " → " + after + "）");
+  // 新增成功后保持展开（方便连填），字段清空
+  assert.equal(await page.locator(".link-form-body").isVisible(), true, "新增成功后表单保持展开，方便继续添加");
+  assert.equal(await page.locator("#link-name").inputValue(), "", "新增成功后名称应清空");
 
   // 新加的那条排最后（sort_order 100 大于预置的 10）：显隐状态要有明确徽标，
   // 不能只靠 opacity —— 那只说明"看起来淡了"，不说明"已隐藏"
   const newRow = page.locator(".link-row").last();
   assert.match(await newRow.innerText(), /example\.com/, "最后一行应是刚添加的那条");
-  const visibleBadge = await newRow.locator(".badge").last().innerText();
-  assert.match(visibleBadge, /已显示/, "显隐状态应有明确徽标，实际：" + visibleBadge);
-  console.log("PASS phase02-5: 合法外链可保存（" + before + " → " + after + "），显隐状态有明确徽标");
+  // 显隐状态在列表行里用 .fx-state（圆点 + 文案）而不是彩色胶囊：
+  // 一屏十几行每行挂一个 badge，会让整页变成彩虹，反而更难扫读。
+  const visibleBadge = await newRow.locator(".fx-state").last().innerText();
+  assert.match(visibleBadge, /已显示/, "显隐状态应有明确文案，实际：" + visibleBadge);
+
+  // 5d. 顶部搜索即时过滤
+  await page.locator(".link-search input").fill("example.com");
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator(".link-row").count(), 1, "按链接搜索应只留下刚添加的那一条");
+  await page.locator(".link-search-clear").click();
+  await page.waitForTimeout(200);
+  assert.equal(await page.locator(".link-row").count(), after, "清除搜索后应恢复全部");
+
+  // 5e. 状态分段筛选：隐藏后切到「已隐藏」能找到它
+  await newRow.locator('.link-act[aria-label^="隐藏"]').click();
+  await page.waitForSelector(".notice-ok", { timeout: 10000 });
+  await page.locator('.link-filter-item[aria-pressed]', { hasText: "已隐藏" }).click();
+  await page.waitForTimeout(200);
+  const hiddenRows = await page.locator(".link-row").count();
+  assert.ok(hiddenRows >= 1, "切到「已隐藏」后应能看到刚隐藏的那一条");
+  const hiddenStates = await page.locator(".link-row .fx-state").allInnerTexts();
+  assert.deepEqual([...new Set(hiddenStates)], ["已隐藏"],
+    "「已隐藏」筛选里的每一行都应是隐藏项，实际：" + JSON.stringify(hiddenStates));
+  assert.match(await page.locator(".link-row").last().innerText(), /example\.com/,
+    "刚隐藏的那条应在「已隐藏」列表里");
+  await page.locator('.link-filter-item', { hasText: "全部" }).click();
+  console.log("PASS phase02-5: 合法外链可保存（" + before + " → " + after + "），状态有文案，搜索与状态筛选可用");
 
   /* ---------- 6. 日志：动作筛选是链接，且翻页不丢筛选 ---------- */
   // 先造 >100 条日志，逼出分页
@@ -163,9 +199,9 @@ try {
     }));
     assert.ok(o.sw <= o.cw + 1, url + " 在 375px 横向溢出：" + JSON.stringify(o));
   }
-  // 手机外链操作热区 >= 44
+  // 手机外链操作热区 >= 44（操作已图标化，选择器随之改成 .link-act）
   await page.goto(server.base + "/admin/links", { waitUntil: "networkidle" });
-  const box = await page.locator(".link-actions .btn").first().boundingBox();
+  const box = await page.locator(".link-actions .link-act").first().boundingBox();
   assert.ok(box && box.height >= 44, "手机外链操作按钮热区应 >= 44dp，实际 " + (box && box.height));
   console.log("PASS phase02-5: 375px 三页均无溢出（外链操作热区 " + Math.round(box.height) + "dp）");
 

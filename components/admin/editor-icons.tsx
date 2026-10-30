@@ -107,6 +107,18 @@ export const IconVideo = (p: P) => (
 export const IconEye = (p: P) => (
   <Svg {...p}><path d="M2.5 10s2.6-4.5 7.5-4.5S17.5 10 17.5 10s-2.6 4.5-7.5 4.5S2.5 10 2.5 10Z" /><circle cx="10" cy="10" r="2.1" /></Svg>
 );
+/** 闭眼：与 IconEye 同画布、同描边，表达「当前可见 → 点它隐藏」 */
+export const IconEyeOff = (p: P) => (
+  <Svg {...p}>
+    <path d="M3.7 7.2C2.9 8.1 2.5 9.1 2.5 9.1s2.6 4.5 7.5 4.5c1.3 0 2.4-.3 3.4-.9" />
+    <path d="M8 5.2c.65-.13 1.3-.2 2-.2 4.9 0 7.5 4.5 7.5 4.5s-.9 1.6-2.6 2.8" />
+    <path d="m3.5 3.5 13 13" />
+  </Svg>
+);
+/** 搜索：放大镜（列表工具条用，与工具栏同一笔画语言） */
+export const IconSearch = (p: P) => (
+  <Svg {...p}><circle cx="9" cy="9" r="4.6" /><path d="m12.6 12.6 3.9 3.9" /></Svg>
+);
 export const IconColumns = (p: P) => (
   <Svg {...p}><path d="M3.5 4.5h13v11h-13zM10 4.5v11" /></Svg>
 );
