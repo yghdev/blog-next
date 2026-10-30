@@ -12,6 +12,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: SITE, lastModified: new Date(), priority: 1 },
     { url: SITE + "/shuoshuo", lastModified: new Date(), priority: 0.6 },
     { url: SITE + "/archives", lastModified: new Date(), priority: 0.6 },
+    // 友链专题页（2026-10-30 起是独立路由，不再是 posts 里的普通 page）
+    { url: SITE + "/friend-links", lastModified: new Date(), priority: 0.5 },
     { url: SITE + "/about", lastModified: new Date(), priority: 0.5 },
   ];
   for (const p of posts) {

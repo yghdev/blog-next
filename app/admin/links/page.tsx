@@ -18,7 +18,7 @@ export default async function LinksPage() {
     <AdminShell active="links" username={user.username}>
       <PageHeader
         title="外链"
-        sub="这里新增的条目会同时出现在桌面右栏和手机抽屉，保存即生效，不用重新部署。排序值小的靠前。"
+        sub="这里新增的条目会同时出现在友链页（/friend-links）、桌面右栏和手机抽屉，保存即生效，不用重新部署。排序值小的靠前。"
       />
       <LinksManager initial={links} />
     </AdminShell>

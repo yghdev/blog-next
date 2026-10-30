@@ -235,7 +235,7 @@ export function LinksManager({ initial }: { initial: FriendLink[] }) {
             <div className="link-compose-heading">
               <h2 className="link-compose-title">{formTitle}</h2>
               <p className="link-compose-desc">
-                保存后前台右栏与手机抽屉立即刷新，不用重新部署。取消勾选「在前台显示」会保留记录但不在前台出现。
+                保存后友链页、前台右栏与手机抽屉立即刷新，不用重新部署。取消勾选「在前台显示」会保留记录但不在前台出现。
               </p>
             </div>
             <button type="button" className="btn btn-sm link-compose-collapse" aria-expanded="true"
@@ -381,7 +381,7 @@ export function LinksManager({ initial }: { initial: FriendLink[] }) {
           <div className="link-empty">
             <Empty
               title="还没有外链"
-              hint="点上方「添加外链」展开表单，填好名称和链接就能添加。友链出现在右栏列表，聚合站（如「开往」）渲染成卡片。"
+              hint="点上方「添加外链」展开表单，填好名称和链接就能添加。友链会出现在友链页与右栏，聚合站（如「开往」）在友链页单独成组。"
               actions={<button type="button" className="btn btn-sm" onClick={() => expand(false)}>添加第一条</button>}
             />
           </div>
@@ -450,7 +450,7 @@ export function LinksManager({ initial }: { initial: FriendLink[] }) {
       <ConfirmDialog
         open={pending !== null}
         title={"删除外链「" + (pending?.name ?? "") + "」？"}
-        description="删除后它立刻从右栏和手机抽屉里消失。只是暂时不想展示的话，用「隐藏」保留记录。"
+        description="删除后它立刻从友链页、右栏和手机抽屉里消失。只是暂时不想展示的话，用「隐藏」保留记录。"
         confirmLabel="删除外链"
         danger
         busy={busy}
