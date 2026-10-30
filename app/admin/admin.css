@@ -1236,7 +1236,6 @@ a.shuo-main:hover .shuo-text { color: var(--fx-brand-ink); }
   .fx-scope .data-row .btn-sm { min-height: var(--tap); }
   /* 列表上方的「全部草稿 / 全部内容」这类小链接同样要够高 */
   .fx-scope .fx-section-head > a,
-  .fx-scope .section-heading > a,
   .fx-scope .fx-empty-inline a {
     display: inline-flex;
     align-items: center;
@@ -2003,24 +2002,34 @@ a.shuo-main:hover .shuo-text { color: var(--fx-brand-ink); }
 /* ══════════════════════════════════════════════════════════════════════
    概览页：创作者工作台，不是数据仪表盘
    ──────────────────────────────────────────────────────────────────────
-   视觉重心刻意不对称：左侧 1.55fr 是「继续写作」这一件事，右侧 1fr 是
-   统计与次要入口。用 grid 而不是等宽卡片，是为了让人第一眼看到草稿标题，
-   而不是先扫过四个数字。
+   版面随「有没有草稿」切换，而不是永远留一张空的继续卡片：
+
+     有草稿：继续卡片（主视觉）→ 统计入口 → 其他草稿 | 最近编辑
+     无草稿：速记框（主视觉）  → 统计入口 → 最近编辑（整行）
+
+   视觉重心只在首屏那一块：它要么是「接着写」，要么是「马上记」。
+   统计卡是入口，不是仪表盘 —— 没有彩色大底、没有渐变，只有暖白表面 +
+   一条细线，悬停抬 1px。整页阴影只出现在悬停的那一张卡上。
    ══════════════════════════════════════════════════════════════════════ */
 .overview-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  /* 右栏（最近编辑）每行要放：类型 / 标题 / 状态 / 日期 / 两个动作，
+     元素比左栏多，所以拿更宽的一侧；左栏只有标题 + 日期。 */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
   gap: var(--fx-s7);
   align-items: start;
+  margin-top: var(--fx-s6);
 }
 .overview-grid > section { margin-bottom: 0; min-width: 0; }
+/* 只有一栏时整行展开：最近编辑不再被 40% 的空栏挤成窄条 */
+.overview-grid.is-single { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1080px) {
   .overview-grid { grid-template-columns: 1fr; gap: var(--fx-s6); }
 }
 
-/* 「继续写作」：整个后台唯一带强调边的地方。
-   它不是卡片堆里的一员，而是这张页面的主视觉 —— 以左侧品牌竖条 + 极浅
-   品牌底标明「从这里继续」，不用阴影也不放大圆角。 */
+/* ── 首屏主位：继续写作 ──
+   整个后台唯一带强调边的地方。左侧 2px 品牌竖条 + 极浅品牌底，
+   标明「从这里继续」；不用阴影、不用大圆角。 */
 .continue-card {
   position: relative;
   display: flex;
@@ -2043,6 +2052,7 @@ a.shuo-main:hover .shuo-text { color: var(--fx-brand-ink); }
   background: var(--fx-brand);
 }
 .continue-copy { min-width: 0; flex: 1; }
+.continue-actions { display: flex; align-items: center; gap: var(--fx-s2); flex-shrink: 0; }
 .section-eyebrow {
   display: block;
   margin-bottom: var(--fx-s2);
@@ -2051,7 +2061,8 @@ a.shuo-main:hover .shuo-text { color: var(--fx-brand-ink); }
   letter-spacing: 0.12em;
   color: var(--fx-brand);
 }
-.continue-card h2 {
+.continue-card h2,
+.quick-capture-card h2 {
   margin: 0 0 6px;
   overflow: hidden;
   font-family: var(--font-serif);
@@ -2065,22 +2076,341 @@ a.shuo-main:hover .shuo-text { color: var(--fx-brand-ink); }
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.continue-card p {
+.continue-card p,
+.quick-capture-card p {
   margin: 0;
   font-size: var(--fx-fs-xs);
   color: var(--fx-muted);
   font-variant-numeric: tabular-nums;
 }
-.continue-card .btn { flex-shrink: 0; }
 
 @media (max-width: 820px) {
-  .continue-card { flex-direction: column; align-items: stretch; gap: var(--fx-s4); padding: var(--fx-s4) var(--fx-s4) var(--fx-s4) var(--fx-s5); }
-  .continue-card .btn { width: 100%; min-height: var(--tap); }
+  .continue-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--fx-s4);
+    padding: var(--fx-s4) var(--fx-s4) var(--fx-s4) var(--fx-s5);
+  }
+  .continue-actions { flex-direction: column; align-items: stretch; gap: var(--fx-s2); }
+  .continue-actions .btn { width: 100%; min-height: var(--tap); }
+  /* 次要动作在手机上退成一行文字，不和主按钮抢同等的块 */
+  .continue-actions .btn-ghost { min-height: 32px; border-color: transparent; }
 }
 
-/* 统计：一行「数字 + 标签」，只有上下的细分隔线。
-   这里刻意没有卡片、没有彩色块 —— 一屏四个数字如果各占一块白盒子，
-   页面立刻变成仪表盘模板。数值本身（衬线、大字、等宽）就是视觉要素。 */
+/* ── 无草稿时的速记卡 ──
+   它占据的正是「继续写作」那块位置，所以沿用同一档圆角与内边距，
+   但表面更安静：暖白面板 + 细线，不再用品牌渐变（这里没有"要接着的东西"，
+   不该假装自己是主操作）。输入区在卡片内部，边界靠一条内阴影以上的留白。 */
+.quick-capture-card {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: var(--fx-s5);
+  align-items: start;
+  padding: var(--fx-s5);
+  border: 1px solid var(--fx-line);
+  border-radius: var(--fx-r-lg);
+  background: var(--fx-surface);
+}
+.quick-capture-intro { min-width: 0; padding-top: 2px; }
+.quick-capture-intro p { max-width: 30em; line-height: var(--fx-lh-loose); }
+@media (max-width: 1080px) {
+  .quick-capture-card { grid-template-columns: minmax(0, 1fr); gap: var(--fx-s4); }
+}
+
+.quick-capture { min-width: 0; }
+.quick-capture-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--fx-fs-micro);
+  font-weight: var(--fx-fw-medium);
+  letter-spacing: 0.08em;
+  color: var(--fx-muted);
+}
+/* 说明文字在左、输入框在右时，输入区顶端要与标题「随手记一句。」的
+   衬线基线肉眼对齐；8px 是量出来的光学偏移，不是随手写的数。 */
+@media (min-width: 1081px) { .quick-capture { padding-top: 8px; } }
+.quick-capture-input {
+  display: block;
+  width: 100%;
+  min-height: 64px;
+  max-height: 152px;
+  padding: 9px 11px;
+  border: 1px solid var(--fx-line-strong);
+  border-radius: var(--fx-r-sm);
+  background: var(--fx-raised);
+  color: var(--fx-ink);
+  font-family: inherit;
+  font-size: var(--fx-fs-sm);
+  line-height: 1.6;
+  resize: none;
+  transition: border-color var(--fx-dur-1) var(--fx-ease), box-shadow var(--fx-dur-1) var(--fx-ease);
+}
+.quick-capture-input::placeholder { color: var(--fx-faint); }
+.quick-capture-input:hover { border-color: var(--fx-brand-line); }
+.quick-capture-input:focus {
+  outline: none;
+  border-color: var(--fx-brand);
+  box-shadow: var(--fx-ring);
+}
+.quick-capture-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fx-s3);
+  margin-top: var(--fx-s2);
+  flex-wrap: wrap;
+}
+.quick-capture-hint {
+  font-size: var(--fx-fs-micro);
+  color: var(--fx-faint);
+  font-variant-numeric: tabular-nums;
+}
+.quick-capture-actions { display: flex; align-items: center; gap: var(--fx-s2); margin-left: auto; }
+.quick-capture-error {
+  margin: var(--fx-s2) 0 0;
+  font-size: var(--fx-fs-xs);
+  color: var(--fx-danger);
+}
+
+@media (max-width: 820px) {
+  .quick-capture-card { padding: var(--fx-s4); }
+  .quick-capture-input { font-size: 16px; /* 防止 iOS 聚焦时自动放大整页 */ }
+  .quick-capture-actions { width: 100%; }
+  .quick-capture-actions .btn { flex: 1; min-height: var(--tap); }
+}
+
+/* ── 统计入口卡 ──
+   五张等宽卡，各自是一个链接。数值用衬线大字，图标与「查看」在最上一条，
+   标签在最下 —— 视线顺序是「数 → 是什么 → 能点」，不是先看到图标墙。
+   悬停只做三件事：抬 1px、加深边框、露出「查看」。没有渐变、没有缩放。 */
+.stat-grid {
+  display: grid;
+  /* 五列是一行的上限（正好是后台的全部内容类型 + 两个待办入口）。
+     窄下来改成 3 列（3+2）而不是 4 列，避免最后一张卡孤零零占一行。 */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--fx-s3);
+  margin-top: var(--fx-s6);
+}
+/* 断点算的是**内容区宽度**而不是视口：内容区 = 视口 − 侧栏 232 − 左右留白。
+   五张卡最少要 5×148 + 4×12 = 788px，对应视口约 1100px，所以 1100 以下
+   才退成 3 列（3+2），避免中间一段区间硬塞五张窄卡。 */
+@media (max-width: 1100px) {
+  .stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--fx-s3) var(--fx-s4) var(--fx-s4);
+  border: 1px solid var(--fx-line);
+  border-radius: var(--fx-r-md);
+  background: var(--fx-surface);
+  color: var(--fx-ink);
+  text-decoration: none;
+  transition: border-color var(--fx-dur-1) var(--fx-ease),
+              box-shadow var(--fx-dur-2) var(--fx-ease),
+              transform var(--fx-dur-2) var(--fx-ease);
+}
+.stat-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fx-s2);
+  margin-bottom: var(--fx-s2);
+  color: var(--fx-nav-icon);
+}
+.stat-card-icon { display: inline-flex; }
+.stat-card-go {
+  font-size: var(--fx-fs-micro);
+  letter-spacing: 0.04em;
+  color: var(--fx-brand);
+  opacity: 0;
+  transition: opacity var(--fx-dur-1) var(--fx-ease);
+}
+.stat-card-value {
+  font-family: var(--font-serif);
+  font-size: var(--fx-fs-xl);
+  font-weight: var(--fx-fw-semi);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.stat-card-label {
+  font-size: var(--fx-fs-xs);
+  letter-spacing: 0.02em;
+  color: var(--fx-muted);
+}
+.stat-card.is-alert .stat-card-value { color: var(--fx-warn); }
+.stat-card.is-alert .stat-card-icon { color: var(--fx-warn); }
+.stat-card:hover {
+  border-color: var(--fx-brand-line);
+  box-shadow: var(--fx-shadow-1);
+  transform: translateY(-1px);
+}
+.stat-card:hover .stat-card-go { opacity: 1; }
+.stat-card:hover .stat-card-label { color: var(--fx-ink-2); }
+.stat-card:hover .stat-card-icon { color: var(--fx-brand); }
+.stat-card:active { transform: none; box-shadow: none; }
+.stat-card:focus-visible { outline-offset: 2px; }
+
+@media (max-width: 820px) {
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--fx-s2); }
+  .stat-card { padding: var(--fx-s3); min-height: var(--tap); }
+  .stat-card-go { display: none; }
+  /* 五张卡在双列里会剩一张：让它横跨两列收尾，而不是留半格空白 */
+  .stat-card:last-child { grid-column: span 2; }
+}
+
+/* ── 编辑列表：标题优先，日期最弱，行内动作悬停才出现 ──
+   行本身不再整行可点：它现在包含两个动作（预览 / 编辑），把整行包成 <a>
+   会出现链接里套链接的非法结构。改成「主链接占满左侧 + 动作区独立」，
+   点击标题区域仍然等同于编辑。 */
+.work-section { min-width: 0; }
+.work-list { display: flex; flex-direction: column; }
+.work-row {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s2);
+  min-height: 46px;
+  border-bottom: 1px solid var(--fx-line);
+  transition: background var(--fx-dur-1) var(--fx-ease);
+}
+.work-row:hover { background: color-mix(in oklab, var(--fx-nav-hover-bg) 60%, transparent); }
+.work-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s2);
+  flex: 1;
+  min-width: 0;
+  min-height: 46px;
+  /* 左内边距为 0：标题必须与区块标题同一条竖线，否则整页左边缘参差 */
+  padding: 0 var(--fx-s2);
+  color: var(--fx-ink-2);
+  text-decoration: none;
+}
+/* 类型标记：最近编辑是混合列表（文章 / 说说 / 页面），没有它时
+   一段说说正文看起来就像一篇文章的标题。所以任何宽度下都保留。 */
+.work-type {
+  flex-shrink: 0;
+  padding: 0 5px;
+  border: 1px solid var(--fx-line-strong);
+  border-radius: var(--fx-r-xs);
+  font-size: var(--fx-fs-micro);
+  line-height: 1.5;
+  color: var(--fx-muted);
+}
+.work-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--fx-fs-sm);
+  color: var(--fx-ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.work-row-main:hover .work-item-title { text-decoration: underline; text-underline-offset: 3px; }
+.work-draft-mark {
+  flex-shrink: 0;
+  font-size: var(--fx-fs-micro);
+  color: var(--fx-warn);
+}
+.work-item-date {
+  flex-shrink: 0;
+  font-size: var(--fx-fs-xs);
+  color: var(--fx-faint);
+  font-variant-numeric: tabular-nums;
+}
+/* 行内动作：默认隐藏，悬停 / 键盘聚焦时出现；触屏设备常显（不能依赖 hover） */
+.work-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s1);
+  flex-shrink: 0;
+  padding-right: var(--fx-s1);
+  opacity: 0;
+  transition: opacity var(--fx-dur-1) var(--fx-ease);
+}
+.work-row:hover .work-row-actions,
+.work-row:focus-within .work-row-actions { opacity: 1; }
+.work-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--fx-line-strong);
+  border-radius: var(--fx-r-xs);
+  background: var(--fx-surface);
+  font-size: var(--fx-fs-micro);
+  color: var(--fx-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--fx-dur-1) var(--fx-ease), border-color var(--fx-dur-1) var(--fx-ease);
+}
+.work-action:hover { color: var(--fx-brand-ink); border-color: var(--fx-brand-line); }
+.work-action.is-primary { color: var(--fx-brand); border-color: var(--fx-brand-line); }
+.work-action.is-primary:hover { background: var(--fx-brand-tint); }
+@media (hover: none) {
+  /* 触屏没有悬停：动作常显，且热区抬到 44 */
+  .work-row-actions { opacity: 1; }
+  .work-action { min-height: var(--tap); padding: 0 var(--fx-s3); }
+}
+@media (max-width: 820px) {
+  .work-row-actions { opacity: 1; }
+  .work-action { min-height: var(--tap); }
+  .work-type { display: none; }
+  .work-item-date { font-size: var(--fx-fs-micro); }
+}
+
+.work-empty { padding: var(--fx-s4) 0; color: var(--fx-faint); font-size: var(--fx-fs-sm); }
+
+/* 兼容：旧版 .work-item 结构（UI Kit 里仍作为样式样例） */
+.work-item {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s3);
+  min-height: 44px;
+  padding: var(--fx-s2) 0;
+  border-bottom: 1px solid var(--fx-line);
+  color: var(--fx-ink-2);
+  text-decoration: none;
+  transition: color var(--fx-dur-1) var(--fx-ease);
+}
+.work-item:hover { color: var(--fx-brand-ink); }
+.work-item:hover .work-item-title { text-decoration: underline; text-underline-offset: 3px; }
+
+/* 兼容：旧版 .overview-item / .overview-comment 结构若仍被引用，视觉已并入 .work-row */
+.overview-list { display: flex; flex-direction: column; }
+.overview-item {
+  display: flex;
+  align-items: center;
+  gap: var(--fx-s3);
+  min-height: var(--tap);
+  padding: var(--fx-s2) 0;
+  border-bottom: 1px solid var(--fx-line);
+  color: var(--fx-ink-2);
+  font-size: var(--fx-fs-sm);
+}
+.overview-item-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-item-meta { flex-shrink: 0; font-size: var(--fx-fs-xs); color: var(--fx-faint); font-variant-numeric: tabular-nums; }
+.overview-comment { padding: var(--fx-s3) 0; border-bottom: 1px solid var(--fx-line); }
+.overview-comment:last-child { border-bottom: none; }
+.overview-comment-head { display: flex; align-items: baseline; gap: var(--fx-s3); margin-bottom: var(--fx-s1); font-size: var(--fx-fs-sm); color: var(--fx-muted); }
+.overview-comment-body {
+  margin: 0;
+  font-size: var(--fx-fs-sm);
+  line-height: var(--fx-lh-base);
+  color: var(--fx-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.overview-more { display: inline-flex; align-items: center; min-height: var(--tap); margin-top: var(--fx-s1); font-size: var(--fx-fs-sm); color: var(--fx-brand); }
+.overview-foot { margin-top: var(--fx-s4); padding-top: var(--fx-s3); border-top: 1px solid var(--fx-line); font-size: var(--fx-fs-xs); color: var(--fx-faint); }
+.overview-foot a { color: var(--fx-brand); }
+
+/* 保留 Figure 的样式给 UI Kit 与其它页面；概览页已改用 .stat-card */
 .fx-figure-row {
   display: flex;
   flex-wrap: wrap;
@@ -2114,113 +2444,10 @@ a.shuo-main:hover .shuo-text { color: var(--fx-brand-ink); }
 }
 a.fx-figure:hover .fx-figure-value { color: var(--fx-brand-ink); }
 a.fx-figure:hover .fx-figure-label { color: var(--fx-ink-2); }
-
 @media (max-width: 820px) {
   .fx-figure-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fx-figure { padding: var(--fx-s3) 0; }
 }
-
-/* 待处理事项：一行链接，不占块。数字前置，动作后置，中间用细点分隔 */
-.task-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--fx-s2) var(--fx-s5);
-  margin: var(--fx-s4) 0 0;
-  font-size: var(--fx-fs-sm);
-}
-.task-links a {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
-  color: var(--fx-muted);
-  text-decoration: none;
-}
-.task-links a:hover { color: var(--fx-brand); }
-.task-links strong { color: var(--fx-ink); font-variant-numeric: tabular-nums; }
-.task-links span { color: var(--fx-brand); }
-
-/* 编辑列表：紧凑，标题优先，日期靠右最弱 */
-.work-section { min-width: 0; }
-.section-heading {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--fx-s4);
-  margin-bottom: var(--fx-s1);
-  padding-bottom: var(--fx-s2);
-  border-bottom: 1px solid var(--fx-line);
-}
-.section-heading h2 {
-  margin: 0;
-  font-size: var(--fx-fs-micro);
-  font-weight: var(--fx-fw-semi);
-  letter-spacing: 0.12em;
-  color: var(--fx-muted);
-}
-.section-heading > a { font-size: var(--fx-fs-xs); color: var(--fx-brand); text-decoration: none; white-space: nowrap; }
-.section-heading > a:hover { text-decoration: underline; }
-
-.work-list { display: flex; flex-direction: column; }
-.work-item {
-  display: flex;
-  align-items: center;
-  gap: var(--fx-s3);
-  min-height: 44px;
-  padding: var(--fx-s2) 0;
-  border-bottom: 1px solid var(--fx-line);
-  color: var(--fx-ink-2);
-  text-decoration: none;
-  transition: color var(--fx-dur-1) var(--fx-ease);
-}
-.work-item:hover { color: var(--fx-brand-ink); }
-.work-item-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--fx-fs-sm);
-  color: var(--fx-ink);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.work-item:hover .work-item-title { text-decoration: underline; text-underline-offset: 3px; }
-.work-item-date {
-  flex-shrink: 0;
-  font-size: var(--fx-fs-xs);
-  color: var(--fx-faint);
-  font-variant-numeric: tabular-nums;
-}
-.work-empty { padding: var(--fx-s4) 0; color: var(--fx-faint); font-size: var(--fx-fs-sm); }
-
-/* 兼容：旧版 .overview-item / .overview-comment 结构若仍被引用，视觉已并入 .work-item */
-.overview-list { display: flex; flex-direction: column; }
-.overview-item {
-  display: flex;
-  align-items: center;
-  gap: var(--fx-s3);
-  min-height: var(--tap);
-  padding: var(--fx-s2) 0;
-  border-bottom: 1px solid var(--fx-line);
-  color: var(--fx-ink-2);
-  font-size: var(--fx-fs-sm);
-}
-.overview-item-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.overview-item-meta { flex-shrink: 0; font-size: var(--fx-fs-xs); color: var(--fx-faint); font-variant-numeric: tabular-nums; }
-.overview-comment { padding: var(--fx-s3) 0; border-bottom: 1px solid var(--fx-line); }
-.overview-comment:last-child { border-bottom: none; }
-.overview-comment-head { display: flex; align-items: baseline; gap: var(--fx-s3); margin-bottom: var(--fx-s1); font-size: var(--fx-fs-sm); color: var(--fx-muted); }
-.overview-comment-body {
-  margin: 0;
-  font-size: var(--fx-fs-sm);
-  line-height: var(--fx-lh-base);
-  color: var(--fx-muted);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.overview-more { display: inline-flex; align-items: center; min-height: var(--tap); margin-top: var(--fx-s1); font-size: var(--fx-fs-sm); color: var(--fx-brand); }
-.overview-foot { margin-top: var(--fx-s4); padding-top: var(--fx-s3); border-top: 1px solid var(--fx-line); font-size: var(--fx-fs-xs); color: var(--fx-faint); }
-.overview-foot a { color: var(--fx-brand); }
 
 /* ══════════════════════════════════════════════════════════════════════
    编辑器 · 写作工作台（Editorial Studio）

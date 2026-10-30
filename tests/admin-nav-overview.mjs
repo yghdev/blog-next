@@ -189,10 +189,19 @@ try {
   /* ---------------- 4. 首屏继续工作，统计不抢占任务区 ---------------- */
   assert.equal(await page.locator(".kpi-card").count(), 0, "概览不应恢复 KPI 卡片");
   assert.equal(await page.locator(".ui-statbar").count(), 0, "概览不应恢复装饰性比例条");
-  assert.equal(await page.locator(".continue-card").count(), 1, "首屏必须有继续工作入口");
+  // 2026-10-30 概览改版：首屏主位按「有没有草稿」二选一 ——
+  // 有草稿是「接着上次的草稿」，没有草稿则是速记卡。空库断言 continue-card
+  // 等于 1 会把「必然为空的卡片」固化成需求，正是这轮要消灭的痛点。
+  const primarySlot = await page.evaluate(() => ({
+    continueCard: document.querySelectorAll(".continue-card").length,
+    quickCapture: document.querySelectorAll(".quick-capture-card").length,
+  }));
+  assert.equal(primarySlot.continueCard + primarySlot.quickCapture, 1,
+    "首屏必须有唯一主位（继续写作 或 速记），实际 " + JSON.stringify(primarySlot));
+  assert.equal(primarySlot.quickCapture, 1, "空库时应由速记卡占据主位，实际 " + JSON.stringify(primarySlot));
   assert.equal(await page.locator(".mobile-topbar").count(), 0, "后台不得渲染前台 MobileNav");
   assert.equal(await page.locator(".site-footer").count(), 0, "后台不得渲染前台页脚");
-  console.log("PASS phase02: 继续工作优先，无 KPI/比例条，无前台壳");
+  console.log("PASS phase02: 首屏主位按草稿态二选一（空库=速记），无 KPI/比例条，无前台壳");
 
   /* ---------------- 5. 手机：侧栏隐藏、顶栏出现、抽屉分组 ---------------- */
   await page.setViewportSize({ width: 375, height: 800 });

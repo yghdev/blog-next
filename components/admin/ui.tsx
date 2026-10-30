@@ -152,6 +152,43 @@ export function Figure({ label, value, href, alert }: {
     : <div className="fx-figure">{inner}</div>;
 }
 
+/**
+ * 统计卡（概览页的入口型统计）。
+ *
+ * 与 Figure 的分工：Figure 是「一行数字」，靠上下细线组织，适合嵌在别的
+ * 版面里；StatCard 是**可点击的独立区块**，有自己的边界与悬停反馈，适合
+ * 概览页那排「点一下就去对应列表」的入口。
+ *
+ * 刻意不做彩色大底、不做渐变、不做常驻投影：默认只有 1px 线与暖白表面，
+ * 悬停时上浮 1px + 极浅投影，动作幅度小于「一个图标点亮」的注意力。
+ * 图标由调用方传入（本层不引图标库，避免原子层被图标依赖绑死）。
+ */
+export function StatCard({ label, value, href, icon, alert, hint }: {
+  label: string;
+  value: number | string;
+  href: string;
+  icon?: ReactNode;
+  /** 需要被注意到（如待审评论 > 0）：只改数值与图标颜色，不铺底色 */
+  alert?: boolean;
+  /** 给读屏的补充说明，如「进入文章列表」 */
+  hint?: string;
+}) {
+  return (
+    <Link
+      className={"stat-card" + (alert ? " is-alert" : "")}
+      href={href}
+      aria-label={label + " " + value + (hint ? "，" + hint : "")}
+    >
+      <span className="stat-card-top">
+        {icon ? <span className="stat-card-icon">{icon}</span> : null}
+        <span className="stat-card-go" aria-hidden>查看</span>
+      </span>
+      <span className="stat-card-value">{value}</span>
+      <span className="stat-card-label">{label}</span>
+    </Link>
+  );
+}
+
 /** 区块标题：无表面的分组头，靠字重与细线组织 */
 export function SectionHead({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
