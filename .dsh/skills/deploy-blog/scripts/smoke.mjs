@@ -64,6 +64,63 @@ try {
   const home = await fetch(BASE + "/");
   check("首页 200", home.status === 200, String(home.status));
 
+  /* ── 0b. 友链专题页（独立路由，2026-10-30 改版） ──
+     这一页是本轮改版的全部内容，且它的数据来自三处（friend_links 表 /
+     页面正文 / settings），任何一处接错都只表现为"少一块"，healthz 与
+     静态资源比对都看不出来。所以在冒烟这一层按"用户能看到的四段"验：
+     头部、目录卡片、交换区、申请区；再验外链属性与评论区挂载点。 */
+  const friendsRes = await fetch(BASE + "/friend-links");
+  const friendsHtml = await friendsRes.text();
+  check("友链页 200", friendsRes.status === 200, String(friendsRes.status));
+  check("友链页是专题结构（非旧文章模板）",
+    friendsHtml.includes('class="fr-hero-title"') && !friendsHtml.includes("article-meta-bar"));
+  check("友链页四段齐全",
+    friendsHtml.includes("01 / FRIEND DIRECTORY") &&
+    friendsHtml.includes("02 / EXCHANGE") &&
+    friendsHtml.includes("想加入这份名单？") &&
+    friendsHtml.includes("FRIENDS &amp; CONNECTIONS"));
+  check("友链页有卡片或空态出口",
+    friendsHtml.includes('class="fr-card"') || friendsHtml.includes("fr-empty-title"));
+  check("友链页有本站信息与复制入口",
+    friendsHtml.includes("fr-site-card") && friendsHtml.includes("fr-copy-btn"));
+  const friendAnchors = [...friendsHtml.matchAll(/<a class="fr-card" href="([^"]+)"[^>]*>/g)];
+  const badAnchor = friendAnchors.find((m) => !/target="_blank"/.test(m[0]) || !/rel="noopener noreferrer"/.test(m[0]));
+  check("友链外链均带 _blank + noopener", friendAnchors.length > 0 && !badAnchor,
+    friendAnchors.length + " 条");
+  // 评论关闭时页面会渲染 fr-comments-off 而不是 Artalk 容器 —— 两种都算正确，
+  // 但"两个都没有"就是坏了（申请入口会滚到一个空锚点）。
+  check("友链页评论区存在或明确提示已关闭",
+    friendsHtml.includes('class="comments"') || friendsHtml.includes("fr-comments-off"));
+  /**
+   * 布局量测用**禁用 JS 的独立 context**：
+   *   - 友链页会挂 Artalk，而 Artalk 只放行生产域名；在 127.0.0.1 的隔离实例上
+   *     它必然抛 CORS 错误，会被下面"控制台无报错"误判成页面坏了。
+   *   - 卡片与版式全部是服务端渲染，没有 JS 也能量真实布局，反而更干净。
+   */
+  const noJs = await browser.newContext({ javaScriptEnabled: false });
+  const noJsPage = await noJs.newPage();
+  const friendsLayout = await (async () => {
+    await noJsPage.setViewportSize({ width: 375, height: 780 });
+    await noJsPage.goto(BASE + "/friend-links", { waitUntil: "networkidle" });
+    return noJsPage.evaluate(() => ({
+      sw: document.documentElement.scrollWidth,
+      cw: document.documentElement.clientWidth,
+      cards: document.querySelectorAll(".fr-card").length,
+      copy: document.querySelectorAll(".fr-copy-btn").length,
+      apply: document.querySelectorAll(".fr-apply-link").length,
+      blocks: ["fr-hero", "fr-grid", "fr-site-card", "fr-apply"]
+        .filter((c) => document.querySelector("." + c)).length,
+    }));
+  })();
+  await noJs.close();
+  check("友链页 375px 无横向溢出", friendsLayout.sw <= friendsLayout.cw + 1, JSON.stringify(friendsLayout));
+  check("友链页 375px 关键区块都在（目录/本站/申请/复制）",
+    friendsLayout.cards > 0 && friendsLayout.copy === 1 &&
+    friendsLayout.apply >= 1 && friendsLayout.blocks === 4,
+    JSON.stringify(friendsLayout));
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+
   /* ── 1. 登录与鉴权 ── */
   const login = await page.request.post(BASE + "/api/auth/login", { data: { username: USER, password: PASS } });
   check("管理员登录", login.ok(), "HTTP " + login.status());
