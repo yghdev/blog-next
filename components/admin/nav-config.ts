@@ -6,7 +6,9 @@
  *   - app/admin/layout.tsx（服务端，校验 cookie 里的折叠组 key）
  * 放进任意一边都会让另一边变成"引用客户端组件"或"复制一份常量"。
  */
-export type NavItem = { href: string; label: string; key: string };
+/** icon 只是图标键名（不是组件）：这份配置同时被服务端布局读取，
+    真正把键名映射成 SVG 的地方在 AdminShell（客户端）。 */
+export type NavItem = { href: string; label: string; key: string; icon: string };
 export type NavGroup = { key: string; title: string; items: NavItem[] };
 
 export const NAV_GROUPS: NavGroup[] = [
@@ -14,34 +16,34 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "workbench",
     title: "工作台",
     items: [
-      { href: "/admin/overview", label: "概览", key: "overview" },
+      { href: "/admin/overview", label: "概览", key: "overview", icon: "grid" },
     ],
   },
   {
     key: "content",
     title: "内容",
     items: [
-      { href: "/admin", label: "文章", key: "posts" },
-      { href: "/admin/shuoshuo", label: "说说", key: "shuoshuo" },
-      { href: "/admin/pages", label: "页面", key: "pages" },
-      { href: "/admin/comments", label: "评论", key: "comments" },
-      { href: "/admin/trash", label: "回收站", key: "trash" },
+      { href: "/admin", label: "文章", key: "posts", icon: "note" },
+      { href: "/admin/shuoshuo", label: "说说", key: "shuoshuo", icon: "chat" },
+      { href: "/admin/pages", label: "页面", key: "pages", icon: "page" },
+      { href: "/admin/comments", label: "评论", key: "comments", icon: "comment" },
+      { href: "/admin/trash", label: "回收站", key: "trash", icon: "archive" },
     ],
   },
   {
     key: "assets",
     title: "资源",
     items: [
-      { href: "/admin/media", label: "媒体", key: "media" },
-      { href: "/admin/links", label: "外链", key: "links" },
+      { href: "/admin/media", label: "媒体", key: "media", icon: "media" },
+      { href: "/admin/links", label: "外链", key: "links", icon: "external" },
     ],
   },
   {
     key: "system",
     title: "系统",
     items: [
-      { href: "/admin/audit", label: "日志", key: "audit" },
-      { href: "/admin/settings", label: "设置", key: "settings" },
+      { href: "/admin/audit", label: "日志", key: "audit", icon: "log" },
+      { href: "/admin/settings", label: "设置", key: "settings", icon: "settings" },
     ],
   },
 ];

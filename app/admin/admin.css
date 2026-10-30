@@ -47,6 +47,18 @@
   --fx-accent-text: #a94f31; /* 次强调要当文字时的替身 4.9:1 */
   --fx-accent-tint: #f7ebe4;
 
+  /* ── 侧栏专属令牌 ──
+     侧栏是全站唯一「常驻导航面」，它的层级靠这组色阶而不是靠线条：
+     分组名最淡、菜单项稍深、选中项回到品牌色。集中在这里，组件不写死色值。 */
+  --fx-nav-group-ink: #6b6a61;   /* 分组名 4.9:1，比菜单项更弱 */
+  --fx-nav-ink: #5c5b52;         /* 普通菜单项 6.1:1 */
+  --fx-nav-icon: #7c7a70;        /* 图标比文字再弱一档，仍 >= 3:1 */
+  --fx-nav-active-bg: #e5ece5;   /* 选中底：浅绿，不是品牌实色 */
+  --fx-nav-active-ink: #2b6459;  /* 选中字：深墨绿 5.7:1 */
+  --fx-nav-hover-bg: #efece4;    /* hover 用暖灰，和选中绿区分开 */
+  --fx-nav-press-bg: #e9e5db;
+  --fx-side-divider: rgba(32, 35, 31, 0.07);
+
   /* ── 语义状态（浅底深字，按语义分配，不复用品牌色冒充状态）── */
   --fx-ok: #1f7a52;      --fx-ok-bg: rgba(31, 122, 82, 0.09);     --fx-ok-line: rgba(31, 122, 82, 0.30);
   --fx-warn: #8a5a12;    --fx-warn-bg: rgba(138, 90, 18, 0.10);   --fx-warn-line: rgba(138, 90, 18, 0.30);
@@ -136,6 +148,15 @@
   --fx-accent-text: #d99372;
   --fx-accent-tint: rgba(217, 147, 114, 0.13);
 
+  --fx-nav-group-ink: #a8a396;
+  --fx-nav-ink: #c9c5b9;
+  --fx-nav-icon: #9a968a;
+  --fx-nav-active-bg: rgba(111, 179, 161, 0.14);
+  --fx-nav-active-ink: #9ed2c3;
+  --fx-nav-hover-bg: rgba(237, 234, 226, 0.06);
+  --fx-nav-press-bg: rgba(237, 234, 226, 0.10);
+  --fx-side-divider: rgba(237, 234, 226, 0.08);
+
   --fx-ok: #74c79e;      --fx-ok-bg: rgba(116, 199, 158, 0.12);     --fx-ok-line: rgba(116, 199, 158, 0.32);
   --fx-warn: #e0b063;    --fx-warn-bg: rgba(224, 176, 99, 0.12);    --fx-warn-line: rgba(224, 176, 99, 0.32);
   --fx-danger: #ff8b85;  --fx-danger-bg: rgba(255, 139, 133, 0.12); --fx-danger-line: rgba(255, 139, 133, 0.32);
@@ -170,6 +191,14 @@
     --fx-accent: #d99372;
     --fx-accent-text: #d99372;
     --fx-accent-tint: rgba(217, 147, 114, 0.13);
+    --fx-nav-group-ink: #a8a396;
+    --fx-nav-ink: #c9c5b9;
+    --fx-nav-icon: #9a968a;
+    --fx-nav-active-bg: rgba(111, 179, 161, 0.14);
+    --fx-nav-active-ink: #9ed2c3;
+    --fx-nav-hover-bg: rgba(237, 234, 226, 0.06);
+    --fx-nav-press-bg: rgba(237, 234, 226, 0.10);
+    --fx-side-divider: rgba(237, 234, 226, 0.08);
     --fx-ok: #74c79e;      --fx-ok-bg: rgba(116, 199, 158, 0.12);     --fx-ok-line: rgba(116, 199, 158, 0.32);
     --fx-warn: #e0b063;    --fx-warn-bg: rgba(224, 176, 99, 0.12);    --fx-warn-line: rgba(224, 176, 99, 0.32);
     --fx-danger: #ff8b85;  --fx-danger-bg: rgba(255, 139, 133, 0.12); --fx-danger-line: rgba(255, 139, 133, 0.32);
@@ -256,18 +285,22 @@
 /* ══════════════════════════════════════════════════════════════════════
    骨架：侧栏 + 主体
    ──────────────────────────────────────────────────────────────────────
-   桌面：固定 224px 侧栏（规范 220–232 区间），与主体仅用一条 1px 线分隔，
+   桌面：固定 232px 侧栏（规范 220–232 区间），与主体仅用一条 1px 线分隔，
         不做「白侧栏浮在灰底上」——侧栏与画布同为纸色，边界靠线而非色差。
    手机：侧栏消失，顶栏 + 底部抽屉。这不是把侧栏压窄，而是另一套布局。
    ══════════════════════════════════════════════════════════════════════ */
 .admin-shell {
   display: grid;
-  grid-template-columns: 224px minmax(0, 1fr);
+  grid-template-columns: 232px minmax(0, 1fr);
   min-height: 100dvh;
   background: var(--fx-canvas);
 }
 
-/* ── 侧栏 ── */
+/* ── 侧栏 ───────────────────────────────────────────────────────────────
+   232px：比上一版宽 8px，换取「图标 + 两字菜单 + 快捷键」不挤在一起。
+   侧栏自己不滚动，只有中间的 .admin-side-nav 滚 —— 品牌/主按钮与底部
+   账号区因此永远可见，用户滚到任何位置都不会把「写文章」滚丢，
+   底栏也不会盖住最后一项菜单。 */
 .admin-sidebar {
   position: sticky;
   top: 0;
@@ -275,111 +308,126 @@
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: var(--fx-s6);
-  padding: var(--fx-s6) var(--fx-s4) var(--fx-s5);
+  padding: 0;
   border-right: 1px solid var(--fx-line);
   background: var(--fx-canvas);
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--fx-line-strong) transparent;
+  overflow: hidden;
 }
-.admin-sidebar-brand { margin-bottom: 0; padding: 0 var(--fx-s3); }
 
-/* 全局主操作：整宽、品牌填充。后台唯一的常驻主按钮 —— 页面里不重复出现。 */
+/* 顶部固定区：品牌 + 主操作。两者之间的间距比旧版紧一档，
+   让「flechazo → 写文章 → 第一组」读起来是连续的起手式。 */
+.admin-side-head {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--fx-s4);
+  padding: var(--fx-s5) var(--fx-s3) var(--fx-s4);
+}
+.admin-sidebar-brand { padding: 0; }
+.admin-sidebar-brand .fx-brand-sub { margin-top: 5px; }
+
+/* 全局主操作：整宽、品牌填充。后台唯一的常驻主按钮 —— 页面里不重复出现。
+   36px 高、8px 圆角、13px/600：比正文重，但不做渐变大块。 */
 .admin-side-compose {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--fx-s2);
+  gap: 9px;
   width: 100%;
   min-height: var(--fx-control-h);
-  padding: 0 var(--fx-s4);
+  padding: 0 var(--fx-s3);
   border: 1px solid var(--fx-brand-fill);
-  border-radius: var(--fx-r-md);
+  border-radius: var(--fx-r-sm);
   background: var(--fx-brand-fill);
   color: var(--fx-brand-on);
   font-size: var(--fx-fs-sm);
   font-weight: var(--fx-fw-semi);
+  line-height: 1;
   text-decoration: none;
   transition: background var(--fx-dur-1) var(--fx-ease), border-color var(--fx-dur-1) var(--fx-ease);
 }
 .admin-side-compose:hover { background: var(--fx-brand-ink); border-color: var(--fx-brand-ink); }
+.admin-side-compose:active { background: var(--fx-brand-ink); }
+.admin-side-compose-icon { flex-shrink: 0; opacity: 0.9; }
 
-/* 快捷键提示：把 Ctrl/Cmd+K 这类能力显性化，用最弱层级，不抢按钮文案 */
+/* 快捷键提示：与命令面板底部 kbd 同一套观感（mono / 10px / 细边），
+   不再用一块比正文还亮的白色圆角块抢注意力。 */
 .admin-side-compose kbd {
   margin-left: auto;
-  padding: 1px 5px;
+  min-width: 30px;
+  height: 19px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 5px;
+  border: 1px solid color-mix(in oklab, var(--fx-brand-on) 42%, transparent);
   border-radius: var(--fx-r-xs);
-  background: rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: color-mix(in oklab, var(--fx-brand-on) 92%, transparent);
   font-family: var(--font-mono);
   font-size: 0.625rem;
   font-weight: var(--fx-fw-normal);
-  letter-spacing: 0.04em;
+  line-height: 1;
+  letter-spacing: 0.02em;
 }
 
-/* ── 侧栏导航：组头是「章节标签 + 细线 + 折叠箭头」，子项挂在一条导轨上 ──
-   三层视觉层级，不靠加装饰：
-     组头  12px / 600 / 0.08em，非当前组 --fx-ink-2（8.3:1），右侧拖一条细线吃掉余量
-     子项  13px / 400，缩进挂在 1px 导轨上，明确「属于上一行」
-     选中  品牌浅底 + 2px 竖条压在导轨上，字重加粗；所在组头同步转墨色/品牌线
-   旧版组头是 11px --fx-faint 的不可交互小字，既淡又不像标签；现在它是一枚
-   可点的章节按钮，字号与字重都上来了，但比子项更短更硬，层级反而更清楚。 */
-.admin-side-nav { display: flex; flex-direction: column; gap: var(--fx-s3); }
+/* ── 导航：只有两层，靠缩进与字重区分 ──
+   组标题  12px/600/0.08em、--fx-nav-group-ink，无横线、无卡片、无背景；
+   菜单项  13px/400、34px 高、16px 线性图标，统一缩进；
+   选中项  浅绿底 + 深绿字 + 500 字重，无左边框、无阴影。
+   分组的边界来自「上方的空白」，不再来自一条贯穿整组的竖线。 */
+.admin-side-nav {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--fx-s5) + var(--fx-s1));
+  padding: var(--fx-s2) var(--fx-s3) var(--fx-s4);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--fx-line-strong) transparent;
+}
 .admin-side-group { display: flex; flex-direction: column; }
 
+/* 组标题：整行可点（热区 30px），文字左对齐到 12px，
+   比菜单图标再靠左一点 —— 章节名悬在条目外侧，像目录而非表头。 */
 .admin-side-group-toggle {
   display: flex;
   align-items: center;
-  gap: var(--fx-s2);
+  gap: 5px;
   width: 100%;
   min-height: 30px;
-  padding: 0 var(--fx-s3) 0 12px;
+  padding: 0 6px 0 0;
   border: 0;
   border-radius: var(--fx-r-sm);
   background: transparent;
-  color: var(--fx-ink-2);
+  color: var(--fx-nav-group-ink);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background var(--fx-dur-1) var(--fx-ease), color var(--fx-dur-1) var(--fx-ease);
+  transition: color var(--fx-dur-1) var(--fx-ease);
 }
-.admin-side-group-toggle:hover {
-  /* 比选中态的浅底再淡一档：hover 只表达"这里能点"，不冒充"当前所在" */
-  background: color-mix(in oklab, var(--fx-brand-tint) 60%, transparent);
-  color: var(--fx-ink);
-}
+.admin-side-group-toggle:hover { color: var(--fx-ink-2); }
 .admin-side-title {
   font-size: var(--fx-fs-xs);
   font-weight: var(--fx-fw-semi);
+  line-height: 1;
   letter-spacing: 0.08em;
   color: inherit;
   white-space: nowrap;
 }
-/* 章节细线：吃掉标题与箭头之间的全部余量，把「组」拉成一整行 */
-.admin-side-rule {
-  flex: 1;
-  height: 1px;
-  min-width: var(--fx-s2);
-  background: var(--fx-line);
-  transition: background var(--fx-dur-1) var(--fx-ease);
-}
 .fx-nav-chevron {
   flex-shrink: 0;
-  color: var(--fx-muted);
-  transition: transform var(--fx-dur-2) var(--fx-ease), color var(--fx-dur-1) var(--fx-ease);
+  color: currentColor;
+  opacity: 0.55;
+  transition: transform var(--fx-dur-2) var(--fx-ease), opacity var(--fx-dur-1) var(--fx-ease);
 }
-.admin-side-group-toggle:hover .fx-nav-chevron { color: var(--fx-ink-2); }
+.admin-side-group-toggle:hover .fx-nav-chevron { opacity: 0.8; }
 .admin-side-group[data-collapsed="true"] .fx-nav-chevron { transform: rotate(-90deg); }
 
-/* 当前组：组头回到墨色、细线与导轨换品牌色 —— 整组收起时也能看出「我在这」 */
-.admin-side-group[data-current="true"] .admin-side-group-toggle { color: var(--fx-ink); }
-.admin-side-group[data-current="true"] .admin-side-rule { background: var(--fx-brand-line); }
-.admin-side-group[data-current="true"] .admin-side-group-links { border-left-color: var(--fx-brand-line); }
-/* 用户手动收起当前组时，组头左侧补一条品牌竖条：选中项虽然被藏起来，
-   「我在哪一组」仍然留在原地。这是折叠态唯一的颜色线索，不多加别的。 */
-.admin-side-group[data-current="true"][data-collapsed="true"] .admin-side-group-toggle {
-  box-shadow: inset 2px 0 0 var(--fx-brand);
-}
+/* 当前组：只把组名提到品牌色。整组收起时也能看出「我在这」，
+   不再额外压一条 2px 竖条 —— 那是第三层强调，和选中项打架。 */
+.admin-side-group[data-current="true"] .admin-side-group-toggle { color: var(--fx-nav-active-ink); }
+.admin-side-group[data-current="true"] .fx-nav-chevron { opacity: 0.7; }
 
 /* 折叠：grid-template-rows 0fr/1fr 可过渡，内容靠 overflow 裁切。
    收起时 TSX 给内容加 inert，键盘与读屏都不会进入不可见区域。 */
@@ -394,48 +442,97 @@
    会把高度算成 0，过渡看起来像「瞬间消失」。 */
 .admin-side-group-clip { min-height: 0; overflow: hidden; }
 .admin-side-group-links {
-  /* 导轨对齐组头文字的左侧，子项文字比组头再缩进一档 */
-  margin: var(--fx-s1) 0 0 7px;
-  padding-left: var(--fx-s3);
-  border-left: 1px solid var(--fx-line);
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+  padding-top: var(--fx-s1);
 }
+
+/* 菜单项：所有一级/二级项同一套排版，图标列固定 16px，文字起点一致。
+   左缩进 14px 与组标题（0）拉开层级，但不再画导轨。 */
 .admin-side-nav a {
   position: relative;
   display: flex;
   align-items: center;
-  min-height: 30px;
-  padding: var(--fx-s1) var(--fx-s3);
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 10px 0 14px;
   border-radius: var(--fx-r-sm);
   font-size: var(--fx-fs-sm);
   font-weight: var(--fx-fw-normal);
-  color: var(--fx-muted);
+  line-height: 1.3;
+  color: var(--fx-nav-ink);
   text-decoration: none;
   transition: color var(--fx-dur-1) var(--fx-ease), background var(--fx-dur-1) var(--fx-ease);
 }
-.admin-side-nav a:hover { color: var(--fx-ink); background: var(--fx-brand-tint); }
+.admin-side-nav a .fx-nav-icon {
+  flex-shrink: 0;
+  color: var(--fx-nav-icon);
+  transition: color var(--fx-dur-1) var(--fx-ease);
+}
+.admin-side-nav a:hover { color: var(--fx-ink); background: var(--fx-nav-hover-bg); }
+.admin-side-nav a:hover .fx-nav-icon { color: var(--fx-ink-2); }
+.admin-side-nav a:active { background: var(--fx-nav-press-bg); }
 
-/* 选中态：2px 品牌竖条 + 品牌浅底 + 提字重。
-   竖条压在组导轨上，读起来是「这一组里的这一项」而不是一颗独立胶囊。 */
+/* 选中态：背景 + 文字色 + 500 字重，三样就够了。
+   浅绿底让「当前位置」退到「主操作」之后；不加粗到 600，不做 2px 竖条。 */
 .admin-side-nav a.is-active {
-  color: var(--fx-ink);
-  font-weight: var(--fx-fw-semi);
-  background: var(--fx-brand-tint);
-  box-shadow: inset 2px 0 0 var(--fx-brand);
+  color: var(--fx-nav-active-ink);
+  font-weight: var(--fx-fw-medium);
+  background: var(--fx-nav-active-bg);
 }
-/* 旧实现用圆点做选中标记，已由竖条取代 */
+.admin-side-nav a.is-active .fx-nav-icon { color: var(--fx-nav-active-ink); }
+.admin-side-nav a.is-active:hover {
+  background: color-mix(in oklab, var(--fx-nav-active-bg) 90%, var(--fx-brand) 10%);
+}
 .admin-side-nav a.is-active::before { content: none; }
+/* 焦点环沿用全局规则，但圆角跟随菜单项（全局兜底是 4px） */
+.admin-side-nav a:focus-visible,
+.admin-side-group-toggle:focus-visible,
+.admin-foot-link:focus-visible { border-radius: var(--fx-r-sm); }
 
-/* 侧栏底部：账号区。一条线把它与导航隔开，贴近视口底 */
+/* 底部：主题 / 账号。分割线压到 7% 墨色，只是「这里结束了」的暗示；
+   区域本身 flex-shrink:0，导航滚动时它原地不动。 */
 .admin-sidebar-foot {
+  flex-shrink: 0;
   margin-top: auto;
-  padding-top: var(--fx-s4);
-  border-top: 1px solid var(--fx-line);
+  padding: var(--fx-s3) var(--fx-s3) calc(var(--fx-s3) + var(--safe-bottom));
+  border-top: 1px solid var(--fx-side-divider);
 }
-.admin-foot-cluster { display: flex; align-items: center; gap: var(--fx-s2); }
-.admin-foot-cluster .btn { min-height: var(--fx-control-h-sm); }
+.admin-foot-cluster { display: flex; align-items: center; gap: var(--fx-s1); }
+/* 侧栏底部的主题开关：沿用前台按钮的尺寸，但配色改走后台令牌，
+   否则暗色后台里它会用前台的 --text-p3，出现一块与侧栏不同色的圆角。 */
+.admin-sidebar .theme-toggle {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--fx-r-sm);
+  color: var(--fx-nav-icon);
+}
+.admin-sidebar .theme-toggle:hover {
+  color: var(--fx-ink);
+  background: var(--fx-nav-hover-bg);
+  border-color: transparent;
+}
+.admin-foot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--fx-r-sm);
+  background: transparent;
+  color: var(--fx-muted);
+  font-family: inherit;
+  font-size: var(--fx-fs-sm);
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--fx-dur-1) var(--fx-ease), background var(--fx-dur-1) var(--fx-ease);
+}
+.admin-foot-link:hover { color: var(--fx-ink); background: var(--fx-nav-hover-bg); }
+.admin-foot-link:active { background: var(--fx-nav-press-bg); }
+.admin-foot-link svg { color: var(--fx-nav-icon); }
 
 /* ── 主体 ── */
 .admin-body { min-width: 0; display: flex; flex-direction: column; }
@@ -1705,46 +1802,37 @@ a.shuo-main:hover .shuo-text { color: var(--fx-brand-ink); }
 }
 
 /* ── 抽屉内的后台导航（手机）──
-   与侧栏同一套层级：组头是可点的章节按钮（细线 + 箭头），子项挂导轨。
-   手机不做「组头 28px 的紧凑版」：组头热区同样 48dp，否则手指点不中。 */
-.sheet-nav { display: flex; flex-direction: column; gap: var(--fx-s1); }
+   与侧栏同一套层级，但触摸尺寸不同：组头与菜单项都 >= 48dp。
+   同样不做「细线 + 导轨」——手机抽屉本来就窄，再画两条线只会更像表格。
+   组头 48px 高、菜单项 48px 高、圆角 6px；选中态与侧栏共用同一组令牌。 */
+.sheet-nav { display: flex; flex-direction: column; gap: var(--fx-s4); padding-bottom: var(--fx-s2); }
 .sheet-nav-group { display: flex; flex-direction: column; }
-.sheet-nav-group + .sheet-nav-group { margin-top: var(--fx-s1); }
 .sheet-nav-toggle {
   display: flex;
   align-items: center;
-  gap: var(--fx-s2);
+  gap: 6px;
   width: 100%;
   min-height: var(--tap-lg);
-  padding: 0 var(--fx-s3);
+  padding: 0 var(--fx-s1);
   border: 0;
   border-radius: var(--fx-r-sm);
   background: transparent;
-  color: var(--fx-ink-2);
+  color: var(--fx-nav-group-ink);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
+  transition: color var(--fx-dur-1) var(--fx-ease);
 }
-.sheet-nav-toggle:active { background: var(--fx-brand-tint); }
+.sheet-nav-toggle:active { color: var(--fx-ink-2); }
 .sheet-nav-title {
   font-size: var(--fx-fs-xs);
   font-weight: var(--fx-fw-semi);
+  line-height: 1;
   letter-spacing: 0.08em;
   color: inherit;
   white-space: nowrap;
 }
-.sheet-nav-rule {
-  flex: 1;
-  height: 1px;
-  min-width: var(--fx-s2);
-  background: var(--fx-line);
-}
-.sheet-nav-group[data-current="true"] .sheet-nav-toggle { color: var(--fx-ink); }
-.sheet-nav-group[data-current="true"] .sheet-nav-rule { background: var(--fx-brand-line); }
-.sheet-nav-group[data-current="true"] .sheet-nav-links { border-left-color: var(--fx-brand-line); }
-.sheet-nav-group[data-current="true"][data-collapsed="true"] .sheet-nav-toggle {
-  box-shadow: inset 2px 0 0 var(--fx-brand);
-}
+.sheet-nav-group[data-current="true"] .sheet-nav-toggle { color: var(--fx-nav-active-ink); }
 .sheet-nav-group[data-collapsed="true"] .fx-nav-chevron { transform: rotate(-90deg); }
 .sheet-nav-body {
   display: grid;
@@ -1754,38 +1842,39 @@ a.shuo-main:hover .shuo-text { color: var(--fx-brand-ink); }
 .sheet-nav-group[data-collapsed="true"] .sheet-nav-body { grid-template-rows: 0fr; }
 .sheet-nav-clip { min-height: 0; overflow: hidden; }
 .sheet-nav-links {
-  margin-left: 7px;
-  padding-left: var(--fx-s3);
-  border-left: 1px solid var(--fx-line);
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
+  padding-top: var(--fx-s1);
 }
 .sheet-nav a {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   min-height: var(--tap-lg);
-  padding: 0 var(--fx-s3);
+  padding: 0 var(--fx-s2) 0 var(--fx-s3);
   border-radius: var(--fx-r-sm);
   font-size: var(--fx-fs-base);
-  color: var(--fx-ink-2);
+  color: var(--fx-nav-ink);
   text-decoration: none;
+  transition: background var(--fx-dur-1) var(--fx-ease), color var(--fx-dur-1) var(--fx-ease);
 }
+.sheet-nav a .fx-nav-icon { flex-shrink: 0; color: var(--fx-nav-icon); }
 .sheet-nav a.is-active {
-  background: var(--fx-brand-tint);
-  color: var(--fx-ink);
-  font-weight: var(--fx-fw-semi);
-  box-shadow: inset 2px 0 0 var(--fx-brand);
+  background: var(--fx-nav-active-bg);
+  color: var(--fx-nav-active-ink);
+  font-weight: var(--fx-fw-medium);
 }
-.sheet-nav a:active { background: var(--fx-sunken); }
+.sheet-nav a.is-active .fx-nav-icon { color: var(--fx-nav-active-ink); }
+.sheet-nav a:active { background: var(--fx-nav-press-bg); }
 .admin-sheet-compose {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   width: 100%;
   min-height: var(--tap-lg);
-  margin-bottom: var(--fx-s4);
+  margin-bottom: var(--fx-s5);
 }
 
 /* ── 命令面板 ── */

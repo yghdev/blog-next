@@ -157,3 +157,76 @@ export const IconUpload = (p: P) => (
 export const IconSpark = (p: P) => (
   <Svg {...p}><path d="M10 3v3M10 14v3M3 10h3M14 10h3M5 5l2 2M13 13l2 2M15 5l-2 2M7 13l-2 2" /></Svg>
 );
+
+/* ── 导航图标（后台侧栏用）────────────────────────────────────────────
+   与工具栏同一套语言：20×20 画布、1.6 描边、圆头、currentColor。
+   刻意保持"同一笔画粗细 + 同一视觉重量"，否则十项菜单会像拼装件。
+   全部单色线性，不用 emoji：emoji 的彩色与字体差异会压过品牌色。 */
+export const IconGrid = (p: P) => (
+  <Svg {...p}>
+    <rect x="3.5" y="3.5" width="5.4" height="5.4" rx="1" />
+    <rect x="11.1" y="3.5" width="5.4" height="5.4" rx="1" />
+    <rect x="3.5" y="11.1" width="5.4" height="5.4" rx="1" />
+    <rect x="11.1" y="11.1" width="5.4" height="5.4" rx="1" />
+  </Svg>
+);
+export const IconNote = (p: P) => (
+  <Svg {...p}>
+    <path d="M4.5 3.5h7.2l3.8 3.8v9.2h-11z" />
+    <path d="M11.5 3.5v4h4M7.2 11h5.6M7.2 13.8h4" />
+  </Svg>
+);
+export const IconChat = (p: P) => (
+  <Svg {...p}>
+    <path d="M3.5 5.5h8.2v6.2H7l-2.6 2.1v-2.1H3.5z" />
+    <path d="M9.2 4.2h7.3v6.1h-1.4v2l-2.4-2H9.2" />
+  </Svg>
+);
+export const IconPage = (p: P) => (
+  <Svg {...p}>
+    <path d="M3.5 5.2h13v9.6h-13zM3.5 8.4h13" />
+    <path d="M6 11.4h3.2" />
+  </Svg>
+);
+export const IconComment = (p: P) => (
+  <Svg {...p}><circle cx="10" cy="10" r="6.4" /><path d="M6.6 6.6h6.8M6.6 10h6.8M6.6 13.4h4.2" /></Svg>
+);
+export const IconArchive = (p: P) => (
+  <Svg {...p}>
+    <path d="M3.2 4.5h13.6v3.2H3.2zM4.4 7.7h11.2v7.8H4.4z" />
+    <path d="M8.2 10.6h3.6" />
+  </Svg>
+);
+export const IconMedia = (p: P) => (
+  <Svg {...p}>
+    <path d="M3.5 4.5h9.4v9.4H3.5z" />
+    <path d="M3.5 11.2l2.8-2.6 2.4 2.2 1.7-1.6 2.5 2.3" />
+    <circle cx="10.4" cy="7.2" r="1.05" />
+    <path d="M15.2 7.2h1.3v8.3H7.5v-1.3" />
+  </Svg>
+);
+export const IconExternal = (p: P) => (
+  <Svg {...p}>
+    <path d="M11.2 4.2h4.6v4.6M15.4 4.6 9.3 10.7" />
+    <path d="M13.2 12.2v3.4H4.4V6.8h3.4" />
+  </Svg>
+);
+export const IconLog = (p: P) => (
+  <Svg {...p}>
+    <path d="M4.6 3.5h9.2v13H4.6zM7.2 7h3.6M7.2 10h4.6M7.2 13h2.8" />
+    <path d="M15.4 6.6v8.4H7" />
+  </Svg>
+);
+export const IconSliders = (p: P) => (
+  <Svg {...p}>
+    <path d="M4 6.2h12M4 13.8h12" />
+    <circle cx="7.4" cy="6.2" r="1.9" />
+    <circle cx="12.6" cy="13.8" r="1.9" />
+  </Svg>
+);
+export const IconLogout = (p: P) => (
+  <Svg {...p}>
+    <path d="M12.2 3.8H4.4v12.4h7.8" />
+    <path d="M9.2 10h7M13.4 7l2.8 3-2.8 3" />
+  </Svg>
+);
