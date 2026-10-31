@@ -174,10 +174,24 @@ T("门槛4: UI 发布后公开路由可见，改 slug 后旧地址 308 跳转", 
   await page.locator("button", { hasText: "发布" }).first().click();
   await page.waitForTimeout(2500);
 
-  // 公开可见
+  /**
+   * 文章规范地址是 `/p/<id>`（2026-10-30「文章地址改编号」）。
+   *
+   * 发布后旧 slug `/v-gate-public` **不原地渲染**，而是 308 到 `/p/<id>`；
+   * 改 slug 之后 `/v-gate-renamed` 也一样 308 到 `/p/<id>`（slug 只是别名，
+   * 不是地址）。所以：
+   *   ① 用 `redirect: "follow"`（fetch 默认）拿正文 —— 它会自动跟过 308；
+   *   ② 单独用 `redirect: "manual"` 钉住「308 + Location = /p/<id>」这个契约。
+   *
+   * 早先这里断言 `location === "/v-gate-renamed"`（slug 之间的跳转），
+   * 那是改编号之前的规则；改编号后 Location 恒为 /p/<id>，断言因此长期假红。
+   */
+  const canonical = "/p/" + id;
+
+  // 公开可见：跟随 308 后必须能看到正文
   const pub = await fetch(server.base + "/v-gate-public");
-  const html = await pub.text();
-  assert.match(html, /公开正文 V1/, "发布后公开路由必须能看到正文");
+  assert.equal(pub.status, 200, "跟随重定向后应为 200");
+  assert.match(await pub.text(), /公开正文 V1/, "发布后公开路由必须能看到正文");
 
   // 改 slug（元数据 PATCH，需带 revision）
   const cur = await getPost(page, id);
@@ -187,7 +201,7 @@ T("门槛4: UI 发布后公开路由可见，改 slug 后旧地址 308 跳转", 
   assert.equal(patched.status(), 200, await patched.text());
 
   /**
-   * 旧地址 308 -> 新地址（方案 §11.3：当前契约是 308 不是 301）。
+   * 旧地址必须 308 到规范地址（方案 §11.3：当前契约是 308 不是 301）。
    *
    * 必须轮询：`revalidateTag(tag, "max")` 是 stale-while-revalidate，
    * 失效后**第一次请求仍返回旧的 200 缓存**，第二次才变成 308。
@@ -195,13 +209,24 @@ T("门槛4: UI 发布后公开路由可见，改 slug 后旧地址 308 跳转", 
    */
   const old = await waitForFresh(async () => {
     const r = await fetch(server.base + "/v-gate-public", { redirect: "manual" });
-    return { ok: r.status === 308, status: r.status, location: r.headers.get("location") };
+    return {
+      ok: r.status === 308 && r.headers.get("location") === canonical,
+      status: r.status,
+      location: r.headers.get("location"),
+    };
   }, { label: "旧 slug 308 跳转" });
   assert.equal(old.status, 308, "旧 slug 必须 308 跳转");
-  assert.equal(old.location, "/v-gate-renamed");
+  assert.equal(old.location, canonical, "Location 必须指向规范地址 /p/<id>，实际 " + old.location);
 
-  const neu = await fetch(server.base + "/v-gate-renamed");
-  assert.match(await neu.text(), /公开正文 V1/, "新地址必须能正常渲染");
+  // 新 slug 同样只是别名：也 308 到 /p/<id>
+  const renamed = await fetch(server.base + "/v-gate-renamed", { redirect: "manual" });
+  assert.equal(renamed.status, 308, "新 slug 也应是 308 到规范地址");
+  assert.equal(renamed.headers.get("location"), canonical, "新 slug 的 Location 也必须是 /p/<id>");
+
+  // 规范地址能正常渲染正文（改 slug 不影响内容可访问性）
+  const neu = await fetch(server.base + canonical);
+  assert.equal(neu.status, 200, "规范地址必须 200");
+  assert.match(await neu.text(), /公开正文 V1/, "规范地址必须能正常渲染");
 });
 
 /* ══════════════════════════════════════════════════════════════════

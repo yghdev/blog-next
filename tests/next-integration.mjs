@@ -149,9 +149,31 @@ try {
 
   /* ---------------------- 发布可见性与 308 ---------------------- */
   const published = await create({ type: "post", slug: "publication-new", title: "NEXT_PUBLIC_NEW", content: "NEXT_PUBLIC_NEW_BODY", status: "published" });
-  const publishedPage = await fetchText(server.base, "/publication-new");
-  assert.match(publishedPage.text, /NEXT_PUBLIC_NEW_BODY/, "published post must be publicly visible");
-  console.log("PASS publication visibility");
+
+  /**
+   * 文章规范地址是 `/p/<id>`（2026-10-30「文章地址改编号」起）。
+   * 旧 slug 地址**不是 404 也不是原地渲染**，而是 308 跳到编号地址 ——
+   * 这是兼容层，RSS 与外部索引里的老链接必须还能用。
+   *
+   * 所以这里要断言两件事，缺一不可：
+   *   ① 旧地址 308 且 Location 指向 `/p/<id>`（重定向契约）
+   *   ② 编号地址能渲染正文（内容确实公开可见）
+   *
+   * 早先的写法只请求旧地址并期待正文，依赖的是"旧 slug 原地渲染"，
+   * 那个行为在改编号时就没了；这条断言因此长期假红。
+   */
+  const slugRes = await fetch(server.base + "/publication-new", { redirect: "manual" });
+  assert.equal(slugRes.status, 308, "旧 slug 地址必须 308 到规范地址");
+  assert.equal(
+    slugRes.headers.get("location"),
+    "/p/" + published.id,
+    "Location 必须指向 /p/<id>，实际 " + slugRes.headers.get("location")
+  );
+
+  const canonical = await fetchText(server.base, "/p/" + published.id);
+  assert.equal(canonical.status, 200, "规范地址必须 200");
+  assert.match(canonical.text, /NEXT_PUBLIC_NEW_BODY/, "published post must be publicly visible at its canonical URL");
+  console.log("PASS publication visibility: old slug 308 -> /p/" + published.id + ", canonical renders body");
 
   const redirectPost = await create({ type: "post", slug: "redirect-old", title: "REDIRECT_TITLE", content: "REDIRECT_BODY", status: "published" });
   // 先把它抓进 unstable_cache，再改 slug —— 这样 308 不会被"根本没缓存过"掩盖
@@ -171,9 +193,19 @@ try {
     return { ok: res.status === 308, status: res.status, location: res.headers.get("location") };
   }, { label: "old slug 308 redirect" });
   assert.equal(redirect.status, 308, "old slug must permanently redirect (not 301/307)");
-  assert.equal(redirect.location, "/redirect-new");
-  assert.match((await fetchText(server.base, "/redirect-new")).text, /REDIRECT_BODY/);
-  console.log("PASS slug change: 308 + Location, target renders new content");
+  // 改 slug 之后，**新旧两个 slug 都**指向规范地址 /p/<id>（文章只认编号）：
+  //   /redirect-old -> 308 -> /p/<id>（别名表兜底）
+  //   /redirect-new -> 308 -> /p/<id>（当前 slug 也走兼容层）
+  assert.equal(
+    redirect.location,
+    "/p/" + redirectPost.id,
+    "old slug 的 Location 必须指向 /p/<id>，实际 " + redirect.location
+  );
+  const renamedRes = await fetch(server.base + "/redirect-new", { redirect: "manual" });
+  assert.equal(renamedRes.status, 308, "新 slug 同样 308 到规范地址");
+  assert.equal(renamedRes.headers.get("location"), "/p/" + redirectPost.id, "新 slug 的 Location 也必须是 /p/<id>");
+  assert.match((await fetchText(server.base, "/p/" + redirectPost.id)).text, /REDIRECT_BODY/);
+  console.log("PASS slug change: 308 + Location, canonical /p/" + redirectPost.id + " renders content");
 
   /* ------------------- 缓存真实生效 / 真实失效 ------------------- */
   // 这一段是上一版最大的窟窿：原来只有 assert.ok(true)，等于没验证。
@@ -184,7 +216,10 @@ try {
   const cachedPost = await create({ type: "post", slug: cachedSlug, title: "CACHE_BEFORE_TITLE", content: "CACHE_BEFORE_BODY", status: "published" });
 
   // 1) 预热：把这一页读进 unstable_cache
-  const warmed = await fetchText(server.base, "/" + cachedSlug);
+  //    文章页走缓存的是 **规范地址** /p/<id>；旧 slug 只做 308 不渲染正文，
+  //    所以预热与后续断言都必须打规范地址，否则测的是重定向壳子。
+  const canonicalHref = "/p/" + cachedPost.id;
+  const warmed = await fetchText(server.base, canonicalHref);
   assert.match(warmed.text, /CACHE_BEFORE_BODY/, "precondition: page readable before caching");
 
   // 2) 绕过应用层直接改库（不经过任何 revalidateTag）
@@ -199,7 +234,7 @@ try {
   assert.equal(dbOnlySearch.hits.length, 1, "no-store search must see the direct DB write immediately");
 
   // 4) 但页面仍是旧值 —— 证明它来自缓存，而不是数据库
-  const stillCached = await fetchText(server.base, "/" + cachedSlug);
+  const stillCached = await fetchText(server.base, canonicalHref);
   assert.match(stillCached.text, /CACHE_BEFORE_BODY/, "page must still serve the cached body after a DB-only write");
   assert.doesNotMatch(stillCached.text, /CACHE_DB_ONLY_BODY/, "cache must not have been bypassed");
   console.log("PASS cache is genuinely in play: DB changed, page unchanged");
@@ -216,7 +251,7 @@ try {
   // 注意：不要把 ok 判定用的文本裁掉再拿去断言 —— 上一版返回了 text.slice(0,400)，
   // 结果断言在一个没有正文的 HTML 前缀上，失败信息还看不出是"截断"造成的。
   const afterInvalidate = await waitForFresh(async () => {
-    const res = await fetchText(server.base, "/" + cachedSlug);
+    const res = await fetchText(server.base, canonicalHref);
     const ok = /CACHE_AFTER_BODY/.test(res.text) && !/CACHE_BEFORE_BODY/.test(res.text);
     return { ok, text: res.text };
   }, { label: "revalidated page body" });
