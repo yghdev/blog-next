@@ -29,6 +29,9 @@
   --card-bg: #fcfcfb;
   --radius: 24px;
   --fs: 16px;
+  /* 两栏 sticky 的统一基线。原先 .sidebar 40px / .toc-col 48px 各自为政，
+     滚动时右栏比左栏低 8px，视觉上明显没对齐。 */
+  --sticky-top: 40px;
   --w-main: 800px;
   --gap-col: 40px;
   --w-side: 288px;
@@ -188,7 +191,7 @@ a:hover { color: var(--link-hover); }
 
 .sidebar {
   position: sticky;
-  top: 40px;
+  top: var(--sticky-top);
   display: flex;
   flex-direction: column;
   align-self: start;
@@ -546,10 +549,19 @@ a:hover { color: var(--link-hover); }
 /* 外层列也要参与 sticky，否则父级高度不够，sticky 会失效跟着滚走 */
 .toc-col {
   position: sticky;
-  top: 48px;
+  top: var(--sticky-top);
   align-self: start;
-  max-height: calc(100vh - 96px);
-  overflow-y: auto;
+  /*
+   * 这里**故意不加** max-height / overflow-y（A-4）。
+   *
+   * 原来写成 `max-height: calc(100vh - 96px); overflow-y: auto`，于是右栏
+   * 自身成了一个滚动容器：18 条友链时 clientHeight 704 / scrollHeight 1647，
+   * 滚轮落在右栏里滚的是右栏、页面不动 —— 两个滚动区抢滚轮，而且外层
+   * 页面滚动条纹丝不动，用户会以为页面卡住了。
+   *
+   * 需求是「默认使用整个页面统一滚动」：右栏本身不滚，跟着页面走。
+   * 只有「目录」在超长时才独立滚动，见下方 .toc-list。
+   */
 }
 /* 目录。注意：RightBar 渲染的类名是 .toc-list，
    此前样式全写在 .toc / .toc ul 上，两处对不上 —— 线上目录一直是
@@ -560,6 +572,17 @@ a:hover { color: var(--link-hover); }
   padding: 0;
   margin: 0;
   border-left: 1px solid var(--border);
+  /*
+   * 目录是唯一允许"独立滚动"的东西：它可能几十上百条，跟着页面滚到下面
+   * 就没法用了。上限用 dvh（移动端地址栏收起时不会突然变高/变矮），
+   * 减去顶部 sticky 基线与上下留白。
+   *
+   * overscroll-behavior: contain 是关键：没有它，目录滚到底后继续滚会把
+   * 滚动链传给页面，出现"滚目录滚着滚着页面突然跳下去"的诡异手感。
+   */
+  max-height: calc(100dvh - var(--sticky-top) - 96px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .toc-title {
   font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
