@@ -1,10 +1,28 @@
 import { getDb } from "./db";
 import { hmac, hashToken } from "./crypto";
-import { dateKeyIn, DISPLAY_TZ, nowIso } from "./time";
+import { isoDateIn, DISPLAY_TZ, nowIso } from "./time";
 import { getRawSetting } from "./settings";
 
 /**
  * 自建访客统计（2026-10-30）。
+ *
+ * ## hits.day 的口径契约（A-2，2026-10-31）
+ *
+ * `day` 是 TEXT 列，**所有区间查询都靠 `WHERE day >= ?` 做字典序比较**
+ * （`whereFor` / `getDailySeries`）。这决定了它必须是：
+ *
+ *   ① **补零**的 `YYYY-MM-DD` —— 否则 "2026-8-5" 在字典序里大于 "2026-10-31"，
+ *      任何区间都会误命中；
+ *   ② 按**展示时区**（DISPLAY_TZ）切日 —— 与页面上看到的日期一致；
+ *   ③ 由 `isoDateIn()` 统一生成 —— 本文件的 `recordHit` 与
+ *      `scripts/import-umami-events.mjs` 是仅有的两个写入者，
+ *      任何新的写入者都必须调用它，不要自己 slice 时间串。
+ *
+ * 注意区分**格式**与**历史数据**：A-2 只统一**新写入**的格式与口径，
+ * 不负责清洗旧行（那需要 UPDATE 生产数据，属于 A-3 的迁移）。因此在 A-3
+ * 执行之前，库里仍可能同时存在 "2026-8-5" 与 "2026-08-05" 两种形态，
+ * 旧行仍会干扰区间比较。**这是已知的、有意的阶段性状态**：A-2 的测试
+ * 显式覆盖了「混合格式共存」这一事实，不假装历史数据已归一化。
  *
  * 设计只有一句话：**只存事件，所有指标查询时聚合**。
  *
@@ -227,7 +245,7 @@ export function recordHit(input: HitInput): { ok: boolean; reason?: string } {
     cutoff,
     refKind === "site" ? "" : refHost,   // 站内来源不存 host，避免把自家域名堆进报表
     refKind,
-    dateKeyIn(now, DISPLAY_TZ),
+    isoDateIn(now, DISPLAY_TZ),
     now
   );
 
@@ -284,7 +302,7 @@ function rangeStart(range: Range): string | null {
   const days = range === "today" ? 0 : range === "7d" ? 6 : range === "30d" ? 29 : -1;
   if (days < 0) return null;
   const from = new Date(now.getTime() - days * 86400000);
-  return dateKeyIn(from.toISOString(), DISPLAY_TZ);
+  return isoDateIn(from.toISOString(), DISPLAY_TZ);
 }
 
 function whereFor(range: Range): { sql: string; args: unknown[] } {
@@ -338,7 +356,7 @@ export type DayPoint = { day: string; pv: number; uv: number };
 /** 最近 N 天（含今天）的每日 PV/UV，缺失日期补 0 —— 图表不能有空洞 */
 export function getDailySeries(days = 14): DayPoint[] {
   const db = getDb();
-  const start = dateKeyIn(new Date(Date.now() - (days - 1) * 86400000).toISOString(), DISPLAY_TZ);
+  const start = isoDateIn(new Date(Date.now() - (days - 1) * 86400000).toISOString(), DISPLAY_TZ);
   const rows = db.prepare(
     "SELECT day, COUNT(*) AS pv, COUNT(DISTINCT visitor) AS uv FROM hits " +
     "WHERE day >= ? GROUP BY day"
@@ -347,7 +365,7 @@ export function getDailySeries(days = 14): DayPoint[] {
   const byDay = new Map(rows.map((r) => [r.day, r]));
   const out: DayPoint[] = [];
   for (let i = days - 1; i >= 0; i--) {
-    const key = dateKeyIn(new Date(Date.now() - i * 86400000).toISOString(), DISPLAY_TZ);
+    const key = isoDateIn(new Date(Date.now() - i * 86400000).toISOString(), DISPLAY_TZ);
     const hit = byDay.get(key);
     out.push({ day: key, pv: hit?.pv ?? 0, uv: hit?.uv ?? 0 });
   }

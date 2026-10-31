@@ -29,6 +29,27 @@
  *   visit_id        -> is_entry （同一 visit_id 的首条 = 1）
  *   created_at      -> created_at / day
  *
+ * ## day 的生成（与 lib/visitor-stats.ts 必须完全一致）
+ *
+ * `hits.day` 是**字符串**列，区间查询靠 `WHERE day >= ?` 做字典序比较，
+ * 因此必须是补零的 `YYYY-MM-DD`，且按**展示时区**（DISPLAY_TZ，默认
+ * Asia/Shanghai）切日 —— 与实时写入 `lib/visitor-stats.ts` 的 `isoDateIn()`
+ * **完全同口径**。
+ *
+ * 为什么在本文件里重写一遍而不是 `import { isoDateIn } from "../lib/time.ts"`：
+ * 部署产物 `dist/` 只包含 `.next/standalone` + `scripts/` + `content/` + `deploy/`，
+ * **不包含 `lib/`**（见 scripts/package-standalone.mjs:86-91）。scripts 下的文件
+ * 会被原样拷进 dist，若它引用 `../lib/*.ts`，在生产上会直接
+ * `ERR_MODULE_NOT_FOUND` —— `scripts/init-db.mjs` 已经踩过这个坑。
+ * 所以运维脚本一律保持"只依赖 node 内置模块 + better-sqlite3"，
+ * 用 tests/visitor-stats.test.ts 的交叉断言锁死两边等价，而不是靠 import 共享。
+ *
+ * 历史上这里写的是 `createdUtc.slice(0, 10)`，那有两个错：
+ *   1) 按 **UTC** 切日，东八区凌晨的事件会被算到前一天（例如
+ *      2026-09-30T18:00Z 实际是上海 10-01 凌晨，会被记成 09-30）；
+ *   2) 与当时的 `dateKeyIn`（不补零）产生 `2026-08-05` vs `2026-8-5`
+ *      两种形态共存，字典序比较全面失真。
+ *
  * ## 幂等
  *
  * 用 event_id 做去重键写进 `import_key`，重复跑不会重复计数。
@@ -114,6 +135,26 @@ db.pragma("journal_mode = WAL");
 
 const SELF_HOST = normalizeHost(process.env.SITE_URL || "blog.yghsite.cn");
 
+/**
+ * 展示时区下的补零日期键 `YYYY-MM-DD`。
+ *
+ * **必须与 lib/time.ts 的 `isoDateIn()` 逐字等价**（同一个 en-CA + 2-digit
+ * 组合，同一个默认时区）。两边一旦漂移，实时写入与历史导入就会产生两种
+ * 格式，`WHERE day >= ?` 的字典序比较立刻失真。
+ * tests/visitor-stats.test.ts 有一条交叉断言同时跑两边的实现。
+ */
+const DISPLAY_TZ = process.env.DISPLAY_TZ || "Asia/Shanghai";
+const DAY_FMT = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric", month: "2-digit", day: "2-digit", timeZone: DISPLAY_TZ,
+});
+function dayKeyIn(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const p = DAY_FMT.formatToParts(d);
+  const g = (t) => p.find((x) => x.type === t).value;
+  return g("year") + "-" + g("month") + "-" + g("day");
+}
+
 // Umami 的 session_id 是 UUID；本系统的 visitor 是 HMAC 前 16 位。
 // 历史事件没有原始 IP/UA，无法重算——直接对 session_id 取摘要，
 // 保持「不可逆、定长、不与新数据格式冲突」这三个性质即可。
@@ -176,7 +217,8 @@ const run = db.transaction(() => {
 
     const refHost = normalizeHost(refDomain);
     const kind = classify(refDomain, SELF_HOST);
-    const day = createdUtc.slice(0, 10);
+    // 与 lib/visitor-stats.ts 的 recordHit 同口径：补零 + 展示时区
+    const day = dayKeyIn(createdUtc);
 
     dayCount.set(day, (dayCount.get(day) ?? 0) + 1);
     kindCount.set(kind, (kindCount.get(kind) ?? 0) + 1);

@@ -285,6 +285,184 @@ test("基线只加在「全部」区间：选「今天」不该看到历史总�
   db.prepare("DELETE FROM settings WHERE key = 'stats:baseline:total'").run();
 });
 
+/* ══════════════════════════════════════════════════════════════════
+   A-2：hits.day 读写口径统一
+
+   背景：day 是**字符串**列，区间查询靠 `WHERE day >= ?` 做字典序比较。
+   因此写入侧必须是补零的 YYYY-MM-DD，否则：
+     - 1–9 月的 "2026-8-5" 在字典序上大于 "2026-10-31" → 任何区间都误命中
+     - getDailySeries 用 dateKeyIn 生成 key 去 Map.get(DB 原值) → 永不相等
+
+   A-2 只负责**格式与口径**；旧格式历史行的清洗是 A-3 的迁移，本文件
+   不假定历史数据已归一化（混合格式共存时这些断言仍应成立）。
+
+   测试策略：只走公开函数（recordHit / getSummary / getDailySeries），
+   不导出 whereFor / rangeStart 之类的内部函数。
+   ══════════════════════════════════════════════════════════════════ */
+
+const PADDED_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+function clearHits() {
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+}
+
+/** 按「N 天前（展示时区）」构造补零日期键，避免依赖测试当天的月份 */
+function dayKeyDaysAgo(n: number): string {
+  return timeMod.isoDateIn(new Date(Date.now() - n * 86400000).toISOString(), timeMod.DISPLAY_TZ);
+}
+
+test("A-2 实时写入：recordHit 的 day 是补零 YYYY-MM-DD", () => {
+  clearHits();
+  const id = seedPost("a2-write");
+  const r = v.recordHit({ path: "/p/" + id, ip: "1.1.1.1", ua: "Mozilla/5.0 Chrome/120.0" });
+  assert.equal(r.ok, true);
+
+  const row = db.prepare("SELECT day, created_at FROM hits ORDER BY id DESC LIMIT 1").get() as
+    { day: string; created_at: string };
+  assert.match(row.day, PADDED_DAY, "day 必须是补零 YYYY-MM-DD，实际：" + row.day);
+  // 与展示时区下的「今天」完全一致（同一天，不是差一天）
+  assert.equal(row.day, timeMod.isoDateIn(row.created_at, timeMod.DISPLAY_TZ));
+});
+
+test("A-2 日序列 key：getDailySeries 返回的每个 day 都是补零 YYYY-MM-DD", () => {
+  clearHits();
+  const series = v.getDailySeries(30);
+  assert.equal(series.length, 30);
+  for (const p of series) {
+    assert.match(p.day, PADDED_DAY, "日序列 key 必须补零：" + p.day);
+  }
+  // 最后一天是今天，且与写入侧同一口径
+  assert.equal(series[29].day, dayKeyDaysAgo(0));
+});
+
+test("A-2 日序列匹配：今天写入的记录能被 getDailySeries 命中（key 与 DB 同格式）", () => {
+  clearHits();
+  const id = seedPost("a2-series-match");
+  v.recordHit({ path: "/p/" + id, ip: "2.2.2.2", ua: "Mozilla/5.0 Chrome/120.0" });
+
+  const series = v.getDailySeries(7);
+  const today = series[series.length - 1];
+  assert.equal(today.day, dayKeyDaysAgo(0));
+  assert.equal(today.pv, 1, "今天的记录必须出现在今天的柱子上（key 匹配）");
+});
+
+test("A-2 区间边界：60 天前的记录不进 today / 7d，但进 all", () => {
+  clearHits();
+  const oldDay = dayKeyDaysAgo(60);
+  const oldIso = new Date(Date.now() - 60 * 86400000).toISOString();
+  db.prepare(
+    "INSERT INTO hits (path, visitor, is_entry, ref_host, ref_kind, day, created_at) " +
+    "VALUES (?, ?, 1, '', 'direct', ?, ?)"
+  ).run("/a2-old", "visitor-old", oldDay, oldIso);
+
+  const id = seedPost("a2-boundary");
+  v.recordHit({ path: "/p/" + id, ip: "3.3.3.3", ua: "Mozilla/5.0 Chrome/120.0" });
+
+  assert.equal(v.getSummary("today").pvLocal, 1, "today 只含今天");
+  assert.equal(v.getSummary("7d").pvLocal, 1, "7d 只含最近 7 天");
+  assert.equal(v.getSummary("30d").pvLocal, 1, "30d 不含 60 天前");
+  assert.equal(v.getSummary("all").pvLocal, 2, "all 含全部");
+});
+
+test("A-2 区间边界：恰好 7 天前（第 7 天）仍属于 7d", () => {
+  clearHits();
+  // 7d = 今天 + 前 6 天；第 7 天前应被排除，第 6 天前应被包含
+  for (const n of [6, 7]) {
+    db.prepare(
+      "INSERT INTO hits (path, visitor, is_entry, ref_host, ref_kind, day, created_at) " +
+      "VALUES (?, ?, 1, '', 'direct', ?, ?)"
+    ).run("/a2-d" + n, "visitor-d" + n, dayKeyDaysAgo(n), new Date(Date.now() - n * 86400000).toISOString());
+  }
+  assert.equal(v.getSummary("7d").pvLocal, 1, "7d 应只含第 6 天前那一条");
+  assert.equal(v.getSummary("all").pvLocal, 2);
+});
+
+test("A-2 混合历史格式：旧的不补零行原样保留，不会被 A-2 洗成新格式", () => {
+  clearHits();
+  // 模拟 A-3 之前的历史数据形态
+  db.prepare(
+    "INSERT INTO hits (path, visitor, is_entry, ref_host, ref_kind, day, created_at) " +
+    "VALUES (?, ?, 1, '', 'direct', ?, ?)"
+  ).run("/a2-legacy", "visitor-legacy", "2026-8-5", "2026-08-05T02:00:00.000Z");
+
+  const legacy = db.prepare("SELECT day FROM hits WHERE path = '/a2-legacy'").get() as { day: string };
+  assert.equal(legacy.day, "2026-8-5", "A-2 不做数据迁移，旧格式必须原样保留（清洗是 A-3 的职责）");
+
+  // 同时写入一条新数据：新数据必须是补零形态，两种格式可以共存
+  const id = seedPost("a2-mixed");
+  v.recordHit({ path: "/p/" + id, ip: "4.4.4.4", ua: "Mozilla/5.0 Chrome/120.0" });
+  const fresh = db.prepare("SELECT day FROM hits WHERE path = ?").get("/p/" + id) as { day: string };
+  assert.match(fresh.day, PADDED_DAY, "新写入必须是补零形态");
+  assert.notEqual(fresh.day, "2026-8-5");
+});
+
+test("A-2 导入脚本：Umami 事件按展示时区切日，且补零（与 recordHit 同口径）", async () => {
+  clearHits();
+  const { spawnSync } = await import("node:child_process");
+
+  // 事件时间 2026-09-30T18:00Z = 上海 2026-10-01 02:00
+  // 若按 UTC 粗暴 slice(0,10) 会得到 "2026-09-30" —— 差一天
+  const tsv = path.join(TMP, "umami-a2.tsv");
+  fs.writeFileSync(
+    tsv,
+    "evt-a2-1\t2026-09-30T18:00:00.000Z\t/a2-import\t\t sess-a2\tvisit-a2\n",
+    "utf8"
+  );
+
+  const res = spawnSync(process.execPath, [path.join(process.cwd(), "scripts", "import-umami-events.mjs"), tsv], {
+    env: { ...process.env, DATA_DIR: TMP, DRY_RUN: "1" },
+    encoding: "utf8",
+  });
+  const out = (res.stdout || "") + (res.stderr || "");
+  assert.equal(res.status, 0, "导入脚本应正常退出：" + out);
+  assert.match(out, /2026-10-01=1/, "应按展示时区切到 10-01，而不是 UTC 的 09-30：" + out);
+  assert.doesNotMatch(out, /2026-09-30=1/, "不得按 UTC 切日");
+});
+
+test("A-2 导入脚本与 lib/time.ts 的日期口径逐字等价（交叉断言，防两边漂移）", async () => {
+  /**
+   * 导入脚本**故意不 import lib/time.ts**：scripts 会被原样拷进 dist，
+   * 而 dist 里没有 lib/（scripts/package-standalone.mjs:86-91），
+   * 引用它会让运维脚本在生产上 ERR_MODULE_NOT_FOUND（init-db.mjs 已踩过）。
+   * 代价是两份实现，所以这里用一组边界时刻逐条比对，只要漂移就红。
+   */
+  const { spawnSync } = await import("node:child_process");
+
+  // 覆盖：普通白天、东八区凌晨（跨日）、月末跨月、年末跨年、闰日
+  const cases = [
+    ["2026-03-15T04:00:00.000Z", "2026-03-15"], // 上海 12:00 同日
+    ["2026-09-30T18:00:00.000Z", "2026-10-01"], // 上海次日凌晨 → 必须跨到 10-01
+    ["2026-12-31T20:00:00.000Z", "2027-01-01"], // 跨年
+    ["2026-01-31T17:00:00.000Z", "2026-02-01"], // 跨月
+    ["2024-02-29T10:00:00.000Z", "2024-02-29"], // 闰日
+    ["2026-08-05T02:00:00.000Z", "2026-08-05"], // 1–9 月：两位补零
+  ];
+
+  // 把边界时刻喂给真实脚本（dry-run），从它打印的「按天」里读回判断
+  const tsv = path.join(TMP, "umami-cross.tsv");
+  fs.writeFileSync(
+    tsv,
+    cases.map(([iso], i) => `evt-x-${i}\t${iso}\t/a2-cross-${i}\t\ts${i}\tv${i}`).join("\n") + "\n",
+    "utf8"
+  );
+  const res = spawnSync(process.execPath, [path.join(process.cwd(), "scripts", "import-umami-events.mjs"), tsv], {
+    env: { ...process.env, DATA_DIR: TMP, DRY_RUN: "1" },
+    encoding: "utf8",
+  });
+  const out = (res.stdout || "") + (res.stderr || "");
+  assert.equal(res.status, 0, "脚本应正常退出：" + out);
+
+  for (const [iso, expected] of cases) {
+    const fromLib = timeMod.isoDateIn(iso, timeMod.DISPLAY_TZ);
+    assert.equal(fromLib, expected, "lib/time.ts 的 isoDateIn 结果应符合预期：" + iso);
+    assert.ok(
+      out.includes(expected + "="),
+      `导入脚本应输出 ${expected}=…（与 isoDateIn 一致），实际输出：` + out
+    );
+  }
+});
+
 test("cleanup", () => {
   dbMod.closeDb();
   fs.rmSync(TMP, { recursive: true, force: true });
