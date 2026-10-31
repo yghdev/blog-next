@@ -157,6 +157,15 @@ export function listArchives(): ArchiveGroup[] {
     const ts = r.published_at || r.created_at;
     const y = yearKeyIn(ts);
     const ym = monthKeyIn(ts);
+    // 日期解析不出来时 yearKeyIn/monthKeyIn 返回 ""，继续分组会造出
+    // year="" 的空年份 + label="0 月" 这种假分组。跳过而不是猜日期：
+    // 脏数据该被看见（下面 warn），但不该被伪装成一个月份。
+    if (!y || !ym) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[archives] skipped post with unparsable date:", r.id, JSON.stringify(ts));
+      }
+      continue;
+    }
     if (!years.has(y)) years.set(y, new Map());
     const months = years.get(y)!;
     if (!months.has(ym)) months.set(ym, []);

@@ -778,3 +778,75 @@ test("snapshot: parseSnapshot rejects missing cover and wrong types", () => {
   });
   assert.equal(ok.ok, true);
 });
+
+/* ══════════════════════════════════════════════════════════════════
+   A-1：归档分组 —— 月份标签必须是「N 月」，逐年逐月倒序，
+        且非法/空日期不得制造空年份分组。
+   ══════════════════════════════════════════════════════════════════ */
+
+function insertPublishedPost(
+  slug: string,
+  publishedAt: string | null,
+  createdAt: string = "2026-01-01T00:00:00.000Z"
+): number {
+  const info = dbMod.getDb().prepare(
+    "INSERT INTO posts (type, slug, title, content, status, published_at, created_at) " +
+    "VALUES ('post', ?, ?, '正文', 'published', ?, ?)"
+  ).run(slug, "标题-" + slug, publishedAt, createdAt);
+  return Number(info.lastInsertRowid);
+}
+
+test("A-1 归档：1/8/9/10/11 月标签全部是「N 月」，且严格倒序", () => {
+  const db = dbMod.getDb();
+  db.prepare("DELETE FROM posts").run();
+
+  // 时间都取 02:00Z = 上海 10:00，确保落在同一天，不跨零点
+  insertPublishedPost("a1-jan", "2026-01-03T02:00:00.000Z");
+  insertPublishedPost("a1-aug", "2026-08-05T02:00:00.000Z");
+  insertPublishedPost("a1-sep", "2026-09-08T02:00:00.000Z");
+  insertPublishedPost("a1-oct", "2026-10-29T02:00:00.000Z");
+  insertPublishedPost("a1-nov", "2026-11-01T02:00:00.000Z");
+
+  const groups = publicPosts.listArchives();
+  assert.equal(groups.length, 1, "五篇都在 2026 年，应只有一个年份分组");
+  assert.equal(groups[0].year, "2026");
+  assert.equal(groups[0].count, 5);
+
+  const labels = groups[0].months.map((m) => m.label);
+  assert.deepEqual(labels, ["11 月", "10 月", "9 月", "8 月", "1 月"], "月份标签必须补零后正确、且倒序");
+
+  // 反向确认：没有任何一条是 NaN 月
+  assert.doesNotMatch(labels.join(" "), /NaN/, "不允许出现 NaN 月");
+});
+
+test("A-1 归档：日期完全不可解析时不得产生空年份分组", () => {
+  const db = dbMod.getDb();
+  db.prepare("DELETE FROM posts").run();
+  insertPublishedPost("a1-ok", "2026-08-05T02:00:00.000Z");
+
+  // 直接写脏值（绕过 API），模拟历史脏数据。
+  // 注意 `published_at || created_at` 的回退语义：
+  //   - published_at 为空串是 falsy，会回退到合法的 created_at —— 这是**设计行为**，不算脏数据；
+  //   - 只有「两列都解析不出来」才会真正没有日期可用。
+  insertPublishedPost("a1-garbage-pub", "not-a-date");                       // published 为真但不可解析
+  insertPublishedPost("a1-both-bad", "", "also-not-a-date");                 // 两列都不可解析
+
+  const groups = publicPosts.listArchives();
+  const years = groups.map((g) => g.year);
+  assert.ok(!years.includes(""), "不得出现 year=\"\" 的空年份分组：" + JSON.stringify(years));
+  assert.deepEqual(years, ["2026"], "只保留合法年份");
+  assert.equal(groups[0].count, 1, "两条脏数据都不计入篇数");
+  assert.deepEqual(groups[0].months.map((m) => m.label), ["8 月"]);
+  assert.doesNotMatch(JSON.stringify(groups), /NaN/, "不允许出现 NaN 月");
+});
+
+test("A-1 归档：published_at 为空串时仍回退到 created_at（不误伤正常数据）", () => {
+  const db = dbMod.getDb();
+  db.prepare("DELETE FROM posts").run();
+  insertPublishedPost("a1-fallback", "", "2026-03-04T02:00:00.000Z");
+
+  const groups = publicPosts.listArchives();
+  assert.deepEqual(groups.map((g) => g.year), ["2026"]);
+  assert.deepEqual(groups[0].months.map((m) => m.label), ["3 月"], "应回退到 created_at 的 3 月");
+  assert.equal(groups[0].count, 1);
+});

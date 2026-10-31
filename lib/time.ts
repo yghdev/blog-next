@@ -70,13 +70,47 @@ export function formatIn(value: string | null | undefined, style: "date" | "date
   return fmt(style, tz).format(d);
 }
 
-/** 取 YYYY-MM-DD（展示时区下），用于归档分组与截断显示 */
-export function dateKeyIn(value: string | null | undefined, tz: string = DISPLAY_TZ): string {
+/**
+ * 取 YYYY-MM-DD（展示时区下），**月与日一律补零**。
+ *
+ * 为什么不能用 fmt("date")：那套格式是 `month:"numeric"`，给人和页面看的
+ * （"2026年8月5日"），1–9 月只有一位。把它当**机器可比较的键**用就会出事：
+ *   dateKeyIn -> "2026-8-5" -> monthKeyIn.slice(0,7) = "2026-8-"
+ *   -> lib/posts.ts 的 Number("8-") = NaN -> 归档页渲染「NaN 月」
+ * 而且 `"2026-8-5" >= "2026-10-31"` 在字符串比较下为 true，
+ * 任何 `WHERE day >= ?` 的区间查询都会误命中。
+ *
+ * 用 en-CA + 2-digit：en-CA 的日期顺序本身就是 YYYY-MM-DD，
+ * 不必自己拼分隔符，也不会被 locale 的日期顺序差异坑到。
+ * 输出同时满足 ECMA-262 的 date-only 形态（按 UTC 解析，跨 TZ 一致），
+ * 所以补零后把它再喂回 toUtcIso 也不会因为运行时 TZ 而偏移一天。
+ */
+const DATE_KEY_FMT = new Map<string, Intl.DateTimeFormat>();
+function dateKeyFmt(tz: string): Intl.DateTimeFormat {
+  let f = DATE_KEY_FMT.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat("en-CA", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      timeZone: tz,
+    });
+    DATE_KEY_FMT.set(tz, f);
+  }
+  return f;
+}
+
+export function isoDateIn(value: string | null | undefined, tz: string = DISPLAY_TZ): string {
   const iso = toUtcIso(value);
   if (!iso) return "";
-  const p = fmt("date", tz).formatToParts(new Date(iso));
+  const p = dateKeyFmt(tz).formatToParts(new Date(iso));
   const g = (t: string) => p.find((x) => x.type === t)!.value;
   return g("year") + "-" + g("month") + "-" + g("day");
+}
+
+/** 取 YYYY-MM-DD（展示时区下），用于归档分组与截断显示。保留原导出名，行为见 isoDateIn */
+export function dateKeyIn(value: string | null | undefined, tz: string = DISPLAY_TZ): string {
+  return isoDateIn(value, tz);
 }
 
 export function monthKeyIn(value: string | null | undefined, tz: string = DISPLAY_TZ): string {
