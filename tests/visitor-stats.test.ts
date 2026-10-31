@@ -490,11 +490,10 @@ function todayKey(): string {
   return timeMod.isoDateIn(new Date().toISOString(), timeMod.DISPLAY_TZ);
 }
 
-test("A-3 守卫：非法日期不进入 today / 7d / 30d / all 的任何统计", () => {
+test("A-3 守卫：非法日期不进入 today / 7d / 30d，但**仍计入 all 的 PV**", () => {
   db.prepare("DELETE FROM hits").run();
   db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
 
-  const today = todayKey();
   const id = seedPost("a3-guard");
   v.recordHit({ path: "/p/" + id, ip: "9.9.9.9", ua: "Mozilla/5.0 Chrome/120.0" });
 
@@ -506,21 +505,69 @@ test("A-3 守卫：非法日期不进入 today / 7d / 30d / all 的任何统计"
   insertRawHit("2026-02-30", "2026-02-28T02:00:00.000Z", "/a3-bad-5");
   insertRawHit("2026-13-01", "2026-07-01T02:00:00.000Z", "/a3-bad-6");
 
-  // 正常 PV 必须仍然只有 1（只有 recordHit 那条合法）
+  // ── 区间视图：必须挡住脏行（它们不能参与字符串区间比较）──
   assert.equal(v.getSummary("today").pvLocal, 1, "today 只含合法今日记录");
   assert.equal(v.getSummary("7d").pvLocal, 1, "7d 只含合法记录");
   assert.equal(v.getSummary("30d").pvLocal, 1, "30d 只含合法记录");
 
-  // all：脏行不得被计入。它们的时间跨度从 2026-02 到 2026-08，
-  // 无论如何都不该出现在「全部」里 —— 因为「全部」= 所有**合法**事件
+  // ── all：必须统计**全部**记录 ──
+  // 迁移只规范化日期，绝不改变访问记录总数。day 无法解析的历史行虽然
+  // 不能参与日期维度统计，但它确实是一次真实访问，必须计入「全部」。
+  // 否则「全部 PV」会在迁移前后发生跳变，而这正是路线图 A-3 明确禁止的。
+  const total = (db.prepare("SELECT COUNT(*) c FROM hits").get() as any).c;
+  assert.equal(total, 7, "前置：表里共 7 行（1 条实时 + 6 条脏行）");
   const all = v.getSummary("all");
-  assert.equal(all.pvLocal, 1, "all 不得被脏日期污染，实际 pvLocal=" + all.pvLocal);
-  assert.equal(all.uv, 1, "all 的 UV 也不得被脏行污染");
-  assert.equal(all.visits, 1, "all 的访问次数同样");
+  assert.equal(all.pvLocal, total, "all 的 PV 必须等于 hits 总行数，实际 " + all.pvLocal);
+  assert.equal(all.pvLocal, 7, "all 必须包含 6 条脏行");
+  // UV / 访问次数同理：脏行也是真实访问，不能凭空消失
+  assert.ok(all.uv >= 1, "UV 至少包含那 1 个合法访客");
 
   // 行本身还在（只读守卫，不删数据）
-  assert.equal((db.prepare("SELECT COUNT(*) c FROM hits").get() as any).c, 7, "脏行必须仍在表里");
   assert.equal((db.prepare("SELECT COUNT(*) c FROM hits WHERE path LIKE '/a3-bad-%'").get() as any).c, 6);
+});
+
+test("A-3 守卫：all 的 PV 恒等于 hits 行数（任何 day 形态都不影响）", () => {
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+
+  const cases = [
+    "2026-08-05",              // 合规
+    "2026-8-5",                // 未补零
+    "bogus",                   // 垃圾串
+    "2026-02-30",              // 非法日历日
+    "2026-8-5 12:00:00",       // 带时间
+    "2026-13-01",              // 越界月
+    "",                        // 空串
+  ];
+  cases.forEach((d, i) => insertRawHit(d, "2026-08-05T02:00:00.000Z", "/a3-all-" + i));
+
+  assert.equal((db.prepare("SELECT COUNT(*) c FROM hits").get() as any).c, cases.length);
+  assert.equal(
+    v.getSummary("all").pvLocal,
+    cases.length,
+    "all 必须统计全部记录，与 day 格式无关"
+  );
+});
+
+test("A-3 守卫：all 的 PV 不会因为迁移而改变（迁移前后对比）", () => {
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+
+  // 模拟「0015 执行前」的库：混合格式
+  insertRawHit("2026-8-5", "2026-08-05T02:00:00.000Z", "/a3-mig-1");
+  insertRawHit("2026-9-8", "2026-09-08T02:00:00.000Z", "/a3-mig-2");
+  insertRawHit("2026-08-05", "2026-08-05T02:00:00.000Z", "/a3-mig-3");
+  insertRawHit("bogus", "2026-08-01T02:00:00.000Z", "/a3-mig-4");
+
+  const pvBefore = v.getSummary("all").pvLocal;
+
+  // 手工做一次「迁移会做的事」：把两条可修复的补零
+  db.prepare("UPDATE hits SET day = '2026-08-05' WHERE path = '/a3-mig-1'").run();
+  db.prepare("UPDATE hits SET day = '2026-09-08' WHERE path = '/a3-mig-2'").run();
+
+  const pvAfter = v.getSummary("all").pvLocal;
+  assert.equal(pvAfter, pvBefore, "迁移前后 all 的 PV 必须完全一致（" + pvBefore + " -> " + pvAfter + "）");
+  assert.equal(pvAfter, 4, "4 条记录都应该在 all 里");
 });
 
 test("A-3 守卫：getDailySeries 不产生非法日期 key，也不把脏行算进柱子里", () => {
@@ -567,8 +614,95 @@ test("A-3 守卫：边界日期（闰日 2024-02-29 合法、2026-02-29 非法�
   insertRawHit("2024-02-29", "2024-02-29T02:00:00.000Z", "/a3-leap-ok");   // 合法闰日
   insertRawHit("2026-02-29", "2026-02-28T02:00:00.000Z", "/a3-leap-bad");  // 非闰年
 
+  // 区间视图：只有合法闰日进得来（都在窗口外，所以这里用 all 对照的是「日期维度」）
+  // all：两条都是真实访问，必须都计入
   const all = v.getSummary("all");
-  assert.equal(all.pvLocal, 1, "只有 2024-02-29 合法，另一条必须被挡住");
+  assert.equal(all.pvLocal, 2, "all 包含两条记录（2024 闰日合法、2026-02-29 非法但仍是真实访问）");
+
+  // 再确认「日期维度」确实挡住了非法的那条：把它挪到 30 天窗口内也不该被统计
+  db.prepare("UPDATE hits SET created_at = ? WHERE path = '/a3-leap-bad'")
+    .run(new Date().toISOString());
+  assert.equal(v.getSummary("30d").pvLocal, 0, "2026-02-29 不是合法日期，不进 30d 窗口");
+});
+
+test("A-3 修正：all 的 Top 页面 / Top 来源同样统计全部记录，区间视图仍过滤", () => {
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+
+  // 三条：一条合规、两条 day 形态异常（但都是真实访问、都带来源）
+  insertRawHit("2026-08-05", "2026-08-05T02:00:00.000Z", "/a3-top-ok");
+  db.prepare("UPDATE hits SET ref_host='google.com', ref_kind='search' WHERE path='/a3-top-ok'").run();
+  insertRawHit("bogus", "2026-08-05T02:00:00.000Z", "/a3-top-bad1");
+  db.prepare("UPDATE hits SET ref_host='x.com', ref_kind='social' WHERE path='/a3-top-bad1'").run();
+  insertRawHit("2026-8-5 12:00:00", "2026-08-05T02:00:00.000Z", "/a3-top-bad2");
+  db.prepare("UPDATE hits SET ref_host='baidu.com', ref_kind='search' WHERE path='/a3-top-bad2'").run();
+
+  // all：三个页面、三个来源都要在
+  const pagesAll = v.getTopPages(10, "all");
+  assert.equal(pagesAll.length, 3, "all 的 Top 页面应含全部 3 个路径");
+  assert.deepEqual(
+    pagesAll.map((p) => p.path).sort(),
+    ["/a3-top-bad1", "/a3-top-bad2", "/a3-top-ok"],
+    "all 不得漏掉 day 异常的行"
+  );
+  const srcAll = v.getTopSources(10, "all");
+  assert.equal(srcAll.reduce((n, s) => n + s.hits, 0), 3, "all 的来源命中数应等于总行数");
+  assert.deepEqual(
+    srcAll.map((s) => s.host).sort(),
+    ["baidu.com", "google.com", "x.com"],
+    "all 的来源不得漏掉 day 异常的行"
+  );
+
+  // 区间视图：这三条都在 2026-08，早已出 30 天窗口，必须为空
+  assert.deepEqual(v.getTopPages(10, "30d"), [], "30d 不得把 2026-08 的行算进来");
+  assert.deepEqual(v.getTopSources(10, "30d"), [], "30d 的来源同样");
+});
+
+test("A-3 修正：单篇浏览量（getPageViews）口径与 all 一致，不看 day 格式", () => {
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+
+  const now = timeMod.nowIso();
+  const info = db.prepare(
+    "INSERT INTO posts (type, slug, title, content, status, published_at, created_at, updated_at) " +
+    "VALUES ('post', 'a3-pv', 'a3-pv', '正文', 'published', ?, ?, ?)"
+  ).run(now, now, now);
+  const pid = Number(info.lastInsertRowid);
+
+  // 同一篇文章：一条合规 + 两条脏 day
+  db.prepare("INSERT INTO hits (path, post_id, visitor, is_entry, ref_host, ref_kind, day, created_at) VALUES (?,?,?,1,'','direct',?,?)")
+    .run("/p/" + pid, pid, "v1", "2026-08-05", "2026-08-05T02:00:00.000Z");
+  db.prepare("INSERT INTO hits (path, post_id, visitor, is_entry, ref_host, ref_kind, day, created_at) VALUES (?,?,?,1,'','direct',?,?)")
+    .run("/p/" + pid, pid, "v2", "bogus", "2026-08-05T02:00:00.000Z");
+  db.prepare("INSERT INTO hits (path, post_id, visitor, is_entry, ref_host, ref_kind, day, created_at) VALUES (?,?,?,1,'','direct',?,?)")
+    .run("/p/" + pid, pid, "v3", "2026-8-5 12:00:00", "2026-08-05T02:00:00.000Z");
+
+  assert.equal(v.getPageViews("/p/" + pid, pid), 3, "单篇浏览量统计全部访问，不看 day 格式");
+  assert.equal(v.getSummary("all").pvLocal, 3, "all 的 PV 与单篇口径一致");
+});
+
+test("A-3 修正：all 的 PV 允许大于日序列之和（两个口径回答不同问题）", () => {
+  /**
+   * 这不是 bug，是设计。硬把两者对齐，只能靠：
+   *   a) 让 all 也过滤 -> 历史总 PV 在迁移后跳变（路线图明确禁止）
+   *   b) 让日序列不过滤 -> 非法日期混进趋势图（本次要求明确禁止）
+   * 所以差异必须保留，并由这条用例守住，防止后人"顺手修一致"。
+   */
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+
+  const today = todayKey();
+  insertRawHit(today, new Date().toISOString(), "/a3-diff-ok");
+  insertRawHit("bogus", new Date().toISOString(), "/a3-diff-bad1");
+  insertRawHit("2026-02-30", new Date().toISOString(), "/a3-diff-bad2");
+
+  const all = v.getSummary("all").pvLocal;
+  const seriesSum = v.getDailySeries(30).reduce((n, p) => n + p.pv, 0);
+
+  assert.equal(all, 3, "all 统计全部 3 条");
+  assert.equal(seriesSum, 1, "日序列只统计那 1 条合法的");
+  assert.ok(all > seriesSum, "差值来自 2 条 day 异常的历史记录");
+  assert.equal(all - seriesSum, 2, "差值应恰好等于异常行数");
 });
 
 test("cleanup", () => {
