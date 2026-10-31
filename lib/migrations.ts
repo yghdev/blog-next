@@ -582,6 +582,96 @@ export const MIGRATIONS: Migration[] = [
        */
     },
   },
+  {
+    name: "0015_hits_day_isopad",
+    up: (db) => {
+      /**
+       * hits.day 历史数据补零（2026-10-31，A-3）。
+       *
+       * ## 为什么需要
+       *
+       * `day` 是 TEXT 列，所有区间查询都靠 `WHERE day >= ?` 做字典序比较。
+       * A-1 之前 `dateKeyIn()` 输出 `2026-8-5`（月日不补零），于是
+       *   '2026-8-5' >= '2026-10-31'  →  true
+       * 任何区间都会误命中（后台「今天」把 8、9 月的数据一起算进去）。
+       *
+       * ## 只做一件事：补零。不重算日期。
+       *
+       * 三个实测结论决定了实现方式（better-sqlite3 12.11.1 / SQLite 3.53.2）：
+       *
+       *   1) `date('2026-8-5')` → NULL。SQLite 的日期函数只认两位月份，
+       *      所以**不能**用它来判断「未补零的行是否合法」。
+       *   2) `date('2026-02-30')` → '2026-03-02'、`date('2026-04-31')` → '2026-05-01'。
+       *      SQLite 对不存在的日历日期**静默进位**、不报错。因此
+       *      `date(cand) = cand` 可以当「日历是否真的存在这一天」的判据
+       *      （进位后必然不等于原值），但**绝不能**把 `date()` 的结果写回。
+       *   3) `created_at` 是 UTC，`day` 是 DISPLAY_TZ（默认 Asia/Shanghai）口径。
+       *      实测 `2026-10-01T18:00:00.000Z` → UTC 日 10-01、上海日 10-02。
+       *      用 `created_at` 重算 `day` 会把跨零点的行**平移一天**，
+       *      而且总量上看不出来 —— 所以本迁移**完全不碰 created_at**。
+       *
+       * ## 保守策略
+       *
+       * 只处理「形状严格匹配 + 日历真实存在」的行。其余一律**保持原值**：
+       * 不猜日期、不用当前日期替代、不写 `0000-00-00`、不删除。
+       * 脏行清单由 scripts/normalize-hits-day.mjs 输出，人工决定。
+       *
+       * 实测（18 行样本）：第一段 changes=4，再跑两次均为 0；
+       * 待人工清单 13 行；行数守恒；integrity_check=ok。
+       */
+      if (!hasTable(db, "hits")) {
+        // 极老的库可能还没建 hits（0013 才建），此时无事可做。
+        // 正常顺序下 hits 一定存在，这里只是防御。
+        console.warn("[0015] hits 表不存在，跳过补零");
+        return;
+      }
+
+      // 候选值表达式：把 day 按 '-' 拆成三段，用 printf 补零成 YYYY-MM-DD。
+      // 只在形状闸门通过后使用（否则 substr/instr 会切出错位的结果）。
+      const candidate =
+        "printf('%s-%02d-%02d'," +
+        " substr(day, 1, 4)," +
+        " CAST(substr(day, 6, instr(substr(day, 6), '-') - 1) AS INTEGER)," +
+        " CAST(substr(day, 6 + instr(substr(day, 6), '-')) AS INTEGER))";
+
+      // 形状闸门：只接受 YYYY-M-D / YYYY-MM-D / YYYY-M-DD 三种「未补零」形态。
+      // 必须是精确模式 —— GLOB 的 `*` 会吞掉任意尾巴，把 '2026-8-5-9'、
+      // '2026-8-5 12:00:00' 截断成 '2026-08-05'，等于把格式错误「修」成
+      // 一个看似正确的错误日期。
+      const shape =
+        "(day GLOB '[0-9][0-9][0-9][0-9]-[0-9]-[0-9]'" +
+        " OR day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9]'" +
+        " OR day GLOB '[0-9][0-9][0-9][0-9]-[0-9]-[0-9][0-9]')";
+
+      // 闸门逐条：
+      //   shape            —— 只认三种未补零形态，且必须在此结束
+      //   day <> cand      —— 已补零的行不参与（幂等的关键：没有它 changes 永远不为 0）
+      //   date(cand)=cand  —— 日历真实存在（拒绝 2026-2-30 进位成 03-02 这类）
+      const res = db.prepare(
+        "UPDATE hits SET day = " + candidate +
+        " WHERE " + shape +
+        " AND day <> " + candidate +
+        " AND date(" + candidate + ") = " + candidate
+      ).run();
+
+      // 剩下「形状合规但日历非法」的行，以及完全无法解析的行，都留给人工。
+      // 这里只统计与告警，绝不修改、绝不删除。
+      const dirty = db.prepare(
+        "SELECT COUNT(*) AS c FROM hits " +
+        " WHERE NOT (day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND date(day) IS day)"
+      ).get() as { c: number };
+
+      if (res.changes > 0) {
+        console.log("[0015] hits.day 补零：修改 " + res.changes + " 行");
+      }
+      if (dirty.c > 0) {
+        console.warn(
+          "[0015] 仍有 " + dirty.c + " 行 day 既不合法也无法自动补零，" +
+          "已保持原值。用 scripts/normalize-hits-day.mjs 查看清单并人工处理。"
+        );
+      }
+    },
+  },
 ];
 
 export function currentVersion(db: Database.Database): string | null {

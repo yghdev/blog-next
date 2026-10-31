@@ -463,6 +463,114 @@ test("A-2 导入脚本与 lib/time.ts 的日期口径逐字等价（交叉断言
   }
 });
 
+/* ══════════════════════════════════════════════════════════════════
+   A-3 读取侧日期形状守卫
+
+   `hits.day` 是 TEXT 列，区间查询靠字典序比较。A-2 保证**新写入**是补零
+   格式，但 A-3 迁移只能修「形状可判定 + 日历合法」的历史行；剩下的脏行
+   必须被读取侧挡住，否则会污染 today / 7d / 30d 与 all。
+
+   守卫的边界（实测，别高估）：
+     - 能挡：未补零（2026-8-5）、垃圾串、空串、纯空格
+     - 也挡：非法日历日（2026-02-30）、越界月（2026-13-01）—— 靠 date(day) IS day
+     - 不挡：格式与日历都合法的日期（这是正确行为）
+   ══════════════════════════════════════════════════════════════════ */
+
+/** 直接塞一行 hits（绕过 recordHit，模拟历史脏数据） */
+function insertRawHit(day: string, createdAt: string, path: string): number {
+  const info = db.prepare(
+    "INSERT INTO hits (path, visitor, is_entry, ref_host, ref_kind, day, created_at) " +
+    "VALUES (?, ?, 1, '', 'direct', ?, ?)"
+  ).run(path, "visitor-" + path, day, createdAt);
+  return Number(info.lastInsertRowid);
+}
+
+/** 合法的「今天」补零键，供构造对照组 */
+function todayKey(): string {
+  return timeMod.isoDateIn(new Date().toISOString(), timeMod.DISPLAY_TZ);
+}
+
+test("A-3 守卫：非法日期不进入 today / 7d / 30d / all 的任何统计", () => {
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+
+  const today = todayKey();
+  const id = seedPost("a3-guard");
+  v.recordHit({ path: "/p/" + id, ip: "9.9.9.9", ua: "Mozilla/5.0 Chrome/120.0" });
+
+  // 全都不合法：未补零、垃圾串、空串、纯空格、非法日历日、越界月
+  insertRawHit("2026-8-5", "2026-08-05T02:00:00.000Z", "/a3-bad-1");
+  insertRawHit("bogus", "2026-08-05T02:00:00.000Z", "/a3-bad-2");
+  insertRawHit("", "2026-08-05T02:00:00.000Z", "/a3-bad-3");
+  insertRawHit("  ", "2026-08-05T02:00:00.000Z", "/a3-bad-4");
+  insertRawHit("2026-02-30", "2026-02-28T02:00:00.000Z", "/a3-bad-5");
+  insertRawHit("2026-13-01", "2026-07-01T02:00:00.000Z", "/a3-bad-6");
+
+  // 正常 PV 必须仍然只有 1（只有 recordHit 那条合法）
+  assert.equal(v.getSummary("today").pvLocal, 1, "today 只含合法今日记录");
+  assert.equal(v.getSummary("7d").pvLocal, 1, "7d 只含合法记录");
+  assert.equal(v.getSummary("30d").pvLocal, 1, "30d 只含合法记录");
+
+  // all：脏行不得被计入。它们的时间跨度从 2026-02 到 2026-08，
+  // 无论如何都不该出现在「全部」里 —— 因为「全部」= 所有**合法**事件
+  const all = v.getSummary("all");
+  assert.equal(all.pvLocal, 1, "all 不得被脏日期污染，实际 pvLocal=" + all.pvLocal);
+  assert.equal(all.uv, 1, "all 的 UV 也不得被脏行污染");
+  assert.equal(all.visits, 1, "all 的访问次数同样");
+
+  // 行本身还在（只读守卫，不删数据）
+  assert.equal((db.prepare("SELECT COUNT(*) c FROM hits").get() as any).c, 7, "脏行必须仍在表里");
+  assert.equal((db.prepare("SELECT COUNT(*) c FROM hits WHERE path LIKE '/a3-bad-%'").get() as any).c, 6);
+});
+
+test("A-3 守卫：getDailySeries 不产生非法日期 key，也不把脏行算进柱子里", () => {
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+
+  const id = seedPost("a3-series");
+  v.recordHit({ path: "/p/" + id, ip: "10.10.10.10", ua: "Mozilla/5.0 Chrome/120.0" });
+  insertRawHit("2026-8-5", "2026-08-05T02:00:00.000Z", "/a3-bad-series-1");
+  insertRawHit("bogus", "2026-08-05T02:00:00.000Z", "/a3-bad-series-2");
+
+  const series = v.getDailySeries(30);
+  for (const p of series) {
+    assert.match(p.day, /^\d{4}-\d{2}-\d{2}$/, "日序列 key 必须合法：" + p.day);
+  }
+  const totalPv = series.reduce((n, p) => n + p.pv, 0);
+  assert.equal(totalPv, 1, "30 天窗口内只有 1 条合法记录，实际 " + totalPv);
+});
+
+test("A-3 守卫：合法日期（含补零与已合规）的统计结果完全不变", () => {
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+
+  const today = todayKey();
+  // 三条合法的今天记录，全部补零形态
+  for (let i = 0; i < 3; i++) {
+    insertRawHit(today, new Date().toISOString(), "/a3-ok-" + i);
+  }
+
+  assert.equal(v.getSummary("today").pvLocal, 3, "合法记录全部计入");
+  assert.equal(v.getSummary("7d").pvLocal, 3);
+  assert.equal(v.getSummary("30d").pvLocal, 3);
+  assert.equal(v.getSummary("all").pvLocal, 3);
+
+  const series = v.getDailySeries(7);
+  assert.equal(series[series.length - 1].pv, 3, "今天的柱子应有 3 条");
+  assert.equal(series[series.length - 1].day, today, "柱子 key 是今天的补零日期");
+});
+
+test("A-3 守卫：边界日期（闰日 2024-02-29 合法、2026-02-29 非法）", () => {
+  db.prepare("DELETE FROM hits").run();
+  db.prepare("DELETE FROM settings WHERE key LIKE 'stats:baseline:%'").run();
+  // 两条都放在 30 天窗口外，只测 all 与窗口逻辑的差异
+  insertRawHit("2024-02-29", "2024-02-29T02:00:00.000Z", "/a3-leap-ok");   // 合法闰日
+  insertRawHit("2026-02-29", "2026-02-28T02:00:00.000Z", "/a3-leap-bad");  // 非闰年
+
+  const all = v.getSummary("all");
+  assert.equal(all.pvLocal, 1, "只有 2024-02-29 合法，另一条必须被挡住");
+});
+
 test("cleanup", () => {
   dbMod.closeDb();
   fs.rmSync(TMP, { recursive: true, force: true });

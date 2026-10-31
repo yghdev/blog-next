@@ -305,10 +305,46 @@ function rangeStart(range: Range): string | null {
   return isoDateIn(from.toISOString(), DISPLAY_TZ);
 }
 
+/**
+ * 日期形状 + 日历合法性守卫（A-3）。
+ *
+ * `hits.day` 是 TEXT 列，区间比较是**字典序**。只有当日期是补零的
+ * `YYYY-MM-DD` 时，字典序才等价于时间序。所以读取侧必须先把不满足
+ * 这个前提的行挡掉，否则一条 `2026-8-5` 就能让 `day >= '2026-10-31'`
+ * 命中（字符串比较下它更大），把 8 月的数据算进「今天」。
+ *
+ * 两个条件的取舍：
+ *   • `GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'`
+ *     —— 十位、数字、两条连字符。纯字符串匹配、无函数调用，
+ *     与 `day >= ?` 组合时仍能走 `idx_hits_day`（实测执行计划为
+ *     `SEARCH hits USING COVERING INDEX idx_hits_day (day>?)`）。
+ *     但它**不校验月份/日是否在合法区间**：`2026-13-01`、`2026-02-30`
+ *     都能通过。
+ *   • `date(day) IS day`
+ *     —— 日历真实性。SQLite 对不存在的日期会静默进位
+ *     （`date('2026-02-30')` → `2026-03-02`），进位后必然不等于原值，
+ *     所以这个等式成立 ⇔ 该日期真实存在。实测它同样不影响上面的索引选择
+ *     （因为范围条件已经把扫描限定在索引区间内）。
+ *
+ * 两条一起用，才能同时挡住「形状不对」和「日历不对」。
+ * 这是**只读**守卫：不修数据、不删数据，脏行仍留在表里等人工处理。
+ *
+ * 成本（实测，10 万行合成数据）：带 `day >= ?` 的区间查询仍走索引，
+ * 7d 从 0.031ms 涨到 0.059ms；`all` 没有范围条件、无法走索引范围扫描，
+ * 从 0.044ms 涨到 20ms（全表逐行调 date()）。线上 hits 是千行量级
+ * （2026-10-30 实测导入 1203 条事件），代价在亚毫秒级；且后台页本身
+ * 有 `unstable_cache` 兜底。这里选择「正确性优先」：宁可多扫一遍，
+ * 也不能让脏行混进「全部」。
+ */
+const DAY_SHAPE_SQL =
+  "day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' AND date(day) IS day";
+
 function whereFor(range: Range): { sql: string; args: unknown[] } {
   const start = rangeStart(range);
-  if (!start) return { sql: "", args: [] };
-  return { sql: " WHERE day >= ?", args: [start] };
+  // 所有区间都要带守卫：`all` 虽然不比较日期，但它的 PV/UV/访问次数
+  // 同样不该被脏行污染（那会让「全部」比各区间之和还多出解释不了的部分）。
+  if (!start) return { sql: " WHERE " + DAY_SHAPE_SQL, args: [] };
+  return { sql: " WHERE " + DAY_SHAPE_SQL + " AND day >= ?", args: [start] };
 }
 
 export type Summary = {
@@ -359,7 +395,7 @@ export function getDailySeries(days = 14): DayPoint[] {
   const start = isoDateIn(new Date(Date.now() - (days - 1) * 86400000).toISOString(), DISPLAY_TZ);
   const rows = db.prepare(
     "SELECT day, COUNT(*) AS pv, COUNT(DISTINCT visitor) AS uv FROM hits " +
-    "WHERE day >= ? GROUP BY day"
+    "WHERE " + DAY_SHAPE_SQL + " AND day >= ? GROUP BY day"
   ).all(start) as { day: string; pv: number; uv: number }[];
 
   const byDay = new Map(rows.map((r) => [r.day, r]));
