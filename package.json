@@ -22,7 +22,7 @@
     "test:browser": "node tests/browser-split.mjs",
     "test:friends-edge": "node tests/friend-links-page-edge.mjs",
     "test:friends": "node tests/friend-links-page.mjs && node tests/friend-links-page-edge.mjs",
-    "test:integration": "npm run test:next && npm run test:browser && npm run test:ui && npm run test:dark && npm run test:admin && npm run test:content && npm run test:comments && npm run test:media && npm run test:settings && npm run test:autosave && npm run test:editor && npm run test:workbench && npm run test:publish && npm run test:media-editor && npm run test:cmdk && npm run test:friends",
+    "test:integration": "node tests/run-integration.mjs",
     "test:ui": "node tests/ui-kit.mjs",
     "test:dark": "node tests/dark-mode.mjs",
     "test:admin": "node tests/admin-nav-overview.mjs",
@@ -35,7 +35,9 @@
     "test:workbench": "node tests/editor-workbench-browser.mjs",
     "test:publish": "node tests/editor-publish-regression.mjs",
     "test:media-editor": "node tests/editor-media-browser.mjs",
-    "test:cmdk": "node tests/command-palette-browser.mjs"
+    "test:cmdk": "node tests/command-palette-browser.mjs",
+    "test:layout": "node tests/layout-regression.mjs",
+    "test:motion": "node tests/reduced-motion.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
