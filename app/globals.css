@@ -1835,7 +1835,16 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   .sheet-mask, .sheet-panel { display: none; }
 }
 
-/* ══════════════════════════════════════
+/* ── 全局减弱动效 ────────────────────────────────────────
+   系统开启「减少动态效果」时，把全站动画与过渡压到近似瞬时。
+
+   注意这一行的注释头必须**带闭合**（A-5，2026-10-31）：此处原先只写了
+   开头的「斜杠星号 + 分隔线」而缺结尾，于是整个 @media 块被吞进注释，
+   直到下一个「星号斜杠」才闭合 —— CSS 不会为此报任何错，构建也照过，
+   只是这段规则永远不生效。症状只在开启该偏好的用户身上出现，极难发现。
+   tests/css-health.test.ts 用「注释符必须配平」守住这类事故。
+
+   （这条注释里刻意不写注释符本身：那会把这段注释提前闭合。） */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: .01ms !important;
