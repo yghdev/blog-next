@@ -21,6 +21,7 @@
  * 视觉上"两栏没对齐"。统一到 `--sticky-top` 之后这个差值必须为 0。
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { createRequire } from "node:module";
 import { startIsolatedServer } from "./helpers/next-server.mjs";
 import { startBrowser } from "./helpers/browser.mjs";
@@ -1556,6 +1557,88 @@ try {
     console.log("PASS D-1 统计格 " + statMetrics.height + "px（原 80）· 数字 " + statMetrics.numSize + "px（原 20.48）");
   }
 
+  /* ── 断言 44（D-2）：关于页独立路由与版式 ── */
+  /**
+   * 需求文档第七章：轻量的个人介绍页（不做求职简历，也不做作品集）。
+   *
+   * 关键约束（D.4 红线）：内容必须来自 content/pages/about.md，不许写死在
+   * 组件里。所以这里既验版式，也验"渲染出的文案确实出自 md"。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const aboutRes = await page.goto(server.base + "/about", { waitUntil: "networkidle" });
+  assert.equal(aboutRes.status(), 200, "/about 应可访问（不能被 [slug] 吃掉或 404）");
+
+  const about = await page.evaluate(() => {
+    const hero = document.querySelector(".about-hero");
+    const greeting = document.querySelector(".about-greeting");
+    const tagline = document.querySelector(".about-tagline");
+    const focus = [...document.querySelectorAll(".about-focus-item")].map((e) => e.textContent.trim());
+    const h2 = [...document.querySelectorAll(".about-body h2")].map((e) => e.textContent.trim());
+    const tocLinks = [...document.querySelectorAll(".toc-list a")].map((a) => a.textContent.trim());
+    const h1 = document.querySelector("h1");
+    return {
+      hasHero: !!hero,
+      greeting: greeting ? greeting.textContent.trim() : null,
+      greetingSize: greeting ? parseFloat(getComputedStyle(greeting).fontSize) : null,
+      tagline: tagline ? tagline.textContent.trim() : null,
+      focus,
+      h2,
+      tocLinks,
+      h1Text: h1 ? h1.textContent.trim() : null,
+      h1Hidden: h1 ? getComputedStyle(h1).position === "absolute" : false,
+      hasDate: !!document.querySelector(".article-meta-bar, .article-title"),
+      scrollW: document.documentElement.scrollWidth,
+      clientW: document.documentElement.clientWidth,
+    };
+  });
+
+  assert.equal(about.hasHero, true, "关于页应有 .about-hero（需求 7.2 页面顶部）");
+  assert.ok(about.greeting && about.greeting.includes("你好"), "7.2 顶部应有问候语，实际 " + JSON.stringify(about.greeting));
+  assert.ok(
+    about.tagline && about.tagline.length > 8,
+    "7.2 应有一句个人介绍（来自 about.md 第二段），实际 " + JSON.stringify(about.tagline)
+  );
+  assert.equal(about.focus.length, 4, "7.3 应有 4 个方向标签，实际 " + about.focus.length + "：" + JSON.stringify(about.focus));
+  console.log("PASS D-2 关于页 hero 正确（" + about.greeting + " / " + about.focus.length + " 个方向标签）");
+
+  /* 需求 7.4/7.5/7.6：三个正文小节 */
+  for (const want of ["我在做什么", "本站", "联系"]) {
+    assert.ok(about.h2.includes(want), "7.4–7.6 应有「" + want + "」一节，实际 " + JSON.stringify(about.h2));
+  }
+  console.log("PASS D-2 正文小节齐全（" + about.h2.join(" / ") + "）");
+
+  /* 需求 7.7：右栏目录 + 目录项与正文实际章节一致 */
+  assert.ok(about.tocLinks.length > 0, "7.7 关于页应保留右栏目录");
+  assert.deepEqual(
+    about.tocLinks.slice().sort(),
+    about.h2.slice().sort(),
+    "目录项必须与正文实际章节一致（否则会有指向不存在锚点的死链）"
+  );
+  console.log("PASS D-2 目录与正文章节一致（" + about.tocLinks.length + " 项）");
+
+  /* 可访问性：必须有 h1，且不能重复显示标题 */
+  assert.equal(about.h1Text, "关于", "关于页应有 h1「关于」，实际 " + JSON.stringify(about.h1Text));
+  assert.equal(about.h1Hidden, true, "h1 应视觉隐藏（sr-only），不能与 hero 重复显示");
+  console.log("PASS D-2 关于页有 h1 且视觉隐藏（不重复标题）");
+
+  /* 关于页不是文章：不应显示发布元信息 */
+  assert.equal(about.hasDate, false, "关于页不应显示文章元信息（日期/阅读时长/浏览量）");
+  console.log("PASS D-2 关于页不显示文章元信息");
+
+  /* 移动端：无横向溢出，目录隐藏 */
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(server.base + "/about", { waitUntil: "networkidle" });
+  const aboutMobile = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    tocVisible: (() => {
+      const el = document.querySelector(".toc-col");
+      return el ? getComputedStyle(el).display !== "none" : false;
+    })(),
+  }));
+  assert.equal(aboutMobile.overflow, false, "375px 下关于页不应横向溢出");
+  assert.equal(aboutMobile.tocVisible, false, "375px 下右栏目录应隐藏（需求 7.7「移动端根据空间决定」）");
+  console.log("PASS D-2 移动端无溢出且目录隐藏");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
@@ -1655,13 +1738,30 @@ function seedPostsForPager(dataDir, n = 21) {
 }
 
 function seedAboutPage(dataDir) {
+  /**
+   * 用**真实的** content/pages/about.md 建页面，而不是占位文本。
+   *
+   * D-2 起关于页有独立版式（hero + 关注方向标签 + 若干小节），
+   * 版式是按 md 的**真实结构**（开头两段 + h2 分节）驱动的。
+   * 用「这是关于页的正文。」这种占位内容，提取不到问候语和方向标签，
+   * 断言会假失败 —— 而且更重要的是：占位数据测不出真实内容会不会排版塌掉。
+   */
+  const raw = fs.readFileSync(new URL("../content/pages/about.md", import.meta.url), "utf8");
+  const m = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+  const meta = m ? m[1] : "";
+  const content = m ? m[2] : raw;
+  const pick = (key) => {
+    const mm = meta.match(new RegExp("^" + key + ":\\s*\"?(.*?)\"?$", "m"));
+    return mm ? mm[1] : "";
+  };
+
   const db = new Database(dataDir + "/blog.db");
   db.pragma("journal_mode = WAL");
   const now = new Date().toISOString();
   db.prepare(
     "INSERT INTO posts (type, slug, title, content, status, published_at, created_at, updated_at) " +
-    "VALUES ('page', 'about', '关于', '这是关于页的正文。', 'published', ?, ?, ?)"
-  ).run(now, now, now);
+    "VALUES ('page', 'about', ?, ?, 'published', ?, ?, ?)"
+  ).run(pick("title") || "关于", content, now, now, now);
   db.close();
 }
 
