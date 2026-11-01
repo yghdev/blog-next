@@ -572,6 +572,74 @@ try {
     console.log("PASS B-5 " + pathName.padEnd(16) + " footer 地标 = 1（" + f.classes[0] + "）");
   }
 
+  /* ── 断言 18（B-6）：移动端搜索页必须有可用输入框 ── */
+  /**
+   * 原实现搜索页手写表单用了 `content-search` 类名，被 820px 的
+   * `.content-search { display:none }` 命中 —— 手机上打开 /search
+   * 只有标题和空白，**一个输入框都没有**，搜不了任何东西。
+   *
+   * 这是"页面主功能在目标设备上完全不可用"，比任何视觉问题都严重。
+   */
+  for (const [vw, vh, label] of [[375, 812, "手机"], [820, 900, "单栏临界"], [1440, 900, "桌面"]]) {
+    await page.setViewportSize({ width: vw, height: vh });
+    await page.goto(server.base + "/search", { waitUntil: "networkidle" });
+
+    const form = await page.evaluate(() => {
+      const wrap = document.querySelector(".search-page-form");
+      const input = document.querySelector(".search-page-form input[type=search]");
+      if (!wrap || !input) return null;
+      const cs = getComputedStyle(wrap);
+      return {
+        wrapDisplay: cs.display,
+        inputHeight: input.getBoundingClientRect().height,
+        inputWidth: input.getBoundingClientRect().width,
+        focusable: !input.disabled && input.tabIndex >= 0,
+        placeholder: input.getAttribute("placeholder"),
+        value: input.value,
+      };
+    });
+    assert.ok(form, vw + "px 搜索页应渲染 .search-page-form 与输入框");
+    assert.notEqual(form.wrapDisplay, "none", vw + "px 搜索表单容器不得被隐藏");
+    assert.ok(form.inputHeight > 0, vw + "px 输入框高度应 > 0，实际 " + form.inputHeight);
+    assert.ok(form.inputWidth > 100, vw + "px 输入框宽度应 > 100，实际 " + form.inputWidth);
+    assert.equal(form.focusable, true, vw + "px 输入框应可聚焦");
+    console.log("PASS B-6 " + String(vw).padStart(4) + "px（" + label + "）搜索框可见 " +
+      Math.round(form.inputWidth) + "×" + Math.round(form.inputHeight));
+  }
+
+  /* ── 断言 19（B-6）：搜索页回填当前关键词，且提交后 URL 正确 ── */
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(server.base + "/search?q=" + encodeURIComponent("测试"), { waitUntil: "networkidle" });
+  const filled = await page.evaluate(() => {
+    const input = document.querySelector(".search-page-form input[type=search]");
+    return input ? input.value : null;
+  });
+  assert.equal(filled, "测试", "刷新/直达时输入框应回填当前关键词 q，实际 " + JSON.stringify(filled));
+
+  // 真的能输入并提交（SearchBox 是客户端组件，回车走 router.push）
+  await page.fill(".search-page-form input[type=search]", "归档");
+  await page.press(".search-page-form input[type=search]", "Enter");
+  await page.waitForTimeout(800);
+  assert.match(
+    page.url(),
+    /\/search\?q=%E5%BD%92%E6%A1%A3/,
+    "回车后应跳到 /search?q=归档，实际 " + page.url()
+  );
+  console.log("PASS B-6 输入框回填 q + 回车提交跳转正确");
+
+  /* ── 断言 20（B-6）：首页的 content-search 在手机端仍然隐藏 ── */
+  /**
+   * 反例守卫：不要为了修搜索页把首页那个框也放出来 ——
+   * 首页手机端靠顶栏搜索，列表顶部再放一个是重复。
+   */
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const homeSearch = await page.evaluate(() => {
+    const el = document.querySelector(".content-search");
+    return el ? getComputedStyle(el).display : "missing";
+  });
+  assert.equal(homeSearch, "none", "375px 下首页 .content-search 应仍为 display:none，实际 " + homeSearch);
+  console.log("PASS B-6 375px 首页 content-search 仍隐藏（未被误伤）");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
