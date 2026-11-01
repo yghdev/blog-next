@@ -38,6 +38,7 @@ try {
   // 造一篇带长目录的文章，让文章页的 .toc-list 也有机会超长
   const tocPostId = seedArticleWithToc(server.dataDir);
   seedAboutPage(server.dataDir);
+  seedSiteFooterSettings(server.dataDir);
 
   controller = await startBrowser();
   const { context } = await controller.newLoggedInContext(server.base, server.fixture);
@@ -535,6 +536,42 @@ try {
   );
   console.log("PASS B-4 375px 骨架 padding 与首页一致（" + frMobile.pad + "）");
 
+  /* ── 断言 17（B-5）：全站前台页面只有一个 <footer> 地标 ── */
+  /**
+   * B-5 的问题：友链页自己有一个 `<footer class="fr-footer">`，layout 又
+   * 渲染全站 `<SiteFooter>`，一个页面两个 footer 地标 —— 读屏的「跳到页脚」
+   * 会给出两个同名目标，键盘用户分不清哪个是"全站页脚"。
+   *
+   * **必须在浏览器里数**：全站页脚包在 `<FrontOnly>`（客户端组件，
+   * 靠 usePathname 排除后台），服务端返回的 HTML 里没有它。
+   * 用 fetch 数会得到 0，那是假阴性。
+   */
+  for (const pathName of ["/", "/friend-links", "/archives", "/search", "/p/" + tocPostId]) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(server.base + pathName, { waitUntil: "networkidle" });
+    const f = await page.evaluate(() => {
+      const all = [...document.querySelectorAll("footer")];
+      return {
+        count: all.length,
+        classes: all.map((e) => e.className),
+        // 友链页的致谢区块应仍在，只是不再是 footer
+        hasFrFooterDiv: !!document.querySelector("div.fr-footer"),
+        frFooterText: document.querySelector(".fr-footer p")?.textContent?.trim() ?? null,
+      };
+    });
+    assert.equal(
+      f.count,
+      1,
+      pathName + " 应有且只有 1 个 <footer> 地标，实际 " + f.count + " 个：" + JSON.stringify(f.classes)
+    );
+    assert.match(f.classes[0], /site-footer/, pathName + " 的那一个应是全站页脚，实际 " + f.classes[0]);
+    if (pathName === "/friend-links") {
+      assert.equal(f.hasFrFooterDiv, true, "友链页的 fr-footer 区块应保留（改为 div）");
+      assert.match(f.frFooterText || "", /感谢每一位愿意分享自己小世界的人/, "致谢文案应保留");
+    }
+    console.log("PASS B-5 " + pathName.padEnd(16) + " footer 地标 = 1（" + f.classes[0] + "）");
+  }
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
@@ -565,6 +602,25 @@ function seedFriendLinks(dataDir, n) {
  * （不像文章会 308 到 /p/<id>）。没有这条记录时该 URL 直接 404，
  * 导航高亮断言就无从谈起 —— 这是测试数据缺失，不是功能问题。
  */
+/**
+ * 种上全站页脚需要的两个设置。
+ *
+ * `SiteFooter` 的逻辑是「icp 与 footerText 都为空时整块不渲染」——
+ * 这是**正确行为**（空配置不该占位）。但测试库默认两项都是空，
+ * 于是页脚压根不出现，`<footer>` 计数断言就无从谈起。
+ *
+ * 这不是为了让测试通过而造假：B-5 要验的是"一个页面只有 1 个 footer 地标"，
+ * 前提是那个地标本身存在。
+ */
+function seedSiteFooterSettings(dataDir) {
+  const db = new Database(dataDir + "/blog.db");
+  db.pragma("journal_mode = WAL");
+  const up = db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+  up.run("icp", "赣ICP备00000000号-1");
+  up.run("footer_text", "本站由 flechazo 维护");
+  db.close();
+}
+
 function seedAboutPage(dataDir) {
   const db = new Database(dataDir + "/blog.db");
   db.pragma("journal_mode = WAL");

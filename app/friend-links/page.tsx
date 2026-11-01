@@ -325,11 +325,15 @@ export default async function FriendLinksPage() {
               )}
             </section>
 
-            {/* ── 页面专属页脚（不重复全站备案信息） ────────── */}
-            <footer className="fr-footer">
+            {/* ── 页面收尾（不重复全站备案信息） ────────────
+                这里用 <div> 而不是 <footer>：全站页脚由 app/layout.tsx 的
+                SiteFooter 统一提供，一个页面只应该有一个 footer 地标。
+                两个 footer 会让读屏的「跳到页脚」给出两个同名目标。
+                文案保留 —— 需求文档没有要求删掉这句致谢。 */}
+            <div className="fr-footer">
               <span className="fr-footer-mark fr-mono">FRIENDS &amp; CONNECTIONS</span>
               <p>感谢每一位愿意分享自己小世界的人。</p>
-            </footer>
+            </div>
       </SiteShell>
 
       <script

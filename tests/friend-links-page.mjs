@@ -59,8 +59,21 @@ try {
   assert.match(first.text, /02 \/ EXCHANGE/, "交换区编号缺失");
   assert.match(first.text, /让我们也成为彼此的链接。/, "交换区主标题缺失");
   assert.match(first.text, /想加入这份名单？/, "申请区标题缺失");
-  assert.match(first.text, /感谢每一位愿意分享自己小世界的人。/, "页面页脚缺失");
-  console.log("PASS page: hero / directory / exchange / apply / footer all render");
+  assert.match(first.text, /感谢每一位愿意分享自己小世界的人。/, "页面致谢文案缺失");
+
+  /**
+   * B-5：页面自己不再有 `<footer class="fr-footer">`。
+   *
+   * 只断言"本页的 fr-footer 不再是 footer 标签" —— **不要**在这里数全站
+   * footer 的数量：全站页脚包在 `<FrontOnly>` 里，那是个客户端组件
+   * （靠 usePathname 判断是否后台），服务端返回的 HTML 中根本没有它。
+   * 在这里断言 `<footer>` 计数 = 1 会得到 0 而失败 —— 那是断言写错了，
+   * 不是页面错了。地标唯一性放在浏览器测试里验（layout-regression）。
+   */
+  assert.doesNotMatch(first.text, /<footer[^>]*class="fr-footer"/, "fr-footer 不应再是 <footer> 地标");
+  assert.match(first.text, /class="fr-footer"/, "fr-footer 区块本身应保留（改成 div）");
+  assert.match(first.text, /感谢每一位愿意分享自己小世界的人。/, "致谢文案应保留");
+  console.log("PASS page: hero / directory / exchange / apply / footer all render（fr-footer 已非 footer 地标）");
 
   /* -------------------- 2. 旧页面正文的数据没丢 -------------------- */
   for (const name of ["xaoxuu", "字节星球", "Xuan&#x27;s blog", "博客星球"]) {
