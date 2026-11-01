@@ -5,14 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { SidebarTrigger } from "./SidebarSheet";
 import { ThemeToggle } from "./ThemeToggle";
 import { useScrollLock } from "./ui/useScrollLock";
+import { NAV_ITEMS, activeHref } from "@/lib/nav";
 
-const NAV = [
-  { href: "/", label: "首页", icon: "🏠" },
-  { href: "/archives", label: "归档", icon: "📚" },
-  { href: "/shuoshuo", label: "说说", icon: "💬" },
-  { href: "/friend-links", label: "朋友", icon: "🎯" },
-  { href: "/about", label: "关于", icon: "👤" },
-];
+/**
+ * 导航项来自 `@/lib/nav`（单一事实来源）。
+ *
+ * 这里原来自己写了一份 NAV，标签与顺序都和桌面的 `Sidebar` 不一样
+ * （首页/归档/说说/朋友/关于 vs 文章/说说/归档/友链/关于）。同一站点
+ * 两套导航，用户换设备就找不到同一个入口。B-7 起两边共用 `NAV_ITEMS`。
+ */
 
 /**
  * 手机端顶部栏：左侧 Logo + 站名，右侧一个汉堡按钮。
@@ -124,11 +125,11 @@ export function MobileNav({ links = [] }: { links?: DrawerLink[] }) {
               <span>导航</span>
               <button aria-label="关闭" onClick={() => setOpen(false)}>×</button>
             </div>
-            {NAV.map((n) => (
+            {NAV_ITEMS.map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
-                className={"mobile-drawer-item" + (pathname === n.href ? " active" : "")}
+                className={"mobile-drawer-item" + (activeHref(pathname) === n.href ? " active" : "")}
               >
                 <span className="mi">{n.icon}</span>
                 {n.label}

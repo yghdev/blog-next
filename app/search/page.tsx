@@ -25,7 +25,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     <>
       <Animations />
       <div className="site-shell">
-        <Sidebar active="/search" />
+        <Sidebar />
         <main className="content">
           <h1 className="page-title">搜索</h1>
           <form method="get" className="content-search" role="search">

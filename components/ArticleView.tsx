@@ -68,7 +68,7 @@ export async function ArticleView({ doc }: { doc: Post }) {
       <Animations />
       <Lightbox />
       <div className="site-shell">
-        <Sidebar active={doc.type === "post" ? "/" : ""} />
+        <Sidebar />
         <main className="content">
           <article>
             <header className="article-header">

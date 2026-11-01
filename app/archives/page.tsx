@@ -19,7 +19,7 @@ export default async function ArchivesPage() {
     <>
       <Animations />
       <div className="site-shell">
-        <Sidebar active="/archives" />
+        <Sidebar />
         <main className="content">
           <h1 className="page-title">归档</h1>
           {groups.length === 0 ? (

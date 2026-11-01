@@ -1,17 +1,28 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { SidebarTrigger } from "./SidebarSheet";
 import { ThemeToggle } from "./ThemeToggle";
+import { NAV_ITEMS, activeHref } from "@/lib/nav";
 
-const NAV = [
-  { href: "/", label: "文章", icon: "📄" },
-  { href: "/shuoshuo", label: "说说", icon: "💬" },
-  { href: "/archives", label: "归档", icon: "🗂" },
-  { href: "/friend-links", label: "友链", icon: "🔗" },
-  { href: "/about", label: "关于", icon: "👤" },
-];
+/**
+ * 桌面端左侧栏 —— 参照 xaoxuu.com：居中大头像 + 衬线站名 + 虚线搜索框 + 图标导航
+ *
+ * ## 为什么是客户端组件（B-7）
+ *
+ * `active` 原来是**页面传进来的字符串**：`<Sidebar active="/archives" />`。
+ * 漏写或写错不会报错，只是那个页面没有选中态 —— 实测漏了 3 个
+ * （`/about`、`/tags/*`、`/search`）。改成 `usePathname()` 自判之后，
+ * 「忘写」这个错误在类型上就不可能发生：`Sidebar` 不再接受 `active`。
+ *
+ * 代价是多带一点 JS，但它本来就 import 了两个客户端组件
+ * （`SidebarTrigger` / `ThemeToggle`），并非纯静态。
+ */
+export function Sidebar() {
+  const pathname = usePathname();
+  const current = activeHref(pathname);
 
-/** 桌面端左侧栏 —— 参照 xaoxuu.com：居中大头像 + 衬线站名 + 虚线搜索框 + 图标导航 */
-export function Sidebar({ active }: { active?: string }) {
   return (
     <aside className="sidebar">
       {/* 品牌区：居中大头像 + 名字 + 标语 */}
@@ -26,8 +37,8 @@ export function Sidebar({ active }: { active?: string }) {
 
       {/* 图标导航 */}
       <nav className="nav">
-        {NAV.map((n) => {
-          const isActive = active === n.href;
+        {NAV_ITEMS.map((n) => {
+          const isActive = current === n.href;
           return (
             <Link
               key={n.href}
@@ -43,7 +54,7 @@ export function Sidebar({ active }: { active?: string }) {
       </nav>
 
 
-      {/* 平板（821~1200px）：右栏已隐藏但顶栏还没出现，
+      {/* 平板（821~1391px，B-3 起）：右栏已隐藏但顶栏还没出现，
           这里补一个侧栏入口，避免这一区间完全看不到统计/外链/标签。
           ≤820px 时左栏整体隐藏，此按钮自然不可见。 */}
       <div className="side-sheet-entry">

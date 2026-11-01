@@ -126,7 +126,7 @@ export default async function FriendLinksPage() {
   return (
     <div className="friends-page">
       <div className="site-shell fr-shell">
-        <Sidebar active="/friend-links" />
+        <Sidebar />
 
         <main className="content fr-main">
           {/* ── 专题头部 ─────────────────────────────────── */}

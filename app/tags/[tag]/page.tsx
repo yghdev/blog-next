@@ -24,7 +24,7 @@ export default async function TagPage({ params }: { params: Promise<{ tag: strin
     <>
       <Animations />
       <div className="site-shell">
-        <Sidebar active="" />
+        <Sidebar />
         <main className="content">
           <h1 className="page-title">标签：{tag}</h1>
           <p style={{ fontSize: ".85rem", color: "var(--text-p4)", margin: "-16px 0 24px" }}>

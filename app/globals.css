@@ -204,15 +204,18 @@ a:hover { color: var(--link-hover); }
   gap: 2px;
   padding: 0 4px;   /* 收窄一点，与搜索框视觉对齐 */
 }
-.nav a {
-  color: var(--text-p2);
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: .925rem;
-  transition: background .15s, color .15s;
-}
-.nav a:hover { background: var(--bg-subtle); color: var(--text-p0); text-decoration: none; }
-.nav a.active { color: var(--text-p0); font-weight: 600; background: var(--bg-subtle); }
+/*
+ * 这里原本有三条 `.nav a` / `.nav a:hover` / `.nav-item.is-active` 之外的旧规则
+ * （padding 6px 10px / radius 8px / font-size .925rem）。
+ *
+ * 它们是**旧版导航**的样式，导航改写成 `.nav-item` 之后没删。因为
+ * `.nav a`（特异性 0,1,1）比 `.nav-item`（0,1,0）高，这三条一直压着
+ * 新样式生效 —— 实测导航项渲染成 `6px 10px / 8px / .925rem`，而不是
+ * 设计值 `13px 16px / 13px / .95rem`。
+ *
+ * B-7 删掉它们，让 `.nav-item` 恢复设计值。选中态现在由
+ * `.nav-item.is-active`（下方）统一负责。
+ */
 
 .sidebar-footer { font-size: .75rem; color: var(--text-p4); line-height: 1.7; }
 
@@ -1867,7 +1870,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   /* 580 → 540 */
   .comment-author { font-weight: 540; }
   /* 600 → 560 */
-  .nav a.active, .prose th, .toc-title, .mobile-drawer-item.active,
+  .nav-item.is-active, .prose th, .toc-title, .mobile-drawer-item.active,
   .nav-item.is-active, .rb-title, .tag-pill .tag-hash { font-weight: 560; }
   /* 650 → 610 */
   .page-title, .post-card h2, .prose h1, .prose h2, .prose h3, .prose h4,
@@ -1885,7 +1888,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   /* 580 → 540 */
   .comment-author { font-weight: 540; }
   /* 600 → 560 */
-  .nav a.active, .prose th, .toc-title, .mobile-drawer-item.active,
+  .nav-item.is-active, .prose th, .toc-title, .mobile-drawer-item.active,
   .nav-item.is-active, .rb-title, .tag-pill .tag-hash { font-weight: 560; }
   /* 650 → 610 */
   .page-title, .post-card h2, .prose h1, .prose h2, .prose h3, .prose h4,

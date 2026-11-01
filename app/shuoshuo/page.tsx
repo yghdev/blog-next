@@ -14,7 +14,7 @@ export default async function ShuoshuoPage() {
     <>
       <Animations />
       <div className="site-shell">
-        <Sidebar active="/shuoshuo" />
+        <Sidebar />
         <main className="content">
           <h1 className="page-title">说说</h1>
           <div>

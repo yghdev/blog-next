@@ -21,7 +21,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     <>
       <Animations />
       <div className="site-shell">
-        <Sidebar active="/" />
+        <Sidebar />
         <main className="content">
           {/* PC 端：文章列表顶部搜索框（手机端隐藏，用顶部栏搜索） */}
           <div className="content-search">

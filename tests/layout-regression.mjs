@@ -37,6 +37,7 @@ try {
   seedFriendLinks(server.dataDir, 18);
   // 造一篇带长目录的文章，让文章页的 .toc-list 也有机会超长
   const tocPostId = seedArticleWithToc(server.dataDir);
+  seedAboutPage(server.dataDir);
 
   controller = await startBrowser();
   const { context } = await controller.newLoggedInContext(server.base, server.fixture);
@@ -219,6 +220,94 @@ try {
       (r.tocVisible ? "（右栏可见）" : "（右栏隐藏）"));
   }
 
+  /* ── 断言 6（B-7）：导航项恢复 .nav-item 的设计值 ── */
+  /**
+   * 旧版 `.nav a`（特异性 0,1,1）一直压着 `.nav-item`（0,1,0），
+   * 实测导航项渲染成 `6px 10px / 8px / .925rem`。
+   * 删掉 `.nav a` 三条规则后必须回到设计值，否则说明还有别的东西在压。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const navStyle = await page.evaluate(() => {
+    const el = document.querySelector(".sidebar .nav .nav-item");
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    return {
+      padding: cs.paddingTop + " " + cs.paddingRight + " " + cs.paddingBottom + " " + cs.paddingLeft,
+      paddingTop: cs.paddingTop,
+      paddingLeft: cs.paddingLeft,
+      radius: cs.borderTopLeftRadius,
+      fontSize: cs.fontSize,
+    };
+  });
+  assert.ok(navStyle, "侧栏应有 .nav-item");
+  assert.equal(navStyle.paddingTop, "13px", ".nav-item padding-top 应为 13px，实际 " + navStyle.paddingTop);
+  assert.equal(navStyle.paddingLeft, "16px", ".nav-item padding-left 应为 16px，实际 " + navStyle.paddingLeft);
+  assert.equal(navStyle.radius, "13px", ".nav-item border-radius 应为 13px，实际 " + navStyle.radius);
+  assert.equal(navStyle.fontSize, "15.2px", ".nav-item font-size 应为 .95rem = 15.2px，实际 " + navStyle.fontSize);
+  console.log("PASS B-7 .nav-item 恢复设计值（padding 13px 16px / radius 13px / 15.2px）");
+
+  /* ── 断言 7（B-7）：每页有且只有一个导航项高亮，包括原来漏掉的 3 个 ── */
+  /**
+   * 原来 `active` 是手工传的字符串，`/about`、`/tags/*`、`/search` 三处
+   * 传的是 `""` 或不在数组里的值 → 没有选中态。改成路径自判后：
+   *   • 5 个导航页各自高亮自己
+   *   • 文章详情 /p/<id> 与标签页 /tags/<tag> 都归到「文章」
+   *   • /search 不是导航项 → 一个都不高亮（这是**正确**行为，不是遗漏）
+   */
+  const activeCases = [
+    ["/", 1, "文章"],
+    ["/shuoshuo", 1, "说说"],
+    ["/archives", 1, "归档"],
+    ["/friend-links", 1, "友链"],
+    ["/about", 1, "关于"],        // 原来传 ""，漏了
+    ["/p/" + tocPostId, 1, "文章"], // 原来硬编码在 ArticleView，现在自判
+    ["/tags/ai", 1, "文章"],       // 原来传 ""，漏了
+    ["/search", 0, "（无）"],      // 不在导航里，不该高亮任何项
+  ];
+  for (const [pathName, want, label] of activeCases) {
+    await page.goto(server.base + pathName, { waitUntil: "networkidle" });
+    const info = await page.evaluate(() => {
+      const items = [...document.querySelectorAll(".sidebar .nav .nav-item")];
+      return {
+        total: items.length,
+        active: items.filter((e) => e.classList.contains("is-active")).length,
+        activeText: items.filter((e) => e.classList.contains("is-active")).map((e) => (e.textContent || "").trim()),
+      };
+    });
+    assert.equal(info.total, 5, pathName + " 侧栏应有 5 个导航项");
+    assert.equal(
+      info.active,
+      want,
+      pathName + " 应有 " + want + " 个高亮项（" + label + "），实际 " +
+        info.active + " 个：" + JSON.stringify(info.activeText)
+    );
+    if (want === 1) {
+      assert.ok(
+        info.activeText.some((t) => t.includes(label)),
+        pathName + " 高亮的应是「" + label + "」，实际 " + JSON.stringify(info.activeText)
+      );
+    }
+    console.log("PASS B-7 " + pathName.padEnd(14) + " 高亮 " + want + " 项" + (want ? "（" + label + "）" : ""));
+  }
+
+  /* ── 断言 8（B-7）：移动端抽屉与桌面用同一套标签与顺序 ── */
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  await page.locator(".mobile-menu-btn").click();
+  await page.waitForTimeout(200);
+  const drawerLabels = await page.locator(".mobile-drawer-item").evaluateAll((els) =>
+    els.map((e) => (e.textContent || "").trim())
+  );
+  assert.deepEqual(
+    drawerLabels,
+    ["📄文章", "💬说说", "🗂归档", "🔗友链", "👤关于"],
+    "移动端抽屉标签与顺序必须与桌面一致，实际 " + JSON.stringify(drawerLabels)
+  );
+  const drawerActive = await page.locator(".mobile-drawer-item.active").count();
+  assert.equal(drawerActive, 1, "首页抽屉应有 1 个高亮项，实际 " + drawerActive);
+  console.log("PASS B-7 移动端抽屉标签/顺序与桌面一致，高亮 1 项");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
@@ -239,6 +328,24 @@ function seedFriendLinks(dataDir, n) {
   for (let i = 0; i < n; i++) {
     ins.run("友链 " + i, "https://example" + i + ".com", "这是第 " + i + " 个友链的描述文字，用来把右栏撑高", 200 + i);
   }
+  db.close();
+}
+
+/**
+ * 造一条 `type=page` 的 /about 记录。
+ *
+ * `/about` 不是独立路由，走 `app/[slug]/page.tsx` 且**保留语义路径**
+ * （不像文章会 308 到 /p/<id>）。没有这条记录时该 URL 直接 404，
+ * 导航高亮断言就无从谈起 —— 这是测试数据缺失，不是功能问题。
+ */
+function seedAboutPage(dataDir) {
+  const db = new Database(dataDir + "/blog.db");
+  db.pragma("journal_mode = WAL");
+  const now = new Date().toISOString();
+  db.prepare(
+    "INSERT INTO posts (type, slug, title, content, status, published_at, created_at, updated_at) " +
+    "VALUES ('page', 'about', '关于', '这是关于页的正文。', 'published', ?, ?, ?)"
+  ).run(now, now, now);
   db.close();
 }
 
