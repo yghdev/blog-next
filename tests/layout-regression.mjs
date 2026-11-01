@@ -308,6 +308,104 @@ try {
   assert.equal(drawerActive, 1, "首页抽屉应有 1 个高亮项，实际 " + drawerActive);
   console.log("PASS B-7 移动端抽屉标签/顺序与桌面一致，高亮 1 项");
 
+  /* ── 断言 9（B-3）：14 档视口 × 标准页/宽版页，对照路线图 §10.3 ── */
+  /**
+   * §10.3 是「设计参数的推论」，验收以浏览器实测为准，容差 2px。
+   * 若实测不符，处理顺序是：① 查实现（padding 是否 32×2、max-width 上限、
+   * 断点写反）；② 查断点条件。**不要为了让断言通过而改设计参数**。
+   */
+  const GRID = [
+    // [视口, 标准页 content, 宽版页 content, sidebar.left]
+    [1600, 800, 960, 56],
+    [1552, 800, 960, 32],
+    [1440, 688, 960, 32],
+    [1392, 640, 960, 32],   // 三栏最低点
+    [1391, 800, 960, 32],   // 两栏最高点（跳变在此）
+    [1202, 800, 810, 32],
+    [1201, 800, 809, 32],
+    [1200, 800, 808, 32],
+    [1199, 800, 807, 32],
+    [1100, 708, 708, 32],
+    [900, 508, 508, 32],
+    [821, 429, 429, 32],
+    [820, 780, 780, null],  // 单栏，左栏隐藏
+    [375, 335, 335, null],
+  ];
+
+  for (const [vw, wantStd, wantWide, wantLeft] of GRID) {
+    await page.setViewportSize({ width: vw, height: 900 });
+
+    await page.goto(server.base + "/", { waitUntil: "networkidle" });
+    const std = await page.evaluate(() => {
+      const c = document.querySelector(".content");
+      const s = document.querySelector(".sidebar");
+      const t = document.querySelector(".toc-col");
+      return {
+        content: c ? Math.round(c.getBoundingClientRect().width) : null,
+        sideLeft: s && getComputedStyle(s).display !== "none" ? Math.round(s.getBoundingClientRect().left) : null,
+        toc: t ? getComputedStyle(t).display !== "none" : false,
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth,
+      };
+    });
+
+    await page.goto(server.base + "/friend-links", { waitUntil: "networkidle" });
+    const wide = await page.evaluate(() => {
+      const c = document.querySelector(".content");
+      return { content: c ? Math.round(c.getBoundingClientRect().width) : null };
+    });
+
+    assert.ok(
+      Math.abs(std.content - wantStd) <= 2,
+      vw + "px 标准页 content 应为 " + wantStd + "±2，实际 " + std.content
+    );
+    assert.ok(
+      Math.abs(wide.content - wantWide) <= 2,
+      vw + "px 宽版页 content 应为 " + wantWide + "±2，实际 " + wide.content
+    );
+    if (wantLeft === null) {
+      assert.equal(std.sideLeft, null, vw + "px 应为单栏，左栏隐藏");
+    } else {
+      assert.ok(
+        Math.abs(std.sideLeft - wantLeft) <= 2,
+        vw + "px sidebar.left 应为 " + wantLeft + "±2，实际 " + std.sideLeft
+      );
+    }
+    assert.ok(std.scrollW <= std.clientW + 1, vw + "px 不应横向溢出：" + std.scrollW + " > " + std.clientW);
+    // 三栏只在 ≥1392 出现
+    assert.equal(std.toc, vw >= 1392, vw + "px 的 .toc-col 可见性应为 " + (vw >= 1392));
+    console.log("PASS B-3 " + String(vw).padStart(4) + "px 标准=" + std.content + " 宽版=" + wide.content +
+      " left=" + std.sideLeft + " toc=" + (std.toc ? "有" : "无"));
+  }
+
+  /* ── 断言 10（B-3）：断点内连续性 —— 1202/1201/1200/1199 恒为 800 ── */
+  /**
+   * 原实现在 1201→1200 之间从 449 跳到 760（差 311px）。本任务的真正目标
+   * 就是消灭这个断崖：四档同属两栏区，内容宽必须都等于 --w-main(800)。
+   */
+  const continuity = [];
+  for (const vw of [1202, 1201, 1200, 1199]) {
+    await page.setViewportSize({ width: vw, height: 900 });
+    await page.goto(server.base + "/", { waitUntil: "networkidle" });
+    continuity.push(await page.evaluate(() => Math.round(document.querySelector(".content").getBoundingClientRect().width)));
+  }
+  assert.deepEqual(continuity, [800, 800, 800, 800], "1202/1201/1200/1199 应恒为 800，实际 " + JSON.stringify(continuity));
+  console.log("PASS B-3 断崖消失：1202/1201/1200/1199 = " + JSON.stringify(continuity));
+
+  /* ── 断言 11（B-3）：side-sheet-entry 显隐区间与断点严格互补 ── */
+  for (const [vw, wantVisible] of [[1392, false], [1391, true], [1201, true], [821, true], [820, false]]) {
+    await page.setViewportSize({ width: vw, height: 900 });
+    await page.goto(server.base + "/", { waitUntil: "networkidle" });
+    const visible = await page.evaluate(() => {
+      const el = document.querySelector(".side-sheet-entry");
+      if (!el) return false;
+      const cs = getComputedStyle(el);
+      return cs.display !== "none" && el.getBoundingClientRect().width > 0;
+    });
+    assert.equal(visible, wantVisible, vw + "px 的「侧栏」入口可见性应为 " + wantVisible);
+    console.log("PASS B-3 " + String(vw).padStart(4) + "px 侧栏入口 " + (visible ? "可见" : "隐藏"));
+  }
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());

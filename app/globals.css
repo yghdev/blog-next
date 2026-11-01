@@ -48,15 +48,13 @@
    * 漏一处就出现「首页对齐了、友链页还是老偏移」这种只在某个页面出现的
    * 错位。现在只在令牌里算一次。
    *
-   * ⚠️ `--w-shell-narrow` 的数值刻意与改前**完全一致**（B-2 是纯重构，
-   * 13 个视口必须逐像素不变）。它漏了 `--gap-col`：288 + 800 + 64 = 1152，
-   * 而两栏布局实际需要 288 + 800 + 40 + 64 = 1192。后果是 1192–1200
-   * 这一小段视口里容器被多收了 8px，左栏偏移 56px 而不是 32px。
-   * 这是**既有缺陷**，B-3 重构两栏几何时一并修正（不在 B-2 范围内改，
-   * 否则 B-2 就不再是"零变化"的重构，验收基线也就失去意义）。
+   * `--w-shell-narrow` 在 B-2 里曾刻意保留既有值 1152（漏了 gap-col 40），
+   * 因为那一步是纯重构、要求逐像素不变。B-3 重构两栏几何时一并修正为
+   * 1192 —— 否则 1192–1200 这一小段视口容器会多收 8px，左栏偏移 56px
+   * 而不是 32px（实测：修正前 1200px 视口的 .sidebar.left = 56）。
    */
   --w-shell: calc(var(--w-side) + var(--w-main) + var(--w-toc) + var(--gap-col) * 2 + 64px);
-  --w-shell-narrow: calc(var(--w-side) + var(--w-main) + 64px);
+  --w-shell-narrow: calc(var(--w-side) + var(--w-main) + var(--gap-col) + 64px);
   --w-shell-read: calc(var(--w-side) + var(--w-read) + var(--gap-col) + 64px);
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
                "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
@@ -839,10 +837,34 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .only-mobile { display: none; }
 
 /* ── 响应式 ── */
-@media (max-width: 1200px) {
+/*
+ * 三栏阈值：1392px。
+ *
+ * 原来写的是 1200px，于是 1201→1200 只差 1px 视口，正文却从 449 跳到 760
+ * （差 311px）—— 因为 1201 还在三栏、右栏占了 320，1200 一过右栏突然消失。
+ * 把阈值提到 1392（三栏最低点：中栏 640px，仍可读）后，1201–1391 这一段
+ * 统一为两栏，宽度按 min(--w-main, vw - 372) 线性变化，断崖消失。
+ *
+ * 代价（Q2 已确认）：1201–1391 的用户从三栏变两栏，右侧统计/友链/标签云
+ * 需要点左侧栏底部的「侧栏」按钮才能看到。
+ */
+@media (max-width: 1391px) {
   .site-shell {
-    grid-template-columns: var(--w-side) minmax(0, 1fr);
-    max-width: var(--w-shell-narrow);
+    /*
+     * 两栏：**不要用 max-width 收容器**，让网格轨道自己限制中栏。
+     *
+     * 原先写的是 `max-width: calc(--w-side + --w-main + 64px)`，问题是
+     * 容器被收窄后会在视口里居中：1200px 视口下容器 1152 居中，左右各留
+     * 24px，于是左栏落到 56px —— 而首页在三栏时是 32px，两个断点之间
+     * 左栏会"跳"一下（实测 1200→1201 从 56 跳到 32）。
+     *
+     * 改成不收容器、由 `minmax(0, var(--w-main))` 限中栏之后：
+     *   容器始终占满（vw - 64），左栏恒在 32px；
+     *   中栏 = min(800, vw - 64 - 288 - 40)，与 §10.3 的公式一致。
+     */
+    grid-template-columns: var(--w-side) minmax(0, var(--w-main));
+    max-width: none;
+    justify-content: start;
   }
   .toc-col { display: none; }
 }
@@ -863,7 +885,10 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   }
   /* 首页不再有页面标题，列表从顶部开始，收紧首卡间距 */
   .post-list { gap: 12px; }
-  .toc-col { display: none !important; }
+  /* 这里原本是 `display: none !important`。`!important` 是旧特异性冲突的
+     权宜之计（`.nav a` 压过 `.nav-item` 那类问题），B-7 删掉冲突规则后
+     已无必要；保留它反而会让以后想在小屏露出右栏时改不动。 */
+  .toc-col { display: none; }
 
   .content { max-width: 100%; }
   .article-title { font-size: 1.5rem; }
@@ -1193,7 +1218,9 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 }
 
 /* 桌面（>1200px）：右栏已经在显示，入口多余，隐藏 */
-@media (min-width: 1201px) {
+/* 「侧栏」入口在 821–1391 可见（两栏区，右栏已隐藏、顶栏还没出现）；
+   1392 起三栏自带右栏，不需要这个入口。区间必须与上面的断点严格互补。 */
+@media (min-width: 1392px) {
   .side-sheet-entry { display: none; }
 }
 
