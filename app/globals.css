@@ -2100,102 +2100,20 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 }
 
 /* ══════════════════════════════════════════════════════════════
-   阶段 01-A：追加型设计令牌（纯追加，不改任何既有值与规则）
+   设计令牌：这里曾有一批「阶段 01-A 追加型令牌」
    ──────────────────────────────────────────────────────────────
-   三层结构，禁止跨层直接引用：
-     1) 基础色板 —— 已存在于本文件顶部（--bg / --text-p0~p4 / --cat-1~7 等）
-     2) 语义色   —— 已存在（--danger / --ok / --warn / --info 及其 -bg 与 -border）
-     3) 组件别名 —— 本段新增，只引用第 2 层，不写具体色值
+   2026-11-01（C-1）整体删除。原因：58 个令牌（--space-* / --radius-* /
+   --fs-* / --lh-* / --fw-* / --btn-* / --field-* / --table-* / --skeleton-*
+   / --toast-*）的 var() 引用数是 **0** —— 实测全项目 grep 无任何引用。
 
-   为什么用别名而不是再定义一套颜色：现有 --text-p0~p4 / --ok* / --danger* 已经
-   覆盖了全部语义，再建平行体系必然出现"同名不同色"。所以这里只做映射，
-   组件样式一律引用别名，将来调整主题只改这一层。
+   它们看起来像一套完整的设计系统（名字规整、注释详尽），实际上是
+   **孤岛值**：改了不会影响任何地方，不改也不会有任何地方坏。
+   这种「假抽象」比没有抽象更糟 —— 会让后来者以为约束已经存在，
+   照着名字写「间距第 5 档」，却得不到任何一致性保证。
 
-   刻度来源（不是拍脑袋）：统计了 app/ 与 components/ 下全部内联样式与 CSS 的
-   实际用量，间距高频值是 4/6/8/10/12/14/16/20/24，圆角是 8/10/12/14/20，
-   字号是 .72/.78/.82/.85/.9/.95rem。令牌只收录这些真实出现过的值，
-   多出来的刻度等于鼓励新代码写出没人用过的间距。
+   真正在用的令牌都在文件顶部的 :root 里（--bg / --text-* / --w-* 等）。
+   tests/design-tokens.test.ts 有反向断言：定义了就必须有人 var() 引用。
    ══════════════════════════════════════════════════════════════ */
-:root {
-  /* ── 间距刻度（1 单位 = 4px，与现有 padding 数值对齐）── */
-  --space-0: 0;
-  --space-1: 4px;
-  --space-2: 6px;
-  --space-3: 8px;
-  --space-4: 10px;
-  --space-5: 12px;
-  --space-6: 14px;
-  --space-7: 16px;
-  --space-8: 20px;
-  --space-9: 24px;
-  --space-10: 32px;
-
-  /* ── 圆角 ── */
-  --radius-xs: 6px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-xl: 14px;
-  --radius-2xl: 20px;
-  --radius-pill: 999px;
-
-  /* ── 字号（沿用既有 .72~.95rem 刻度；--fs 仍是根字号 16px）── */
-  --fs-2xs: .72rem;
-  --fs-xs: .78rem;
-  --fs-sm: .82rem;
-  --fs-md: .9rem;
-  --fs-lg: .95rem;
-  --fs-xl: 1.15rem;
-  --fs-2xl: 1.3rem;
-
-  /* ── 行高 ── */
-  --lh-tight: 1.6;
-  --lh-normal: 1.7;
-  --lh-loose: 1.8;
-
-  /* ── 字重（暗色主题会在本文件末尾统一降 40，这里只给语义名）── */
-  --fw-normal: 400;
-  --fw-medium: 550;
-  --fw-semibold: 560;
-  --fw-bold: 650;
-
-  /* ── 组件别名：按钮 ── */
-  --btn-bg: var(--bg);
-  --btn-bg-hover: var(--bg-subtle);
-  --btn-border: var(--border-strong);
-  --btn-text: var(--text-p0);
-  --btn-primary-bg: var(--text-p0);
-  --btn-primary-text: var(--bg);
-  --btn-ghost-text: var(--text-p3);
-  --btn-disabled-opacity: .45;
-
-  /* ── 组件别名：表单 ── */
-  --field-bg: var(--bg);
-  --field-bg-focus: var(--card-bg);
-  --field-border: var(--border-strong);
-  --field-label: var(--text-p3);
-  --field-hint: var(--text-p4);
-  --field-error: var(--danger);
-
-  /* ── 组件别名：数据容器 ── */
-  --table-bg: var(--card-bg);
-  --table-border: var(--border);
-  --table-head-bg: var(--bg-subtle);
-  --table-row-hover: var(--bg-subtle);
-  --table-cell-text: var(--text-p1);
-  --table-head-text: var(--text-p4);
-
-  /* ── 组件别名：骨架屏 ──
-     用半透明中性色而不是固定灰：暗色主题下固定灰会亮得像贴纸。 */
-  --skeleton-bg: var(--bg-subtle);
-  --skeleton-shine: color-mix(in oklab, var(--text-p0) 6%, transparent);
-
-  /* ── 组件别名：浮层（Toast）── */
-  --toast-bg: var(--surface-2);
-  --toast-border: var(--border-strong);
-  --toast-shadow: var(--lift-2);
-  --toast-text: var(--text-p1);
-}
 
 /* ── 共享原子的旋转关键帧 ────────────────────────────────
    components/ui/Button.tsx 的 loading 转圈引用 ui-spin；components/ui 下的

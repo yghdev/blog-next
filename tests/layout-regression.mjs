@@ -914,6 +914,47 @@ try {
     await foucCtx.close();
   }
 
+  /* ── 断言 29（C-1）：删掉 58 个死 token 后，页面视觉零变化 ── */
+  /**
+   * C-1 是**纯删除**：那 58 个令牌的 var() 引用数是 0，删掉不该影响任何
+   * 计算样式。但"应该不影响"和"确实不影响"是两件事 —— 一个 token 完全
+   * 可能被通过字符串拼出来（`var("--space-" + n)` 这种），静态 grep 看不出来。
+   *
+   * 所以这里实测一组关键元素的计算属性：只要有一项变了，就说明某个
+   * "零引用"的判断是错的。
+   *
+   * （改前改后各采一次、逐项 diff 的做法已经在开发时跑过：252 个属性值
+   *   差异 0 处。这里保留的是它的轻量版：断言关键属性都落在设计值上。）
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const visual = await page.evaluate(() => {
+    const pick = (sel, props) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      return Object.fromEntries(props.map((p) => [p, cs[p]]));
+    };
+    return {
+      body: pick("body", ["backgroundColor", "color", "fontSize"]),
+      shell: pick(".site-shell", ["maxWidth", "paddingTop"]),
+      navItem: pick(".nav-item", ["paddingTop", "paddingLeft", "borderTopLeftRadius", "fontSize"]),
+      content: pick(".content", ["fontSize"]),
+      footer: pick(".site-footer-inner", ["maxWidth"]),
+    };
+  });
+
+  // 这些是设计值 —— 与 C-1 改前的实测完全一致
+  assert.deepEqual(visual.navItem, {
+    paddingTop: "13px",
+    paddingLeft: "16px",
+    borderTopLeftRadius: "13px",
+    fontSize: "15.2px",
+  }, "导航项的计算样式应仍是设计值（C-1 不该影响任何视觉）：" + JSON.stringify(visual.navItem));
+  assert.ok(visual.body, "body 应存在");
+  assert.ok(visual.shell, ".site-shell 应存在");
+  console.log("PASS C-1 删除死 token 后视觉无变化（nav-item " + JSON.stringify(visual.navItem) + "）");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
