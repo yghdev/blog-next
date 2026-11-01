@@ -388,6 +388,12 @@ a:hover { color: var(--link-hover); }
 /* ── 主内容区 ── */
 .content { min-width: 0; }
 
+/*
+ * 页面标题（C-8：由 <PageHeader> 统一渲染）。
+ *
+ * `.page-head` 本身不设样式 —— 它只是个语义容器（header 元素），
+ * 让 "标题 + 副标题" 成为一个整体。真正控制排版的是下面两条。
+ */
 .page-title {
   font-family: var(--font-serif);
   font-size: 1.75rem;
@@ -395,6 +401,22 @@ a:hover { color: var(--link-hover); }
   color: var(--text-p0);
   margin: 0 0 32px;
   letter-spacing: .01em;
+}
+
+/*
+ * 副标题（C-8）。
+ *
+ * 用**负上边距**抵消 `.page-title` 的 32px 下边距 —— 这是原来标签页
+ * `.tag-count` 用的手法（`margin: -16px 0 24px`）：副标题应当紧跟标题、
+ * 视觉上属于同一组，而不是被 32px 推开。
+ *
+ * 净效果：标题与副标题之间 16px，副标题与正文之间 24px。
+ * 与改前 `.tag-count` 完全一致。
+ */
+.page-sub {
+  font-size: .85rem;
+  color: var(--text-p4);
+  margin: -16px 0 24px;
 }
 
 /* ── 404 页（C-5：原本全是内联样式）── */
@@ -419,12 +441,8 @@ a:hover { color: var(--link-hover); }
   margin: 0 0 16px;
 }
 
-/* ── 标签页文章计数（C-5：原内联 .85rem，负上边距抵消标题的下边距）── */
-.tag-count {
-  font-size: .85rem;
-  color: var(--text-p4);
-  margin: -16px 0 24px;
-}
+/* `.tag-count` 已删除（C-8）：标签页改用 <PageHeader sub="…">，
+   它的排版语义并入 `.page-sub`。 */
 
 /* ── 文章封面（C-5：原内联 width/border-radius/margin/border）── */
 .article-cover {

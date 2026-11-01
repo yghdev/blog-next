@@ -107,7 +107,7 @@ test("C-5 新语义类必须都有对应样式", () => {
     "search-meta",
     "archive-year-count", "archive-month-group", "archive-month",
     "pager-current",
-    "tag-count",
+    "page-sub",   // C-8：标签页的计数改用 <PageHeader sub> 后，排版语义并入这里
     "article-cover",
     "comment-error",
   ];

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { SiteShell } from "@/components/SiteShell";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { Animations } from "@/components/Animations";
 import { listArchivesCached } from "@/lib/cached";
 import { dateKeyIn } from "@/lib/time";
@@ -18,15 +20,13 @@ export default async function ArchivesPage() {
     <>
       <Animations />
       <SiteShell variant="three-col">
-        <h1 className="page-title">归档</h1>
+        <PageHeader title="归档" />
         {groups.length === 0 ? (
-          <div className="empty-block">
-            <div className="empty-title">归档还是空的</div>
-            <div className="empty-hint">归档按月分组，只统计已发布的文章。草稿不会出现在这里。</div>
-            <div className="empty-actions">
-              <a className="btn btn-sm" href="/admin/new">写第一篇</a>
-            </div>
-          </div>
+          <EmptyState
+            title="归档还是空的"
+            hint="归档按月分组，只统计已发布的文章。草稿不会出现在这里。"
+            actions={<a className="btn btn-sm" href="/admin/new">写第一篇</a>}
+          />
         ) : null}
         {groups.map((g) => (
           <section key={g.year}>

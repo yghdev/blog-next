@@ -1,5 +1,6 @@
 import { Animations } from "@/components/Animations";
 import { SiteShell } from "@/components/SiteShell";
+import { PageHeader } from "@/components/PageHeader";
 import { PostCard } from "@/components/PostCard";
 import { getDb } from "@/lib/db";
 import { makeExcerpt, parseJsonArray, decodeSlug, postHref } from "@/lib/posts";
@@ -23,10 +24,7 @@ export default async function TagPage({ params }: { params: Promise<{ tag: strin
     <>
       <Animations />
       <SiteShell variant="three-col">
-        <h1 className="page-title">标签：{tag}</h1>
-        <p className="tag-count">
-          共 {posts.length} 篇文章
-        </p>
+        <PageHeader title={"标签：" + tag} sub={"共 " + posts.length + " 篇文章"} />
         <div className="post-list">
           {posts.map((p) => (
             <PostCard

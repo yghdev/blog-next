@@ -1193,6 +1193,106 @@ try {
     console.log("PASS C-5 搜索计数语义类正确（" + sm.size + "）");
   }
 
+  /* ── 断言 34（C-8）：PageHeader 与 EmptyState 渲染正确 ── */
+  /**
+   * 这两个组件只是把重复的 JSX 收成一个组件，**不改任何 CSS** ——
+   * 后台 `admin/ui.tsx` 的 Empty 用的是同一套 `.empty-block` 类，
+   * 改样式会波及后台。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // 四个页面的标题都由 PageHeader 渲染，结构一致
+  const HEADER_CASES = [
+    ["/archives", "归档"],
+    ["/shuoshuo", "说说"],
+    ["/search", "搜索"],
+  ];
+  for (const [pathName, wantTitle] of HEADER_CASES) {
+    await page.goto(server.base + pathName, { waitUntil: "networkidle" });
+    const h = await page.evaluate(() => {
+      const head = document.querySelector("header.page-head");
+      const title = head?.querySelector("h1.page-title");
+      return {
+        hasHead: !!head,
+        tag: title ? title.tagName : null,
+        text: title ? title.textContent.trim() : null,
+        size: title ? getComputedStyle(title).fontSize : null,
+        h1Count: document.querySelectorAll("h1").length,
+      };
+    });
+    assert.equal(h.hasHead, true, pathName + " 应有 header.page-head（PageHeader 的容器）");
+    assert.equal(h.tag, "H1", pathName + " 的标题应是 h1");
+    assert.equal(h.text, wantTitle, pathName + " 标题文字应为 " + wantTitle + "，实际 " + h.text);
+    assert.equal(h.size, "28px", pathName + " 标题字号应为 1.75rem = 28px，实际 " + h.size);
+    assert.equal(h.h1Count, 1, pathName + " 应有且只有 1 个 h1，实际 " + h.h1Count);
+    console.log("PASS C-8 " + pathName.padEnd(12) + " PageHeader 正确（h1 / " + h.text + " / " + h.size + "）");
+  }
+
+  /* ── 断言 35（C-8）：EmptyState 结构与后台共用同一套类 ── */
+  /**
+   * 用搜索页的「无结果」验证三层结构齐全（title / hint / actions），
+   * 用「未输入」验证 actions 可缺省。
+   */
+  await page.goto(server.base + "/search?q=zzzznothing", { waitUntil: "networkidle" });
+  const withActions = await page.evaluate(() => {
+    const eb = document.querySelector(".empty-block");
+    if (!eb) return null;
+    const cs = getComputedStyle(eb);
+    return {
+      hasTitle: !!eb.querySelector(".empty-title"),
+      hasHint: !!eb.querySelector(".empty-hint"),
+      hasActions: !!eb.querySelector(".empty-actions"),
+      actionCount: eb.querySelectorAll(".empty-actions .btn").length,
+      textAlign: cs.textAlign,
+      titleSize: getComputedStyle(eb.querySelector(".empty-title")).fontSize,
+      hintSize: getComputedStyle(eb.querySelector(".empty-hint")).fontSize,
+    };
+  });
+  assert.ok(withActions, "搜索无结果时应渲染 .empty-block");
+  assert.equal(withActions.hasTitle, true, "应有 .empty-title");
+  assert.equal(withActions.hasHint, true, "应有 .empty-hint");
+  assert.equal(withActions.hasActions, true, "应有 .empty-actions");
+  assert.equal(withActions.actionCount, 2, "应有 2 个操作按钮，实际 " + withActions.actionCount);
+  assert.equal(withActions.titleSize, "14.72px", "空状态标题 .92rem = 14.72px，实际 " + withActions.titleSize);
+  assert.equal(withActions.hintSize, "12.8px", "空状态说明 .8rem = 12.8px，实际 " + withActions.hintSize);
+  console.log("PASS C-8 EmptyState 三层结构齐全（标题 " + withActions.titleSize + " / 说明 " + withActions.hintSize + " / 2 个按钮）");
+
+  await page.goto(server.base + "/search", { waitUntil: "networkidle" });
+  const noActions = await page.evaluate(() => {
+    const eb = document.querySelector(".empty-block");
+    if (!eb) return null;
+    return {
+      hasHint: !!eb.querySelector(".empty-hint"),
+      hasActions: !!eb.querySelector(".empty-actions"),
+    };
+  });
+  assert.ok(noActions, "搜索未输入时应渲染 .empty-block");
+  assert.equal(noActions.hasHint, true, "应有 .empty-hint");
+  assert.equal(noActions.hasActions, false, "未传 actions 时不应渲染 .empty-actions");
+  console.log("PASS C-8 EmptyState actions 可缺省（不渲染空容器）");
+
+  /* ── 断言 36（C-8）：标签页的 sub 排版与改前 .tag-count 一致 ── */
+  /**
+   * 原来标签页用 `.tag-count { margin: -16px 0 24px }` 抵消标题的 32px
+   * 下边距。现在改用 `<PageHeader sub>`，`.page-sub` 必须承担同样的
+   * 排版语义 —— 否则标题与正文之间的间距会变。
+   */
+  await page.goto(server.base + "/tags/ai", { waitUntil: "networkidle" });
+  const sub = await page.evaluate(() => {
+    const el = document.querySelector("header.page-head .page-sub");
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    const title = getComputedStyle(document.querySelector("header.page-head .page-title"));
+    return { margin: cs.margin, size: cs.fontSize, color: cs.color, titleMargin: title.margin };
+  });
+  if (sub) {
+    assert.equal(sub.margin, "-16px 0px 24px", "副标题 margin 应为 -16px 0 24px（与改前 .tag-count 一致），实际 " + sub.margin);
+    assert.equal(sub.size, "13.6px", "副标题字号 .85rem = 13.6px，实际 " + sub.size);
+    console.log("PASS C-8 标签页 sub 排版与改前一致（margin " + sub.margin + "）");
+  } else {
+    console.log("SKIP C-8 标签页无 sub（该标签下没有文章）");
+  }
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());

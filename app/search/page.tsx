@@ -1,5 +1,7 @@
 import { Animations } from "@/components/Animations";
 import { SiteShell } from "@/components/SiteShell";
+import { PageHeader } from "@/components/PageHeader";
+import { EmptyState } from "@/components/EmptyState";
 import { SearchBox } from "@/components/SearchBox";
 import { PostCard } from "@/components/PostCard";
 import { searchPosts } from "@/lib/search";
@@ -26,7 +28,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     <>
       <Animations />
       <SiteShell variant="wide">
-        <h1 className="page-title">搜索</h1>
+        <PageHeader title="搜索" />
         {/*
           复用 SearchBox，而不是手写第二份表单（B-6）。
           手写那份用了 `content-search` 类名，被 820px 的
@@ -46,17 +48,16 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         ) : null}
 
         {q && hits.length === 0 ? (
-          <div className="empty-block">
-            <div className="empty-title">没有找到「{q}」</div>
-            <div className="empty-hint">
-              两字以上的词能走全文索引，单个字只能逐条匹配，容易搜不到。
-              也可以换个更短的关键词，或者直接从归档里翻。
-            </div>
-            <div className="empty-actions">
-              <Link className="btn btn-sm" href="/archives">看归档</Link>
-              <Link className="btn btn-sm btn-ghost" href="/">回首页</Link>
-            </div>
-          </div>
+          <EmptyState
+            title={"没有找到「" + q + "」"}
+            hint="两字以上的词能走全文索引，单个字只能逐条匹配，容易搜不到。也可以换个更短的关键词，或者直接从归档里翻。"
+            actions={
+              <>
+                <Link className="btn btn-sm" href="/archives">看归档</Link>
+                <Link className="btn btn-sm btn-ghost" href="/">回首页</Link>
+              </>
+            }
+          />
         ) : (
           <div className="post-list">
             {hits.map((h) => (
@@ -72,10 +73,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         )}
 
         {!q ? (
-          <div className="empty-block">
-            <div className="empty-title">想找点什么？</div>
-            <div className="empty-hint">输入标题或正文里的关键词，回车即可。两字以上会走全文索引，更快更准。</div>
-          </div>
+          <EmptyState
+            title="想找点什么？"
+            hint="输入标题或正文里的关键词，回车即可。两字以上会走全文索引，更快更准。"
+          />
         ) : null}
       </SiteShell>
     </>
