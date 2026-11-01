@@ -640,6 +640,88 @@ try {
   assert.equal(homeSearch, "none", "375px 下首页 .content-search 应仍为 display:none，实际 " + homeSearch);
   console.log("PASS B-6 375px 首页 content-search 仍隐藏（未被误伤）");
 
+  /* ── 断言 21（B-8）：桌面右栏与手机抽屉的区块内容必须一致 ── */
+  /**
+   * B-8 之前，统计块/友链/标签云在 RightBar 与 MobileSidebar 里各写一遍
+   * （连 🚇 🔗 ↗ 都一字不差）。抽成纯展示组件后，两边渲染的应该是
+   * 同一批 DOM —— 这条断言直接比对"数量与文本集合"，不比对具体结构。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const desktop = await page.evaluate(() => {
+    const rb = document.querySelector(".rightbar");
+    return {
+      blockTitles: [...rb.querySelectorAll(".rb-title")].map((e) => e.textContent.trim()),
+      statCells: rb.querySelectorAll(".stat-cell").length,
+      statLabels: [...rb.querySelectorAll(".stat-name")].map((e) => e.textContent.trim()).sort(),
+      tagNames: [...rb.querySelectorAll(".tag-pill .tag-hash + *")].length
+        ? [...rb.querySelectorAll(".tag-pill")].map((e) => e.textContent.replace("#", "").trim()).sort()
+        : [],
+      friendNames: [...rb.querySelectorAll(".fl-name")].map((e) => e.textContent.trim()).sort(),
+    };
+  });
+
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  await page.locator(".mobile-menu-btn").click();
+  await page.waitForTimeout(200);
+  // 抽屉里的「侧栏」是右侧那个（MobileSidebar），顶部汉堡打开的是导航抽屉
+  const drawerOpened = await page.evaluate(() => !!document.querySelector(".mobile-drawer"));
+  assert.equal(drawerOpened, true, "375px 应能打开抽屉");
+
+  const mobileLabels = await page.evaluate(() => {
+    const items = [...document.querySelectorAll(".mobile-drawer-item")].map((e) => e.textContent.trim());
+    return { navItems: items };
+  });
+  assert.equal(mobileLabels.navItems.length, 5, "移动抽屉应有 5 个导航项");
+
+  /* 右侧栏抽屉（MobileSidebar）：点顶部栏的侧栏按钮打开 */
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  await page.locator(".mobile-sidebar-btn").click();
+  await page.waitForTimeout(400);
+  const mobileBlocks = await page.evaluate(() => {
+    const sb = document.querySelector(".mobile-sidebar");
+    if (!sb) return null;
+    return {
+      titles: [...sb.querySelectorAll(".rb-title")].map((e) => e.textContent.trim()),
+      stats: [...sb.querySelectorAll(".stat-name")].map((e) => e.textContent.trim()).sort(),
+      friends: [...sb.querySelectorAll(".fl-name")].map((e) => e.textContent.trim()).sort(),
+    };
+  });
+  assert.ok(mobileBlocks, "点击侧栏按钮后应出现 .mobile-sidebar");
+
+  /**
+   * B-8 的核心验收：桌面与移动渲染的区块**内容完全一致**。
+   *
+   * 这比"两边都用了同一个组件"更强：即使某天有人把入口数据源改歪了
+   * （比如移动端少传一个 prop），这里也会红。
+   */
+  assert.deepEqual(mobileBlocks.titles, desktop.blockTitles, "移动抽屉与桌面右栏的区块标题应完全一致");
+  assert.deepEqual(mobileBlocks.stats, desktop.statLabels, "统计项应完全一致");
+  assert.deepEqual(mobileBlocks.friends, desktop.friendNames, "友链条目应完全一致");
+  console.log("PASS B-8 桌面与移动区块完全一致：" +
+    JSON.stringify(mobileBlocks.titles) + " / 统计 " + mobileBlocks.stats.length + " / 友链 " + mobileBlocks.friends.length);
+
+  /**
+   * 桌面侧的核心断言：统计块必须存在，且与移动端用同一个组件
+   * （共用已由 rightbar-blocks.test.ts 静态验证）。这里验渲染结果没退化。
+   */
+  /**
+   * 不断言完整的标题数组：友链/聚合两块是否存在取决于种子数据
+   * （测试库默认只有一条「开往」hub）。钉住"必有"与"顺序"即可。
+   */
+  assert.ok(desktop.statCells >= 4, "桌面右栏应有 ≥4 个统计格，实际 " + desktop.statCells);
+  assert.ok(desktop.blockTitles.includes("站点统计"), "右栏应有「站点统计」块");
+  // 统计块必须是第一块（与移动端顺序一致：统计 → 友链 → 标签云）
+  assert.equal(desktop.blockTitles[0], "站点统计", "右栏第一块应是站点统计，实际 " + desktop.blockTitles[0]);
+  // 标签云：有标签时才出现；测试库可能没有已发布文章 → 允许缺省
+  const tagIdx = desktop.blockTitles.indexOf("标签云");
+  if (tagIdx >= 0) {
+    assert.equal(tagIdx, desktop.blockTitles.length - 1, "标签云应是最后一块，实际 " + JSON.stringify(desktop.blockTitles));
+  }
+  console.log("PASS B-8 桌面右栏区块：" + JSON.stringify(desktop.blockTitles) +
+    "，统计格 " + desktop.statCells + "，标签 " + desktop.tagNames.length + "，友链 " + desktop.friendNames.length);
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());

@@ -1,10 +1,22 @@
-import Link from "next/link";
 import { getSiteStatsCached, getTagCloudCached } from "@/lib/cached";
 import { FriendLinks } from "./FriendLinks";
+import { StatsBlock } from "./rightbar/StatsBlock";
+import { TagCloudBlock } from "./rightbar/TagCloudBlock";
 
 type Toc = { level: number; text: string; id: string }[];
 
-/** 桌面端右侧栏：站点统计 + 聚合外链 + 友链 + 标签云（文章页还会在上面显示目录） */
+/**
+ * 桌面端右侧栏（B-8 重构）。
+ *
+ * 这里**只负责取数 + 组合**，具体区块的结构全部来自
+ * `components/rightbar/` 与 `FriendLinks.tsx` 里的纯展示组件 ——
+ * 手机抽屉（`MobileSidebarContent`）用的是同一批组件，
+ * 所以两端的统计块、友链、标签云结构天然一致，不会再出现
+ * "桌面改了手机没改"。
+ *
+ * 目录块仍留在这里：它是文章页专属的（只有 ArticleView 传 `toc`），
+ * 手机端不显示目录（抽屉里没有这个需求），所以没有共用的必要。
+ */
 export async function RightBar({ toc }: { toc?: Toc }) {
   const stats = await getSiteStatsCached();
   const tags = await getTagCloudCached(14);
@@ -27,48 +39,12 @@ export async function RightBar({ toc }: { toc?: Toc }) {
         </section>
       ) : null}
 
-      {/* 站点统计 */}
-      <section className="rb-block">
-        <header className="rb-head">
-          <span className="rb-title">站点统计</span>
-        </header>
-        <div className="stat-grid">
-          {stats.map((s) => (
-            <div key={s.label} className="stat-cell">
-              <span className="stat-ico" aria-hidden>{s.icon}</span>
-              <b className="stat-num">{s.value}</b>
-              <span className="stat-name">{s.label}</span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <StatsBlock stats={stats} />
 
-      {/* 聚合站 / 友链（数据来自 friend_links 表，后台可增删） */}
+      {/* 聚合站 / 友链：自带取数（数据来自 friend_links 表，后台可增删） */}
       <FriendLinks />
 
-      {/* 标签云 */}
-      {tags.length > 0 ? (
-        <section className="rb-block">
-          <header className="rb-head">
-            <span className="rb-title">标签云</span>
-            <span className="rb-badge">{tags.length}</span>
-          </header>
-          <div className="tag-cloud">
-            {tags.map((t) => (
-              <Link
-                key={t.name}
-                href={"/tags/" + encodeURIComponent(t.name)}
-                className="tag-pill"
-                title={`${t.count} 篇文章`}
-              >
-                <span className="tag-hash">#</span>
-                {t.name}
-                <span className="tag-num">{t.count}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      <TagCloudBlock tags={tags} />
     </aside>
   );
 }
