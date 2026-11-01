@@ -269,7 +269,8 @@
    会把行内 svg 顶成独立一块，所以这里同时改回 inline-block。
    绝对定位/弹性子项的 svg 不受这两条影响，布局照旧。 */
 svg { display: inline-block; vertical-align: -0.125em; }
-.icon-inline, .btn svg, .meta svg, .views-badge svg { flex-shrink: 0; }
+/* `.icon-inline` 已删除（C-6）：零引用 */
+.btn svg, .meta svg, .views-badge svg { flex-shrink: 0; }
 
 html {
   font-size: var(--fs);
@@ -382,7 +383,7 @@ a:hover { color: var(--link-hover); }
  * `.nav-item.is-active`（下方）统一负责。
  */
 
-.sidebar-footer { font-size: .75rem; color: var(--text-p4); line-height: 1.7; }
+/* `.sidebar-footer` 已删除（C-6）：零引用，侧栏底部现在用 .side-bottom */
 
 /* ── 主内容区 ── */
 .content { min-width: 0; }
@@ -478,15 +479,12 @@ a:hover { color: var(--link-hover); }
 
 /* ── 文章正文排版 ── */
 .article-header { margin-bottom: 36px; }
-.article-title {
-  font-family: var(--font-serif);
-  font-size: 2rem;
-  line-height: 1.4;
-  font-weight: 680;
-  color: var(--text-p0);
-  margin: 0 0 16px;
-  letter-spacing: .01em;
-}
+/*
+ * 这里原本还有一份 `.article-title { font-size: 2rem; line-height: 1.4;
+ * margin: 0 0 16px }` —— 已被文件后段的同名规则**逐字段完全覆盖**
+ * （特异性相同、后者在后），是纯死代码，C-6 删除。
+ * 别再往这里加：`globals.css` 里只应有一份 .article-title 基础定义。
+ */
 
 .prose { color: var(--text-p1); font-size: 1rem; line-height: 1.85; }
 .prose > * { margin: 0 0 1.15em; }
@@ -789,10 +787,7 @@ a:hover { color: var(--link-hover); }
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.toc-title {
-  font-size: .72rem; text-transform: uppercase; letter-spacing: .08em;
-  color: var(--text-p4); margin-bottom: 12px; font-weight: 600;
-}
+/* `.toc-title` 已删除（C-6）：目录标题现在用 .rb-title（RightBar 的区块头） */
 .toc-list li a {
   display: block; padding: 4px 0 4px 12px;
   color: var(--text-p3); line-height: 1.5;
@@ -986,8 +981,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 /* ── 分页 ── */
 .pager { display: flex; justify-content: center; gap: 10px; margin-top: 40px; }
 
-/* 只在手机端显示的元素 */
-.only-mobile { display: none; }
+/* `.only-mobile` 已删除（C-6）：零引用 */
 
 /* ── 响应式 ── */
 /*
@@ -1067,7 +1061,9 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   .toc-col { display: none; }
 
   .content { max-width: 100%; }
-  .article-title { font-size: 1.5rem; }
+  /* `.article-title` 的移动端字号覆盖**移到文件末尾**了（C-6）：
+     放在这里（媒体查询早于末尾的基础定义）会被后者的 2.05rem 压掉，
+     导致移动端标题一直是 32.8px。详见文末的 820 断点块。 */
   .page-title { font-size: 1.4rem; margin-bottom: 24px; }
   .post-card { padding: 18px 18px; border-radius: 16px; }
   .post-card h2 { font-size: 1.1rem; }
@@ -1462,11 +1458,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   border: none; background: none; cursor: pointer;
   color: var(--text-p2); padding: 0;
 }
-.mobile-drawer-search { padding: 0 6px 10px; }
-.mobile-drawer-search .search-box input {
-  background: var(--bg-subtle);
-  border-color: var(--border);
-}
+/* `.mobile-drawer-search` 已删除（C-6）：抽屉里的搜索已改为顶部栏的 .mobile-search-form */
 
 /* ── 手机端右侧栏（顶栏按钮唤出） ── */
 .mobile-sidebar-mask {
@@ -2138,7 +2130,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   /* 580 → 540 */
   .comment-author { font-weight: 540; }
   /* 600 → 560 */
-  .nav-item.is-active, .prose th, .toc-title, .mobile-drawer-item.active,
+  .nav-item.is-active, .prose th, .mobile-drawer-item.active,
   .nav-item.is-active, .rb-title, .tag-pill .tag-hash { font-weight: 560; }
   /* 650 → 610 */
   .page-title, .post-card h2, .prose h1, .prose h2, .prose h3, .prose h4,
@@ -2156,7 +2148,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   /* 580 → 540 */
   .comment-author { font-weight: 540; }
   /* 600 → 560 */
-  .nav-item.is-active, .prose th, .toc-title, .mobile-drawer-item.active,
+  .nav-item.is-active, .prose th, .mobile-drawer-item.active,
   .nav-item.is-active, .rb-title, .tag-pill .tag-hash { font-weight: 560; }
   /* 650 → 610 */
   .page-title, .post-card h2, .prose h1, .prose h2, .prose h3, .prose h4,
@@ -2209,3 +2201,24 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   .btn[aria-busy="true"] > span[aria-hidden="true"] { animation: ui-pulse 1.2s ease-in-out infinite !important; }
 }
 @keyframes ui-pulse { 50% { opacity: .35; } }
+
+/* ══════════════════════════════════════════════════════════════
+   移动端文章标题（C-6）
+   ──────────────────────────────────────────────────────────────
+   这条覆盖必须放在**文件末尾** —— 也就是所有 `.article-title` 基础定义
+   之后。
+
+   原来它写在文件前部的 `@media (max-width: 820px)` 块里（约 1070 行），
+   而 `.article-title` 的基础定义在后面（约 1420 行）。两者特异性都是
+   0,1,0，后者胜出 —— 于是**移动端标题从来没变小过**：实测 375px 下
+   计算值是 32.8px（2.05rem），而不是这里声明的 24px（1.5rem）。
+
+   这类 bug 靠读代码极难发现：媒体查询里明明写着 1.5rem，"看起来已经
+   适配了"。只有真的把窗口拉到手机宽度量一次才会露馅。
+
+   不用 `!important`：那只是掩盖顺序问题，以后想再按断点覆盖就得继续
+   加码。正确做法是让覆盖点在顺序上真的靠后。
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 820px) {
+  .article-title { font-size: 1.5rem; }
+}

@@ -1053,6 +1053,58 @@ try {
   await page.evaluate(() => document.documentElement.removeAttribute("data-theme"));
   await page.waitForTimeout(150);
 
+  /* ── 断言 31（C-6）：移动端文章标题必须真的变小 ── */
+  /**
+   * 这是 C-6 修的核心 bug：
+   *
+   *   1070 行  @media (max-width:820px) { .article-title { font-size: 1.5rem } }
+   *   1420 行  .article-title { font-size: 2.05rem }        ← 基础定义在后面
+   *
+   * 两者特异性都是 0,1,0，后者胜出 —— **移动端标题从来没变小过**，
+   * 实测一直是 32.8px 而不是声明的 24px。
+   *
+   * 这类 bug 靠读代码极难发现（媒体查询里明明写着 1.5rem，"看起来已经
+   * 适配了"），只有把窗口拉到手机宽度量一次才会露馅。
+   */
+  const TITLE_CASES = [
+    [375, "24px"],
+    [820, "24px"],   // 断点内含
+    [821, "32.8px"], // 断点外 1px，应恢复桌面字号
+    [1440, "32.8px"],
+  ];
+  for (const [vw, want] of TITLE_CASES) {
+    await page.setViewportSize({ width: vw, height: vw === 375 ? 812 : 900 });
+    await page.goto(server.base + "/p/" + tocPostId, { waitUntil: "networkidle" });
+    const fs = await page.evaluate(() => {
+      const el = document.querySelector(".article-title");
+      return el ? getComputedStyle(el).fontSize : null;
+    });
+    assert.equal(fs, want, vw + "px 下 .article-title 字号应为 " + want + "，实际 " + fs);
+    console.log("PASS C-6 " + String(vw).padStart(4) + "px 文章标题字号 = " + fs);
+  }
+
+  /* ── 断言 32（C-6）：删死类后页面仍正常渲染 ── */
+  /**
+   * 删了 5 个死类（.sidebar-footer / .toc-title / .only-mobile /
+   * .mobile-drawer-search / .icon-inline）。它们零引用，删掉不该有任何变化 ——
+   * 但"零引用"是静态判断，这里用渲染结果兜底：关键元素都还在。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const afterCleanup = await page.evaluate(() => ({
+    sidebar: !!document.querySelector(".sidebar"),
+    navItems: document.querySelectorAll(".sidebar .nav-item").length,
+    sidebarFoot: !!document.querySelector(".side-bottom"),
+    rbTitles: document.querySelectorAll(".rb-title").length,
+    themeToggle: !!document.querySelector(".theme-toggle"),
+  }));
+  assert.equal(afterCleanup.sidebar, true, "侧栏应存在");
+  assert.equal(afterCleanup.navItems, 5, "导航应有 5 项，实际 " + afterCleanup.navItems);
+  assert.equal(afterCleanup.sidebarFoot, true, "侧栏底部（.side-bottom）应存在");
+  assert.ok(afterCleanup.rbTitles > 0, "右栏区块标题（.rb-title）应存在");
+  assert.equal(afterCleanup.themeToggle, true, "主题切换按钮应存在");
+  console.log("PASS C-6 删死类后侧栏/导航/右栏/切换按钮全部正常（rb-title " + afterCleanup.rbTitles + " 个）");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
