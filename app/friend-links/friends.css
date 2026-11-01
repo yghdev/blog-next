@@ -27,14 +27,23 @@
   --fr-muted: color-mix(in oklab, var(--text-p3) 72%, var(--text-p0));
 }
 
-/* ── 骨架：左导航 + 更宽的单栏正文（本页不放右栏） ── */
+/* ── 骨架：本页不放右栏，正文走宽版 ──
+ *
+ * 这里原本自己重算了一遍网格与 max-width，还把 `--w-main` 换成了硬编码
+ * 的 960px。结果是 1440px 下本页左栏在 76px、首页在 32px —— 差 44px，
+ * 两个页面并排看就是没对齐。
+ *
+ * B-2 起宽度全部来自全局令牌（`--w-shell-read` / `--w-read`），本页只
+ * 声明"我是宽版"，不再重算任何加法。B-4 会把 `.fr-shell` 这个类彻底去掉，
+ * 改用 `SiteShell variant="wide"`。
+ */
 .site-shell.fr-shell {
-  grid-template-columns: var(--w-side) minmax(0, 960px);
-  max-width: calc(var(--w-side) + 960px + var(--gap-col) + 64px);
+  grid-template-columns: var(--w-side) minmax(0, 1fr);
+  max-width: var(--w-shell-read);
   align-items: start;
 }
 .content.fr-main {
-  max-width: 960px;
+  max-width: var(--w-read);
   min-width: 0;
 }
 
@@ -771,10 +780,7 @@
 
 /* ─────────────────────────── 响应式 ─────────────────────────── */
 @media (max-width: 1200px) {
-  .site-shell.fr-shell {
-    /* 右栏已在本页移除，中栏宽度由 960px 上限兜住 */
-    max-width: calc(var(--w-side) + 960px + var(--gap-col) + 64px);
-  }
+  /* 右栏本页本来就没有，宽度由 --w-shell-read 统一兜住，不需要再算一遍 */
   /* 中栏变窄后这行装饰性英文会单独折到第二行，反而抢统计数字的视线 —— 直接收起 */
   .fr-hero-note { display: none; }
 }

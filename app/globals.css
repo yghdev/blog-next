@@ -36,6 +36,28 @@
   --gap-col: 40px;
   --w-side: 288px;
   --w-toc: 320px;
+  /*
+   * 宽版页（搜索 / 友链）的正文上限。取 960 而不是 800，是因为这两个页面
+   * 没有右栏——把省下来的 320px 让给正文，列表类内容读起来更舒展。
+   */
+  --w-read: 960px;
+  /*
+   * 站点骨架宽度：**唯一事实来源**（B-2）。
+   *
+   * 这三个值以前是手抄在 5 处的同一串加法。改一个参数要记得改 5 个地方，
+   * 漏一处就出现「首页对齐了、友链页还是老偏移」这种只在某个页面出现的
+   * 错位。现在只在令牌里算一次。
+   *
+   * ⚠️ `--w-shell-narrow` 的数值刻意与改前**完全一致**（B-2 是纯重构，
+   * 13 个视口必须逐像素不变）。它漏了 `--gap-col`：288 + 800 + 64 = 1152，
+   * 而两栏布局实际需要 288 + 800 + 40 + 64 = 1192。后果是 1192–1200
+   * 这一小段视口里容器被多收了 8px，左栏偏移 56px 而不是 32px。
+   * 这是**既有缺陷**，B-3 重构两栏几何时一并修正（不在 B-2 范围内改，
+   * 否则 B-2 就不再是"零变化"的重构，验收基线也就失去意义）。
+   */
+  --w-shell: calc(var(--w-side) + var(--w-main) + var(--w-toc) + var(--gap-col) * 2 + 64px);
+  --w-shell-narrow: calc(var(--w-side) + var(--w-main) + 64px);
+  --w-shell-read: calc(var(--w-side) + var(--w-read) + var(--gap-col) + 64px);
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
                "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
   --font-serif: "Iowan Old Style", "Palatino Linotype", "Noto Serif SC",
@@ -180,13 +202,42 @@ a:hover { color: var(--link-hover); }
 /* ── 站点骨架：左导航 + 主内容 + 右目录 ── */
 .site-shell {
   display: grid;
-  /* 左栏固定 288 / 中间弹性（上限 800）/ 右栏固定 320 */
+  /*
+   * 默认按三栏渲染（历史行为）。
+   *
+   * B-1 会给每个页面加 `site-shell--three-col` / `--wide` 显式 variant；
+   * 在那之前这里必须先给出三列，否则所有页面会退化成单列（实测三栏下
+   * 正文从 800 撑到 1488）。保留这条默认值也让 B-2 成为**纯重构**：
+   * 逐视口宽度必须与改前完全一致，任何数值变化都说明改错了。
+   */
   grid-template-columns: var(--w-side) minmax(0, var(--w-main)) var(--w-toc);
   gap: var(--gap-col);
-  max-width: calc(var(--w-side) + var(--w-main) + var(--w-toc) + var(--gap-col) * 2 + 64px);
+  max-width: var(--w-shell);
   margin: 0 auto;
   padding: 48px 32px 96px;
   align-items: start;
+}
+
+/*
+ * 骨架有两种形态（B-1 的 SiteShell 组件据此渲染）：
+ *   three-col —— 左导航 + 正文 + 右栏（首页/归档/说说/标签/文章）
+ *   wide      —— 左导航 + 更宽的正文，没有右栏（搜索/友链）
+ *
+ * 「有没有右栏」由 variant 决定，而不是像以前那样各页自己拼 grid-template-columns —
+ * 搜索页就是因为拼了三列却没写第三列，右侧空出 320px。
+ */
+.site-shell--three-col {
+  grid-template-columns: var(--w-side) minmax(0, var(--w-main)) var(--w-toc);
+}
+
+.site-shell--wide {
+  grid-template-columns: var(--w-side) minmax(0, 1fr);
+  max-width: var(--w-shell-read);
+}
+
+.site-shell--wide .content {
+  max-width: var(--w-read);
+  min-width: 0;
 }
 
 .sidebar {
@@ -791,7 +842,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 @media (max-width: 1200px) {
   .site-shell {
     grid-template-columns: var(--w-side) minmax(0, 1fr);
-    max-width: calc(var(--w-side) + var(--w-main) + 64px);
+    max-width: var(--w-shell-narrow);
   }
   .toc-col { display: none; }
 }
@@ -1632,7 +1683,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   background: var(--bg-warm);
 }
 .site-footer-inner {
-  max-width: calc(var(--w-side) + var(--w-main) + var(--w-toc) + var(--gap-col) * 2 + 64px);
+  max-width: var(--w-shell);
   margin: 0 auto;
   padding: 26px 32px 34px;
   display: flex;
