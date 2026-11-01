@@ -95,86 +95,170 @@
   --safe-top: env(safe-area-inset-top, 0px);
   --tap: 44px;              /* iOS HIG 最小触控热区 */
   --tap-lg: 48px;           /* Android Material 最小触控热区 */
+
+  /* ── 暗色值（C-2：只在这里写一次，两个暗色作用域只做映射）──
+     这些值原来是手抄两遍的（手动暗色块 + 系统偏好块），改一个色要记得
+     改两处。现在值集中在这里，两处只写 `--bg: var(--dark-bg)` 这样的
+     机械映射 —— 抄错了会在截图 diff 里立刻暴露。
+
+     注意：CSS 变量在计算期展开，多一层间接没有运行时成本；
+     但 DevTools 里会多显示一层（--bg → --dark-bg → 具体色值），
+     调试时别被绕晕。 */
+  --dark-bg: #141414;
+  --dark-bg-subtle: #1a1a1a;
+  --dark-bg-warm: #171717;
+  --dark-link: #5fbfa8;
+  --dark-link-hover: #86d8c2;
+  --dark-accent: #e08968;
+  --dark-accent-soft: rgba(224,137,104,.14);
+  --dark-bg-tint: rgba(95,191,168,.06);
+  --dark-cat-1: #5fbfa8;
+  --dark-cat-1-bg: rgba(95,191,168,.13);
+  --dark-cat-2: #8fa3c9;
+  --dark-cat-2-bg: rgba(143,163,201,.13);
+  --dark-cat-3: #c99a8c;
+  --dark-cat-3-bg: rgba(201,154,140,.13);
+  --dark-cat-4: #9d8cc9;
+  --dark-cat-4-bg: rgba(157,140,201,.13);
+  --dark-cat-5: #c9be8c;
+  --dark-cat-5-bg: rgba(201,190,140,.13);
+  --dark-cat-6: #8cc4c9;
+  --dark-cat-6-bg: rgba(140,196,201,.13);
+  --dark-cat-7: #c98cb0;
+  --dark-cat-7-bg: rgba(201,140,176,.13);
+  --dark-text-p0: rgba(255,255,255,.95);
+  --dark-text-p1: rgba(255,255,255,.85);
+  --dark-text-p2: rgba(255,255,255,.72);
+  --dark-text-p3: rgba(255,255,255,.50);
+  --dark-text-p4: rgba(255,255,255,.38);
+  --dark-border: rgba(255,255,255,.09);
+  --dark-border-strong: rgba(255,255,255,.14);
+  --dark-code-bg: rgba(255,255,255,.06);
+  --dark-card-bg: #1a1a19;
+  --dark-fw-body: 360;
+  --dark-danger: #ff8a8d;
+  --dark-danger-bg: rgba(255,110,114,.13);
+  --dark-danger-border: rgba(255,110,114,.30);
+  --dark-ok: #6fd6a6;
+  --dark-ok-bg: rgba(111,214,166,.12);
+  --dark-ok-border: rgba(111,214,166,.28);
+  --dark-warn: #e0b062;
+  --dark-warn-bg: rgba(224,176,98,.12);
+  --dark-warn-border: rgba(224,176,98,.28);
+  --dark-info: #8fb3dd;
+  --dark-info-bg: rgba(143,179,221,.12);
+  --dark-info-border: rgba(143,179,221,.28);
+  --dark-surface-2: #1e1e1d;
+  --dark-lift-1: 0 1px 2px rgba(0,0,0,.30);
+  --dark-lift-2: 0 6px 20px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.24);
 }
 
 /* 暗色令牌（2026-10-23）：同时支持手动切换与系统偏好。
    优先级：html[data-theme] 手动选择 > 系统 prefers-color-scheme。
    首次访问无 data-theme 时跟随系统；点过切换按钮后由 JS 写入 data-theme。 */
 :root[data-theme="dark"] {
-    /* 原生控件跟随手动选择（滚动条、下拉、日期选择器、autofill） */
+    /* 原生控件跟随（滚动条、下拉、日期选择器、autofill） */
     color-scheme: dark;
-    --bg: #141414;
-    --bg-subtle: #1a1a1a;
-    --bg-warm: #171717;
-    --link: #5fbfa8;
-    --link-hover: #86d8c2;
-    --accent: #e08968;
-    --accent-soft: rgba(224,137,104,.14);
-    --bg-tint: rgba(95,191,168,.06);
-    --cat-1: #5fbfa8;  --cat-1-bg: rgba(95,191,168,.13);
-    --cat-2: #8fa3c9;  --cat-2-bg: rgba(143,163,201,.13);
-    --cat-3: #c99a8c;  --cat-3-bg: rgba(201,154,140,.13);
-    --cat-4: #9d8cc9;  --cat-4-bg: rgba(157,140,201,.13);
-    --cat-5: #c9be8c;  --cat-5-bg: rgba(201,190,140,.13);
-    --cat-6: #8cc4c9;  --cat-6-bg: rgba(140,196,201,.13);
-    --cat-7: #c98cb0;  --cat-7-bg: rgba(201,140,176,.13);
-    --text-p0: rgba(255,255,255,.95);
-    --text-p1: rgba(255,255,255,.85);
-    --text-p2: rgba(255,255,255,.72);
-    --text-p3: rgba(255,255,255,.50);
-    --text-p4: rgba(255,255,255,.38);
-    --border: rgba(255,255,255,.09);
-    --border-strong: rgba(255,255,255,.14);
-    --code-bg: rgba(255,255,255,.06);
-    --card-bg: #1a1a19;
-    --fw-body: 360;   /* 400 - 40 */
-    /* 暗色下的语义色：提高亮度、压低底色，避免「浅底深字」变成「黑底黑字」 */
-    --danger: #ff8a8d;        --danger-bg: rgba(255,110,114,.13);  --danger-border: rgba(255,110,114,.30);
-    --ok: #6fd6a6;            --ok-bg: rgba(111,214,166,.12);      --ok-border: rgba(111,214,166,.28);
-    --warn: #e0b062;          --warn-bg: rgba(224,176,98,.12);     --warn-border: rgba(224,176,98,.28);
-    --info: #8fb3dd;          --info-bg: rgba(143,179,221,.12);    --info-border: rgba(143,179,221,.28);
-    --surface-2: #1e1e1d;
-    --lift-1: 0 1px 2px rgba(0,0,0,.30);
-    --lift-2: 0 6px 20px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.24);
+    --bg: var(--dark-bg);
+    --bg-subtle: var(--dark-bg-subtle);
+    --bg-warm: var(--dark-bg-warm);
+    --link: var(--dark-link);
+    --link-hover: var(--dark-link-hover);
+    --accent: var(--dark-accent);
+    --accent-soft: var(--dark-accent-soft);
+    --bg-tint: var(--dark-bg-tint);
+    --cat-1: var(--dark-cat-1);
+    --cat-1-bg: var(--dark-cat-1-bg);
+    --cat-2: var(--dark-cat-2);
+    --cat-2-bg: var(--dark-cat-2-bg);
+    --cat-3: var(--dark-cat-3);
+    --cat-3-bg: var(--dark-cat-3-bg);
+    --cat-4: var(--dark-cat-4);
+    --cat-4-bg: var(--dark-cat-4-bg);
+    --cat-5: var(--dark-cat-5);
+    --cat-5-bg: var(--dark-cat-5-bg);
+    --cat-6: var(--dark-cat-6);
+    --cat-6-bg: var(--dark-cat-6-bg);
+    --cat-7: var(--dark-cat-7);
+    --cat-7-bg: var(--dark-cat-7-bg);
+    --text-p0: var(--dark-text-p0);
+    --text-p1: var(--dark-text-p1);
+    --text-p2: var(--dark-text-p2);
+    --text-p3: var(--dark-text-p3);
+    --text-p4: var(--dark-text-p4);
+    --border: var(--dark-border);
+    --border-strong: var(--dark-border-strong);
+    --code-bg: var(--dark-code-bg);
+    --card-bg: var(--dark-card-bg);
+    --fw-body: var(--dark-fw-body);
+    --danger: var(--dark-danger);
+    --danger-bg: var(--dark-danger-bg);
+    --danger-border: var(--dark-danger-border);
+    --ok: var(--dark-ok);
+    --ok-bg: var(--dark-ok-bg);
+    --ok-border: var(--dark-ok-border);
+    --warn: var(--dark-warn);
+    --warn-bg: var(--dark-warn-bg);
+    --warn-border: var(--dark-warn-border);
+    --info: var(--dark-info);
+    --info-bg: var(--dark-info-bg);
+    --info-border: var(--dark-info-border);
+    --surface-2: var(--dark-surface-2);
+    --lift-1: var(--dark-lift-1);
+    --lift-2: var(--dark-lift-2);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    /* 原生控件跟随系统偏好。这一处最容易漏 —— 它只对"从没点过切换
-       按钮"的用户生效，而那正是大多数首次访问者。 */
+    /* 原生控件跟随（滚动条、下拉、日期选择器、autofill） */
     color-scheme: dark;
-    --bg: #141414;
-    --bg-subtle: #1a1a1a;
-    --bg-warm: #171717;
-    --link: #5fbfa8;
-    --link-hover: #86d8c2;
-    --accent: #e08968;
-    --accent-soft: rgba(224,137,104,.14);
-    --bg-tint: rgba(95,191,168,.06);
-    --cat-1: #5fbfa8;  --cat-1-bg: rgba(95,191,168,.13);
-    --cat-2: #8fa3c9;  --cat-2-bg: rgba(143,163,201,.13);
-    --cat-3: #c99a8c;  --cat-3-bg: rgba(201,154,140,.13);
-    --cat-4: #9d8cc9;  --cat-4-bg: rgba(157,140,201,.13);
-    --cat-5: #c9be8c;  --cat-5-bg: rgba(201,190,140,.13);
-    --cat-6: #8cc4c9;  --cat-6-bg: rgba(140,196,201,.13);
-    --cat-7: #c98cb0;  --cat-7-bg: rgba(201,140,176,.13);
-    --text-p0: rgba(255,255,255,.95);
-    --text-p1: rgba(255,255,255,.85);
-    --text-p2: rgba(255,255,255,.72);
-    --text-p3: rgba(255,255,255,.50);
-    --text-p4: rgba(255,255,255,.38);
-    --border: rgba(255,255,255,.09);
-    --border-strong: rgba(255,255,255,.14);
-    --code-bg: rgba(255,255,255,.06);
-    --card-bg: #1a1a19;
-    --fw-body: 360;   /* 400 - 40 */
-    --danger: #ff8a8d;        --danger-bg: rgba(255,110,114,.13);  --danger-border: rgba(255,110,114,.30);
-    --ok: #6fd6a6;            --ok-bg: rgba(111,214,166,.12);      --ok-border: rgba(111,214,166,.28);
-    --warn: #e0b062;          --warn-bg: rgba(224,176,98,.12);     --warn-border: rgba(224,176,98,.28);
-    --info: #8fb3dd;          --info-bg: rgba(143,179,221,.12);    --info-border: rgba(143,179,221,.28);
-    --surface-2: #1e1e1d;
-    --lift-1: 0 1px 2px rgba(0,0,0,.30);
-    --lift-2: 0 6px 20px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.24);
+    --bg: var(--dark-bg);
+    --bg-subtle: var(--dark-bg-subtle);
+    --bg-warm: var(--dark-bg-warm);
+    --link: var(--dark-link);
+    --link-hover: var(--dark-link-hover);
+    --accent: var(--dark-accent);
+    --accent-soft: var(--dark-accent-soft);
+    --bg-tint: var(--dark-bg-tint);
+    --cat-1: var(--dark-cat-1);
+    --cat-1-bg: var(--dark-cat-1-bg);
+    --cat-2: var(--dark-cat-2);
+    --cat-2-bg: var(--dark-cat-2-bg);
+    --cat-3: var(--dark-cat-3);
+    --cat-3-bg: var(--dark-cat-3-bg);
+    --cat-4: var(--dark-cat-4);
+    --cat-4-bg: var(--dark-cat-4-bg);
+    --cat-5: var(--dark-cat-5);
+    --cat-5-bg: var(--dark-cat-5-bg);
+    --cat-6: var(--dark-cat-6);
+    --cat-6-bg: var(--dark-cat-6-bg);
+    --cat-7: var(--dark-cat-7);
+    --cat-7-bg: var(--dark-cat-7-bg);
+    --text-p0: var(--dark-text-p0);
+    --text-p1: var(--dark-text-p1);
+    --text-p2: var(--dark-text-p2);
+    --text-p3: var(--dark-text-p3);
+    --text-p4: var(--dark-text-p4);
+    --border: var(--dark-border);
+    --border-strong: var(--dark-border-strong);
+    --code-bg: var(--dark-code-bg);
+    --card-bg: var(--dark-card-bg);
+    --fw-body: var(--dark-fw-body);
+    --danger: var(--dark-danger);
+    --danger-bg: var(--dark-danger-bg);
+    --danger-border: var(--dark-danger-border);
+    --ok: var(--dark-ok);
+    --ok-bg: var(--dark-ok-bg);
+    --ok-border: var(--dark-ok-border);
+    --warn: var(--dark-warn);
+    --warn-bg: var(--dark-warn-bg);
+    --warn-border: var(--dark-warn-border);
+    --info: var(--dark-info);
+    --info-bg: var(--dark-info-bg);
+    --info-border: var(--dark-info-border);
+    --surface-2: var(--dark-surface-2);
+    --lift-1: var(--dark-lift-1);
+    --lift-2: var(--dark-lift-2);
   }
 }
 

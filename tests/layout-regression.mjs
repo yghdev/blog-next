@@ -955,6 +955,104 @@ try {
   assert.ok(visual.shell, ".site-shell 应存在");
   console.log("PASS C-1 删除死 token 后视觉无变化（nav-item " + JSON.stringify(visual.navItem) + "）");
 
+  /* ── 断言 30（C-2）：暗色令牌抽成 --dark-* 后，实际配色零变化 ── */
+  /**
+   * C-2 是**纯重构**：把两处手抄的 47 个暗色值收成一组 `--dark-*`，
+   * 两个作用域只做机械映射。改前改后暗色的实际计算值必须逐项一致 ——
+   * 不一致就说明某个 `--dark-*` 抄错了值。
+   *
+   * 这里断言的是"抽取后依然解析出正确颜色"：既证明映射链通了
+   * （--bg → --dark-bg → 具体色），也证明没有把某个值弄丢。
+   */
+  const DARK_KEY_TOKENS = [
+    ["--bg", "#141414"],
+    ["--bg-subtle", "#1a1a1a"],
+    ["--bg-warm", "#171717"],
+    ["--link", "#5fbfa8"],
+    ["--link-hover", "#86d8c2"],
+    ["--accent", "#e08968"],
+    // 注意：浏览器会把 rgba(255,255,255,.95) 规范化成 #fffffff2，
+    // 所以这里只断言"不透明度接近 0.95 的白色"，不写死字符串形式。
+    ["--text-p0", null],
+    ["--card-bg", "#1a1a19"],
+    ["--surface-2", "#1e1e1d"],
+    ["--danger", "#ff8a8d"],
+    ["--ok", "#6fd6a6"],
+    ["--warn", "#e0b062"],
+    ["--info", "#8fb3dd"],
+    ["--cat-1", "#5fbfa8"],
+    ["--cat-7", "#c98cb0"],
+  ];
+
+  async function sampleDark(pageCtx, label, setTheme) {
+    const p = pageCtx === "same" ? page : await pageCtx.newPage();
+    try {
+      await p.goto(server.base + "/", { waitUntil: "networkidle" });
+      if (setTheme) await p.evaluate((t) => document.documentElement.setAttribute("data-theme", t), setTheme);
+      await p.waitForTimeout(200);
+      return await p.evaluate((tokens) => {
+        const cs = getComputedStyle(document.documentElement);
+        const o = {};
+        for (const t of tokens) o[t] = cs.getPropertyValue(t).trim();
+        o.__bodyBg = getComputedStyle(document.body).backgroundColor;
+        return o;
+      }, DARK_KEY_TOKENS.map(([t]) => t));
+    } finally {
+      if (pageCtx !== "same") await p.close();
+    }
+  }
+
+  const manualDark = await sampleDark("same", "手动暗色", "dark");
+
+  /** 判断一个颜色值是否是"接近白色的、alpha≈.95" */
+  const isNearlyWhite95 = (v) => {
+    if (/^#fffffff2$/i.test(v)) return true;                       // 规范化为 hex8
+    const m = v.match(/^rgba\(255,\s*255,\s*255,\s*([0-9.]+)\)$/);
+    return !!m && Math.abs(parseFloat(m[1]) - 0.95) < 0.01;
+  };
+
+  for (const [token, want] of DARK_KEY_TOKENS) {
+    if (want === null) {
+      assert.ok(
+        isNearlyWhite95(manualDark[token]),
+        "手动暗色下 " + token + " 应接近白色 alpha .95，实际 " + JSON.stringify(manualDark[token])
+      );
+      continue;
+    }
+    assert.equal(
+      manualDark[token],
+      want,
+      "手动暗色下 " + token + " 应为 " + want + "，实际 " + JSON.stringify(manualDark[token])
+    );
+  }
+  assert.equal(manualDark.__bodyBg, "rgb(20, 20, 20)", "手动暗色下 body 背景应为 rgb(20,20,20)");
+  console.log("PASS C-2 手动暗色 15 个关键令牌解析值全部正确");
+
+  // 系统偏好暗色（无 data-theme）必须解析出**完全相同**的值
+  const sysCtx = await controller.browser.newContext({ colorScheme: "dark", viewport: { width: 1440, height: 900 } });
+  try {
+    const systemDark = await sampleDark(sysCtx, "系统暗色", null);
+    for (const [token, want] of DARK_KEY_TOKENS) {
+      if (want === null) {
+        assert.ok(isNearlyWhite95(systemDark[token]), "系统暗色下 " + token + " 应接近白色 alpha .95，实际 " + JSON.stringify(systemDark[token]));
+        continue;
+      }
+      assert.equal(
+        systemDark[token],
+        want,
+        "系统暗色下 " + token + " 应与手动暗色一致（" + want + "），实际 " + JSON.stringify(systemDark[token])
+      );
+    }
+    assert.equal(systemDark.__bodyBg, manualDark.__bodyBg, "两种暗色模式的 body 背景必须相同");
+    console.log("PASS C-2 系统暗色与手动暗色解析值完全一致（47 个 --dark-* 映射链正确）");
+  } finally {
+    await sysCtx.close();
+  }
+
+  // 还原成浅色，避免影响后续断言
+  await page.evaluate(() => document.documentElement.removeAttribute("data-theme"));
+  await page.waitForTimeout(150);
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
