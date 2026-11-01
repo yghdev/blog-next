@@ -44,6 +44,55 @@
   /* 两栏 sticky 的统一基线。原先 .sidebar 40px / .toc-col 48px 各自为政，
      滚动时右栏比左栏低 8px，视觉上明显没对齐。 */
   --sticky-top: 40px;
+
+  /*
+   * ── 组件刻度（C-7）──
+   *
+   * 这些值原来散落在样式里：border-radius: 10px ×14、font-size: .78rem ×8、
+   * transition 时长 8 档、z-index 4 档、44px ×15 / 48px ×6。
+   *
+   * 本阶段**只新增令牌 + 只在 C-1…C-9 新增/修改的规则里使用**，不做全量
+   * 替换 —— 把 2200 行里的 8px 换成间距令牌只是「看起来更规范」，
+   * 回归面却很大，收益为负。
+   *
+   * 唯一例外是 z-index：它必须全量替换，理由见 --z-* 的注释。
+   *
+   * 这些都是**主题无关**的尺寸/层级 —— 只在 :root 定义一次，
+   * 暗色块里不重复（tests/scale-tokens.test.ts 有断言守着）。
+   */
+  /*
+   * 只保留当前真正用到的刻度。`--radius-md`(10px) 与 `--radius-pill`(999px)
+   * 虽然也是高频值，但它们出现在**老规则**里（本阶段不动老代码），
+   * 加了没人用就等于又造一批 C-1 刚清掉的死 token —— 等真有新代码需要时再加。
+   */
+  --radius-sm: 8px;
+  --radius-lg: 12px;
+
+  --fs-xs: .72rem;    /* 11.52px：辅助标记 */
+  --fs-sm: .78rem;    /* 12.48px：次要说明 */
+  --fs-base: .82rem;  /* 13.12px：正文小字 */
+  --fs-md: .85rem;    /* 13.6px：小标题 */
+
+  /*
+   * 动效时长同理：本阶段新增的规则里没有 transition（C-5 的 .pager-current
+   * 是无过渡的静态元素），所以暂不引入。将来给新组件加过渡时再加，
+   * 并直接用它。
+   */
+
+  /*
+   * 层级。这四档必须**全量替换**掉数字字面量 —— 不是风格问题：
+   *
+   *   原来顶栏 50、两个抽屉 100、对话框 200、确认弹窗也是 200。
+   *   同为 200 的两个浮层谁在上只取决于 DOM 顺序，而不是设计意图。
+   *   一旦有人调整 DOM 结构（比如把 Dialog 提到 Sheet 前面），
+   *   弹窗就会莫名其妙跑到遮罩下面 —— 而且只在"两个同时打开"时出现。
+   *
+   * 现在层级关系成为显式约定：顶栏 < 抽屉 < 对话框。
+   */
+  --z-base: 1;
+  --z-topbar: 50;
+  --z-drawer: 100;
+  --z-dialog: 200;
   --w-main: 800px;
   --gap-col: 40px;
   --w-side: 288px;
@@ -414,7 +463,7 @@ a:hover { color: var(--link-hover); }
  * 与改前 `.tag-count` 完全一致。
  */
 .page-sub {
-  font-size: .85rem;
+  font-size: var(--fs-md);
   color: var(--text-p4);
   margin: -16px 0 24px;
 }
@@ -428,7 +477,7 @@ a:hover { color: var(--link-hover); }
 }
 .notfound-title {
   font-family: var(--font-serif);
-  font-size: 2.5rem;
+  font-size: 2.5rem;   /* 特意保留字面量：2.5rem 不在刻度里，是 404 专属尺寸 */
   color: var(--text-p0);
   margin: 0 0 12px;
 }
@@ -436,7 +485,7 @@ a:hover { color: var(--link-hover); }
 
 /* ── 搜索结果计数（C-5：原内联 .82rem + text-p4）── */
 .search-meta {
-  font-size: .82rem;
+  font-size: var(--fs-base);
   color: var(--text-p4);
   margin: 0 0 16px;
 }
@@ -447,7 +496,7 @@ a:hover { color: var(--link-hover); }
 /* ── 文章封面（C-5：原内联 width/border-radius/margin/border）── */
 .article-cover {
   width: 100%;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   margin-bottom: 20px;
   border: 1px solid var(--border);
 }
@@ -878,7 +927,7 @@ a:hover { color: var(--link-hover); }
 .archive-year:first-child { margin-top: 0; }
 /* 年份后面的「N 篇」计数（C-5：原为内联 fontSize/.72rem + fontWeight 400） */
 .archive-year-count {
-  font-size: .72rem;
+  font-size: var(--fs-xs);
   color: var(--text-p4);
   margin-left: 8px;
   font-weight: 400;
@@ -887,7 +936,7 @@ a:hover { color: var(--link-hover); }
 .archive-month-group { margin-bottom: 10px; }
 /* 月份标签（原内联 fontSize/.78rem + margin 6px 0 4px） */
 .archive-month {
-  font-size: .78rem;
+  font-size: var(--fs-sm);
   color: var(--text-p4);
   margin: 6px 0 4px;
 }
@@ -1070,11 +1119,11 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .pager-current {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
   background: var(--bg);
   color: var(--text-p0);
-  font-size: .82rem; font-weight: 560;
+  font-size: var(--fs-base); font-weight: 560;
   font-family: inherit;
   opacity: .6;
   font-variant-numeric: tabular-nums;
@@ -1175,7 +1224,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .mobile-topbar {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: var(--z-topbar);
   align-items: center;
   justify-content: space-between;
   min-height: 54px;
@@ -1197,8 +1246,8 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .mobile-brand img { border-radius: 50%; object-fit: cover; }
 
 .mobile-menu-btn {
-  width: 44px;
-  height: 44px;
+  width: var(--tap);
+  height: var(--tap);
   display: grid;
   place-content: center;
   gap: 4px;
@@ -1219,7 +1268,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .mobile-drawer-mask {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--z-drawer);
   background: rgba(0, 0, 0, .38);
   animation: fadeIn .18s ease;
 }
@@ -1271,9 +1320,9 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 48px;
+  min-height: var(--tap-lg);
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   color: var(--text-p1);
   font-size: .95rem;
   transition: background .15s;
@@ -1552,7 +1601,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .mobile-topbar-actions { display: flex; align-items: center; gap: 2px; }
 .mobile-icon-btn {
   /* iOS HIG：最小触控热区 44×44pt（视觉仍是 19px 图标，靠容器扩张） */
-  width: 44px; height: 44px;
+  width: var(--tap); height: var(--tap);
   display: grid; place-content: center;
   border: none; background: none; cursor: pointer;
   color: var(--text-p2); padding: 0;
@@ -1563,7 +1612,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .mobile-sidebar-mask {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: var(--z-drawer);
   background: rgba(0, 0, 0, .38);
   animation: fadeIn .18s ease;
   display: flex;
@@ -1599,7 +1648,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   position: sticky;
   top: 0;
   background: var(--bg);
-  z-index: 1;
+  z-index: var(--z-base);
 }
 .mobile-sidebar-head button {
   border: none; background: none; cursor: pointer;
@@ -2033,7 +2082,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .dialog-mask {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--z-dialog);
   background: rgba(0, 0, 0, .42);
   backdrop-filter: blur(2px);
   animation: fadeIn .16s ease;
@@ -2124,7 +2173,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .sheet-mask {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: var(--z-dialog);
   background: rgba(0, 0, 0, .42);
   animation: fadeIn .16s ease;
   display: flex;

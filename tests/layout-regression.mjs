@@ -1351,6 +1351,83 @@ try {
   );
   console.log("PASS C-9 侧栏 / 顶栏 / <title> 三方同源");
 
+  /* ── 断言 38（C-7）：层级令牌生效，且顶栏 < 抽屉 < 对话框 ── */
+  /**
+   * 原来 z-index 是数字字面量：顶栏 50、两个抽屉 100、对话框 200、
+   * 另一个浮层也是 200。同为 200 时谁在上只取决于 DOM 顺序 ——
+   * 一旦有人调整结构，弹窗会莫名跑到遮罩下面，且只在"两个同时打开"时出现。
+   *
+   * 现在层级关系是显式约定：--z-topbar(50) < --z-drawer(100) < --z-dialog(200)。
+   */
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+
+  const zTokens = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const num = (n) => Number(cs.getPropertyValue(n).trim());
+    return {
+      topbar: num("--z-topbar"),
+      drawer: num("--z-drawer"),
+      dialog: num("--z-dialog"),
+      base: num("--z-base"),
+      // 实际渲染值
+      topbarEl: Number(getComputedStyle(document.querySelector(".mobile-topbar")).zIndex),
+    };
+  });
+  assert.ok(zTokens.topbar > zTokens.base, "顶栏层级应高于 base（" + zTokens.topbar + " > " + zTokens.base + "）");
+  assert.ok(zTokens.drawer > zTokens.topbar, "抽屉应高于顶栏（" + zTokens.drawer + " > " + zTokens.topbar + "）");
+  assert.ok(zTokens.dialog > zTokens.drawer, "对话框应高于抽屉（" + zTokens.dialog + " > " + zTokens.drawer + "）");
+  assert.equal(zTokens.topbarEl, zTokens.topbar, "顶栏的实际 z-index 应等于令牌值（" + zTokens.topbarEl + " vs " + zTokens.topbar + "）");
+  console.log("PASS C-7 层级令牌生效且严格递增（base " + zTokens.base + " < topbar " + zTokens.topbar +
+    " < drawer " + zTokens.drawer + " < dialog " + zTokens.dialog + "）");
+
+  /* ── 断言 39（C-7）：触控热区仍满足 44 / 48 ── */
+  /**
+   * 把 `width: 44px` 换成 `var(--tap)` 之后，实际渲染尺寸必须还是 44。
+   * 这条防的是"令牌值写错"（比如把 --tap 定义成 40px）—— 那会让所有
+   * 移动端按钮热区悄悄缩水，而没有任何报错。
+   */
+  const tap = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const box = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height) };
+    };
+    return {
+      token: cs.getPropertyValue("--tap").trim(),
+      tokenLg: cs.getPropertyValue("--tap-lg").trim(),
+      menuBtn: box(".mobile-menu-btn"),
+      iconBtn: box(".mobile-icon-btn"),
+    };
+  });
+  assert.equal(tap.token, "44px", "--tap 应为 44px，实际 " + tap.token);
+  assert.equal(tap.tokenLg, "48px", "--tap-lg 应为 48px，实际 " + tap.tokenLg);
+  if (tap.menuBtn) {
+    assert.equal(tap.menuBtn.w, 44, "汉堡按钮宽度应为 44px，实际 " + tap.menuBtn.w);
+    assert.equal(tap.menuBtn.h, 44, "汉堡按钮高度应为 44px，实际 " + tap.menuBtn.h);
+  }
+  if (tap.iconBtn) {
+    assert.ok(tap.iconBtn.w >= 44, "图标按钮热区宽度应 ≥44px，实际 " + tap.iconBtn.w);
+  }
+  console.log("PASS C-7 触控热区仍为 44/48（--tap=" + tap.token + " / --tap-lg=" + tap.tokenLg + "）");
+
+  /* ── 断言 40（C-7）：字号令牌解析正确 ── */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/archives", { waitUntil: "networkidle" });
+  const fs2 = await page.evaluate(() => {
+    const el = document.querySelector(".archive-month");
+    const root = getComputedStyle(document.documentElement);
+    return {
+      token: root.getPropertyValue("--fs-sm").trim(),
+      rendered: el ? getComputedStyle(el).fontSize : null,
+    };
+  });
+  assert.equal(fs2.token, ".78rem", "--fs-sm 应为 .78rem，实际 " + fs2.token);
+  assert.equal(fs2.rendered, "12.48px", "月份标签渲染字号应为 .78rem = 12.48px，实际 " + fs2.rendered);
+  console.log("PASS C-7 字号令牌解析正确（--fs-sm=" + fs2.token + " → " + fs2.rendered + "）");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
