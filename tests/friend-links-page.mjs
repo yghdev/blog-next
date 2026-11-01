@@ -129,7 +129,9 @@ try {
   const home = await fetchText(server.base, "/");
   assert.equal(home.status, 200);
   assert.doesNotMatch(home.text, /fr-hero/, "友链页样式/结构泄漏到了首页");
-  assert.match(home.text, /class="site-shell"/, "首页骨架应保持不变");
+  // B-1 起 site-shell 多了 variant 修饰类（site-shell site-shell--three-col），
+  // 断言放宽为"以 site-shell 开头"，仍能守住"骨架类存在且没被改名"。
+  assert.match(home.text, /class="site-shell[ "]/, "首页骨架类应存在（允许带 variant 修饰类）");
   const archives = await fetchText(server.base, "/archives");
   assert.equal(archives.status, 200);
   assert.match(archives.text, /class="page-title">归档</, "归档页标题应保持原样");

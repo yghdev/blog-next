@@ -1,6 +1,5 @@
-import { Sidebar } from "@/components/Sidebar";
 import { Animations } from "@/components/Animations";
-import { RightBar } from "@/components/RightBar";
+import { SiteShell } from "@/components/SiteShell";
 import { PostCard } from "@/components/PostCard";
 import { getDb } from "@/lib/db";
 import { makeExcerpt, parseJsonArray, decodeSlug, postHref } from "@/lib/posts";
@@ -23,28 +22,24 @@ export default async function TagPage({ params }: { params: Promise<{ tag: strin
   return (
     <>
       <Animations />
-      <div className="site-shell">
-        <Sidebar />
-        <main className="content">
-          <h1 className="page-title">标签：{tag}</h1>
-          <p style={{ fontSize: ".85rem", color: "var(--text-p4)", margin: "-16px 0 24px" }}>
-            共 {posts.length} 篇文章
-          </p>
-          <div className="post-list">
-            {posts.map((p) => (
-              <PostCard
-                key={p.id}
-                href={postHref(p)}
-                title={p.title}
-                excerpt={p.excerpt || makeExcerpt(p.content)}
-                date={p.published_at || p.created_at}
-                categories={parseJsonArray(p.categories)}
-              />
-            ))}
-          </div>
-        </main>
-        <div className="toc-col"><RightBar /></div>
-      </div>
+      <SiteShell variant="three-col">
+        <h1 className="page-title">标签：{tag}</h1>
+        <p style={{ fontSize: ".85rem", color: "var(--text-p4)", margin: "-16px 0 24px" }}>
+          共 {posts.length} 篇文章
+        </p>
+        <div className="post-list">
+          {posts.map((p) => (
+            <PostCard
+              key={p.id}
+              href={postHref(p)}
+              title={p.title}
+              excerpt={p.excerpt || makeExcerpt(p.content)}
+              date={p.published_at || p.created_at}
+              categories={parseJsonArray(p.categories)}
+            />
+          ))}
+        </div>
+      </SiteShell>
     </>
   );
 }

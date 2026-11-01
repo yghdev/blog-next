@@ -1,6 +1,6 @@
 import Link from "next/link";
+import { SiteShell } from "./SiteShell";
 import type { Metadata } from "next";
-import { Sidebar } from "./Sidebar";
 import { Animations } from "./Animations";
 import { formatDate, toIso } from "./PostCard";
 import {
@@ -11,7 +11,6 @@ import { renderMarkdown } from "@/lib/markdown";
 import { CommentSection } from "./CommentSection";
 import { Lightbox } from "./Lightbox";
 import { categoryColor } from "@/lib/category-color";
-import { RightBar } from "./RightBar";
 import type { Post } from "@/lib/db";
 
 /**
@@ -67,9 +66,7 @@ export async function ArticleView({ doc }: { doc: Post }) {
     <>
       <Animations />
       <Lightbox />
-      <div className="site-shell">
-        <Sidebar />
-        <main className="content">
+      <SiteShell variant="three-col" toc={toc}>
           <article>
             <header className="article-header">
               {cats.length > 0 ? (
@@ -143,9 +140,7 @@ export async function ArticleView({ doc }: { doc: Post }) {
           {settings.commentEnabled && doc.comments_enabled !== 0 ? (
             <CommentSection postId={doc.id} pageKey={legacyPageKey(doc)} />
           ) : null}
-        </main>
-        <div className="toc-col"><RightBar toc={toc} /></div>
-      </div>
+      </SiteShell>
     </>
   );
 }

@@ -849,9 +849,20 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
  * 需要点左侧栏底部的「侧栏」按钮才能看到。
  */
 @media (max-width: 1391px) {
-  .site-shell {
+  /*
+   * 两栏区（821–1391）：**只影响标准页**。
+   *
+   * 这里必须区分 variant：
+   *   • three-col / 无 variant  → 右栏隐藏、中栏上限 --w-main(800)
+   *   • wide                    → 本来就没有右栏，正文继续用 --w-read(960)
+   *
+   * 第一版没区分，把 `.site-shell` 一刀切成 `minmax(0, --w-main)` 且
+   * `max-width: none`，于是宽版页在 1391 及以下从 960 掉到 800 ——
+   * 友链页正文突然变窄 160px，而 §10.3 表格要求 1391 宽版仍是 960。
+   */
+  .site-shell:not(.site-shell--wide) {
     /*
-     * 两栏：**不要用 max-width 收容器**，让网格轨道自己限制中栏。
+     * 标准页：**不要用 max-width 收容器**，让网格轨道自己限制中栏。
      *
      * 原先写的是 `max-width: calc(--w-side + --w-main + 64px)`，问题是
      * 容器被收窄后会在视口里居中：1200px 视口下容器 1152 居中，左右各留
@@ -866,6 +877,11 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
     max-width: none;
     justify-content: start;
   }
+  /* 宽版页在两栏区保持自己的上限，不被上面的规则波及 */
+  .site-shell--wide {
+    max-width: none;
+    justify-content: start;
+  }
   .toc-col { display: none; }
 }
 
@@ -876,7 +892,14 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   .sidebar { display: none; }
   .mobile-topbar { display: flex; }
 
-  .site-shell {
+  /*
+   * 单栏。这里必须写成 `.site-shell:not(.site-shell--wide)` 与
+   * `.site-shell--wide` 两条，才能在特异性上压过 1391 断点里的
+   * `.site-shell:not(.site-shell--wide)`（0,2,1）—— 否则 820 以下
+   * 正文会掉回 288px（左栏宽的轨道还在）。
+   */
+  .site-shell:not(.site-shell--wide),
+  .site-shell--wide {
     grid-template-columns: minmax(0, 1fr);
     gap: 20px;
     padding: 14px 20px calc(72px + env(safe-area-inset-bottom, 0px));

@@ -406,6 +406,64 @@ try {
     console.log("PASS B-3 " + String(vw).padStart(4) + "px 侧栏入口 " + (visible ? "可见" : "隐藏"));
   }
 
+  /* ── 断言 12（B-1）：搜索页不再空出 320px 右栏 ── */
+  /**
+   * 原实现用三列网格却没有第三个子元素 → 1440px 下右侧空 320px。
+   * 现在 variant="wide" 只有两列，正文应吃满可用宽度。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/search", { waitUntil: "networkidle" });
+  const searchPage = await page.evaluate(() => {
+    const c = document.querySelector(".content");
+    const shell = document.querySelector(".site-shell");
+    return {
+      hasTocCol: !!document.querySelector(".toc-col"),
+      contentWidth: c ? Math.round(c.getBoundingClientRect().width) : null,
+      shellClass: shell ? shell.className : null,
+      scrollW: document.documentElement.scrollWidth,
+      clientW: document.documentElement.clientWidth,
+    };
+  });
+  assert.equal(searchPage.hasTocCol, false, "/search 不应渲染 .toc-col（原实现三列却没有第三列，右侧空 320px）");
+  assert.match(searchPage.shellClass, /site-shell--wide/, "搜索页应使用 site-shell--wide");
+  assert.ok(
+    searchPage.contentWidth > 700,
+    "/search 的 .content 应 > 700（1440 视口），实际 " + searchPage.contentWidth
+  );
+  assert.ok(searchPage.scrollW <= searchPage.clientW + 1, "/search 不应横向溢出");
+  console.log("PASS B-1 /search 无 toc-col，content=" + searchPage.contentWidth + "（> 700）");
+
+  /* ── 断言 13（B-1）：7 个页面都用上 SiteShell，且骨架类正确 ── */
+  const SHELL_CASES = [
+    ["/", "site-shell--three-col", true],
+    ["/archives", "site-shell--three-col", true],
+    ["/shuoshuo", "site-shell--three-col", true],
+    ["/search", "site-shell--wide", false],
+    ["/friend-links", "site-shell--wide", false],
+    ["/p/" + tocPostId, "site-shell--three-col", true],
+    ["/tags/ai", "site-shell--three-col", true],
+  ];
+  for (const [pathName, wantClass, wantToc] of SHELL_CASES) {
+    await page.goto(server.base + pathName, { waitUntil: "networkidle" });
+    const info = await page.evaluate(() => {
+      const shell = document.querySelector(".site-shell");
+      return {
+        cls: shell ? shell.className : null,
+        hasToc: !!document.querySelector(".toc-col"),
+        hasSidebar: !!document.querySelector(".sidebar"),
+        hasMain: !!document.querySelector("main.content"),
+        shellCount: document.querySelectorAll(".site-shell").length,
+      };
+    });
+    assert.ok(info.cls, pathName + " 应有 .site-shell");
+    assert.match(info.cls, new RegExp(wantClass), pathName + " 的骨架类应含 " + wantClass + "，实际 " + info.cls);
+    assert.equal(info.hasSidebar, true, pathName + " 应有左栏");
+    assert.equal(info.hasMain, true, pathName + " 应有 main.content");
+    assert.equal(info.shellCount, 1, pathName + " 只应有 1 个 .site-shell（防止嵌套）");
+    assert.equal(info.hasToc, wantToc, pathName + " 的 .toc-col 应为 " + (wantToc ? "有" : "无"));
+    console.log("PASS B-1 " + pathName.padEnd(16) + " " + wantClass + " toc=" + (info.hasToc ? "有" : "无"));
+  }
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
