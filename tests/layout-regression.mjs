@@ -827,6 +827,93 @@ try {
   assert.equal(adminCs, "dark", "后台暗色下 colorScheme 也应为 dark（admin.css 不得覆盖），实际 " + adminCs);
   console.log("PASS C-3 后台 /admin/login 暗色 → colorScheme=" + adminCs);
 
+  /* ── 断言 27（C-4）：四个 ThemeToggle 实例保持同步 ── */
+  /**
+   * 组件在项目里有 4 个实例（前台侧栏/顶栏、后台侧栏/顶栏）。原来每个
+   * 各持一份 useState，只在自己被点时更新自己 —— 点桌面侧栏那个，
+   * 手机顶栏那个的 aria-label 仍是旧值。读屏用户会被告知错误的信息。
+   *
+   * 现在真相只有一份（documentElement 的 data-theme），所有实例订阅它。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  await page.waitForTimeout(300);
+
+  const beforeToggle = await page.evaluate(() =>
+    [...document.querySelectorAll(".theme-toggle")].map((e) => ({
+      visible: e.getBoundingClientRect().width > 0,
+      label: e.getAttribute("aria-label"),
+      state: e.getAttribute("data-theme-state"),
+    }))
+  );
+  assert.ok(beforeToggle.length >= 2, "首页应有 ≥2 个 ThemeToggle 实例（侧栏 + 顶栏），实际 " + beforeToggle.length);
+
+  // 点可见的那个（桌面下是侧栏底部那个）
+  const visibleIndex = beforeToggle.findIndex((x) => x.visible);
+  assert.ok(visibleIndex >= 0, "应有可见的 ThemeToggle");
+  await page.locator(".theme-toggle").nth(visibleIndex).click();
+  await page.waitForTimeout(400);
+
+  const afterToggle = await page.evaluate(() => ({
+    list: [...document.querySelectorAll(".theme-toggle")].map((e) => ({
+      label: e.getAttribute("aria-label"),
+      state: e.getAttribute("data-theme-state"),
+    })),
+    htmlTheme: document.documentElement.getAttribute("data-theme"),
+    metaColor: document.querySelector('meta[name="theme-color"]')?.getAttribute("content"),
+  }));
+
+  const labels = new Set(afterToggle.list.map((x) => x.label));
+  const states = new Set(afterToggle.list.map((x) => x.state));
+  assert.equal(
+    labels.size,
+    1,
+    "点击后所有 ThemeToggle 的 aria-label 必须一致，实际 " + JSON.stringify([...labels])
+  );
+  assert.equal(
+    states.size,
+    1,
+    "点击后所有 ThemeToggle 的 data-theme-state 必须一致，实际 " + JSON.stringify([...states])
+  );
+  assert.equal(afterToggle.htmlTheme, states.values().next().value, "html[data-theme] 应与实例状态一致");
+  assert.match(afterToggle.metaColor || "", /^#[0-9a-f]{6}$/i, "meta theme-color 应被同步");
+  console.log("PASS C-4 " + beforeToggle.length + " 个实例同步（" + [...labels][0] + "，data-theme=" + afterToggle.htmlTheme + "，meta=" + afterToggle.metaColor + "）");
+
+  // 切回来，避免影响后续断言
+  await page.locator(".theme-toggle").nth(visibleIndex).click();
+  await page.waitForTimeout(300);
+
+  /* ── 断言 28（C-4）：首屏无 FOUC ── */
+  /**
+   * 暗色偏好下，`data-theme` 必须在**首次绘制之前**就是 `dark`。
+   * 若等 React hydrate 后才设置，暗色用户会先看到一帧白底。
+   */
+  const foucCtx = await controller.browser.newContext({ colorScheme: "dark", viewport: { width: 1440, height: 900 } });
+  try {
+    const foucPage = await foucCtx.newPage();
+    await foucPage.addInitScript(() => {
+      window.__firstTheme = null;
+      const rec = () => {
+        if (window.__firstTheme !== null) return;
+        const t = document.documentElement?.getAttribute("data-theme");
+        if (t) window.__firstTheme = { theme: t, bg: getComputedStyle(document.body).backgroundColor };
+      };
+      document.addEventListener("readystatechange", rec);
+      rec();
+    });
+    await foucPage.goto(server.base + "/", { waitUntil: "networkidle" });
+    const fouc = await foucPage.evaluate(() => ({
+      first: window.__firstTheme,
+      final: document.documentElement.getAttribute("data-theme"),
+    }));
+    assert.ok(fouc.first, "应在首屏就能读到 data-theme（否则说明是 hydrate 后才设置）");
+    assert.equal(fouc.first.theme, "dark", "系统偏好暗色时首屏 theme 应为 dark，实际 " + fouc.first.theme);
+    assert.equal(fouc.final, "dark", "最终主题应为 dark");
+    console.log("PASS C-4 首屏无 FOUC（首次可读 theme=" + fouc.first.theme + "，bg=" + fouc.first.bg + "）");
+  } finally {
+    await foucCtx.close();
+  }
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());

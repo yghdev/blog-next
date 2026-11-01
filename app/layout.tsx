@@ -13,6 +13,7 @@ import { ThemeScript } from "@/components/ThemeScript";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { SidebarSheetProvider } from "@/components/SidebarSheet";
 import { FrontOnly } from "@/components/FrontOnly";
+import { LIGHT_BG } from "@/lib/theme-colors";
 
 /**
  * C4：站名/描述此前硬编码在这里，改一个字要重新构建。
@@ -52,7 +53,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#fffefc",
+  themeColor: LIGHT_BG,
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,

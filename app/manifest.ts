@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { LIGHT_BG } from "@/lib/theme-colors";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -9,8 +10,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#fffefc",
-    theme_color: "#fffefc",
+    background_color: LIGHT_BG,
+    theme_color: LIGHT_BG,
     lang: "zh-CN",
     categories: ["blog", "technology"],
     icons: [

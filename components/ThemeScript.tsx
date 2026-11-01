@@ -1,3 +1,5 @@
+import { DARK_BG, LIGHT_BG } from "@/lib/theme-colors";
+
 /**
  * 主题防闪烁脚本（2026-10-23）。
  *
@@ -18,7 +20,9 @@ const SCRIPT = [
   "  }",
   "  document.documentElement.setAttribute('data-theme',v);",
   "  var m=document.querySelector('meta[name=theme-color]');",
-  "  if(m)m.setAttribute('content',v==='dark'?'#141414':'#fffefc');",
+  // 颜色来自 lib/theme-colors.ts 的常量，不写字面量 —— 避免改了常量
+  // 忘了改这里，导致首屏闪一下旧色
+  "  if(m)m.setAttribute('content',v==='dark'?'" + DARK_BG + "':'" + LIGHT_BG + "');",
   "}catch(e){}})();",
 ].join("");
 
