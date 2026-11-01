@@ -39,6 +39,7 @@ try {
   const tocPostId = seedArticleWithToc(server.dataDir);
   seedAboutPage(server.dataDir);
   seedSiteFooterSettings(server.dataDir);
+  const longIds = seedLongStringPosts(server.dataDir);
 
   controller = await startBrowser();
   const { context } = await controller.newLoggedInContext(server.base, server.fixture);
@@ -722,6 +723,52 @@ try {
   console.log("PASS B-8 桌面右栏区块：" + JSON.stringify(desktop.blockTitles) +
     "，统计格 " + desktop.statCells + "，标签 " + desktop.tagNames.length + "，友链 " + desktop.friendNames.length);
 
+  /* ── 断言 22（R1）：正文长串不得撑破页面 ── */
+  /**
+   * 中文默认能在汉字间断行，英文与 URL 不能 —— 正文贴一个长链接就会
+   * 把整页横向撑破（实测 1200px 下溢出 909px）。`.prose` 原本没有
+   * `overflow-wrap`，而列表页摘要与目录都有，所以问题只在文章页出现。
+   */
+  const LONG_CASES = [
+    [longIds.url, "长 URL"],
+    [longIds.word, "长英文单词"],
+    [longIds.title, "长英文标题"],
+  ];
+  for (const vw of [1440, 1200, 820, 375]) {
+    await page.setViewportSize({ width: vw, height: 900 });
+    for (const [id, name] of LONG_CASES) {
+      await page.goto(server.base + "/p/" + id, { waitUntil: "networkidle" });
+      const r = await page.evaluate(() => ({
+        sw: document.documentElement.scrollWidth,
+        cw: document.documentElement.clientWidth,
+      }));
+      assert.ok(
+        r.sw <= r.cw + 1,
+        vw + "px「" + name + "」导致横向溢出：" + r.sw + " > " + r.cw
+      );
+    }
+    console.log("PASS R1 " + String(vw).padStart(4) + "px 长串正文不溢出（URL / 单词 / 标题）");
+  }
+
+  /* ── 断言 23（R1）：代码块必须保留横向滚动，不被换行折断 ── */
+  /**
+   * 反例守卫：给 `*` 加 overflow-wrap 会把代码也折成一片，缩进语义全毁。
+   * 代码块的正确行为是 `overflow-x: auto` —— 内容超出时自己滚。
+   */
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto(server.base + "/p/" + longIds.code, { waitUntil: "networkidle" });
+  const pre = await page.evaluate(() => {
+    const el = document.querySelector(".prose pre");
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, overflowX: cs.overflowX, wrap: cs.overflowWrap };
+  });
+  assert.ok(pre, "代码块文章应渲染 .prose pre");
+  assert.equal(pre.overflowX, "auto", "代码块应保留 overflow-x: auto，实际 " + pre.overflowX);
+  assert.notEqual(pre.wrap, "anywhere", "代码块不应被 overflow-wrap 折断，实际 " + pre.wrap);
+  assert.ok(pre.scrollWidth > pre.clientWidth, "前置：这段代码应真的超宽（否则断言无意义）");
+  console.log("PASS R1 代码块保留横向滚动（" + pre.clientWidth + "/" + pre.scrollWidth + "，overflow-x=" + pre.overflowX + "）");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
@@ -769,6 +816,34 @@ function seedSiteFooterSettings(dataDir) {
   up.run("icp", "赣ICP备00000000号-1");
   up.run("footer_text", "本站由 flechazo 维护");
   db.close();
+}
+
+/**
+ * 造几篇"长串"文章（R1）。
+ *
+ * 正文里贴长 URL 是最正常的写作行为（引用 GitHub 地址、API 路径、
+ * 没有空格的文件名）。没有 overflow-wrap 时它会把整页横向撑破 ——
+ * 实测 1200px 下溢出 909px。这里把四类典型形态都种上。
+ */
+function seedLongStringPosts(dataDir) {
+  const db = new Database(dataDir + "/blog.db");
+  db.pragma("journal_mode = WAL");
+  const now = new Date().toISOString();
+  const ins = db.prepare(
+    "INSERT INTO posts (type, slug, title, content, status, published_at, created_at, updated_at) " +
+    "VALUES ('post', ?, ?, ?, 'published', ?, ?, ?)"
+  );
+  const ids = {};
+  ids.url = Number(ins.run("r1-url", "长链接测试",
+    "## 链接\n\nhttps://example.com/" + "a".repeat(180) + "\n\n段落。", now, now, now).lastInsertRowid);
+  ids.word = Number(ins.run("r1-word", "长单词测试",
+    "## 词\n\n" + "Supercalifragilisticexpialidocious".repeat(5), now, now, now).lastInsertRowid);
+  ids.title = Number(ins.run("r1-title", "Supercalifragilisticexpialidocious".repeat(4),
+    "## 标题\n\n正文。", now, now, now).lastInsertRowid);
+  ids.code = Number(ins.run("r1-code", "代码块测试",
+    "## 代码\n\n```\nconst x = '" + "a".repeat(150) + "';\n```\n\n段落。", now, now, now).lastInsertRowid);
+  db.close();
+  return ids;
 }
 
 function seedAboutPage(dataDir) {

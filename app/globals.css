@@ -413,6 +413,43 @@ a:hover { color: var(--link-hover); }
 .article-title, .post-card h2 {
   text-wrap: balance;
 }
+
+/*
+ * 正文长串换行（R1，2026-11-01）。
+ *
+ * 中文默认能在汉字间断行，英文和 URL 不能 —— 正文里贴一个长链接
+ * （GitHub 地址、API 路径、没有空格的文件名）就会把整页横向撑破。
+ * 实测 1200px 视口下，一个 200 字符的 URL 让 scrollWidth 变成 2109
+ * （溢出 909px），而同一段中文完全正常。
+ *
+ * 列表页的摘要有 `overflow-wrap: anywhere`、目录也有，唯独**正文没有** ——
+ * 所以问题只在点进文章后出现，更容易被漏掉。
+ *
+ * 用 `anywhere` 而不是 `break-word`：前者允许在任意位置断开且**参与
+ * min-content 计算**，后者只在必要时断但不会缩小 min-content ——
+ * 对 flex/grid 子项来说，只有 `anywhere` 才能真正把宽度压下来。
+ *
+ * **不给 pre / code / table 加**：代码块靠 `overflow-x: auto` 横向滚动
+ * （换行会破坏缩进语义），表格同理。这是有意保留的例外。
+ */
+.prose p,
+.prose li,
+.prose blockquote,
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose td,
+.prose th,
+.article-title,
+.post-card h2,
+.post-card h3,
+.comment-text,
+.notice,
+.empty-title,
+.empty-hint {
+  overflow-wrap: anywhere;
+}
 .prose blockquote {
   margin: 1.4em 0;
   padding: .4em 0 .4em 1.1em;
