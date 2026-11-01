@@ -2,6 +2,18 @@
 
 /* ── 设计令牌：参考 xaoxuu.com / Stellar，纯白极简 ── */
 :root {
+  /*
+   * 原生控件配色（C-3）。
+   *
+   * 这一行管的是**浏览器自己画的东西**：滚动条、<select> 下拉、
+   * <input type="date"> 的日历弹层、autofill 底色、移动端键盘配色。
+   * 它默认是 light —— 暗色主题下如果不改，页面一片深色、右侧挂一条白
+   * 滚动条，下拉框点开也是白的。
+   *
+   * 注意别和 `@media (prefers-color-scheme: dark)` 混：那是媒体查询
+   * （问系统偏好），这是声明（告诉浏览器怎么画原生控件）。
+   */
+  color-scheme: light;
   --bg: #fffefc;
   --bg-subtle: #f7f6f3;
   --text-p0: #111111;
@@ -89,6 +101,8 @@
    优先级：html[data-theme] 手动选择 > 系统 prefers-color-scheme。
    首次访问无 data-theme 时跟随系统；点过切换按钮后由 JS 写入 data-theme。 */
 :root[data-theme="dark"] {
+    /* 原生控件跟随手动选择（滚动条、下拉、日期选择器、autofill） */
+    color-scheme: dark;
     --bg: #141414;
     --bg-subtle: #1a1a1a;
     --bg-warm: #171717;
@@ -126,6 +140,9 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    /* 原生控件跟随系统偏好。这一处最容易漏 —— 它只对"从没点过切换
+       按钮"的用户生效，而那正是大多数首次访问者。 */
+    color-scheme: dark;
     --bg: #141414;
     --bg-subtle: #1a1a1a;
     --bg-warm: #171717;

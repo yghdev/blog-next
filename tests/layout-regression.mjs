@@ -769,6 +769,64 @@ try {
   assert.ok(pre.scrollWidth > pre.clientWidth, "前置：这段代码应真的超宽（否则断言无意义）");
   console.log("PASS R1 代码块保留横向滚动（" + pre.clientWidth + "/" + pre.scrollWidth + "，overflow-x=" + pre.overflowX + "）");
 
+  /* ── 断言 24（C-3）：color-scheme 跟随主题 ── */
+  /**
+   * `color-scheme` 决定浏览器**自己画的东西**用什么配色：滚动条、<select>
+   * 下拉、<input type="date"> 日历弹层、autofill 底色。
+   *
+   * 它默认是 light，所以暗色主题下如果不声明，页面一片深色、右侧挂一条
+   * 白滚动条，下拉框点开也是白的 —— 而这不是"我们没写样式"，是浏览器
+   * 按默认值画的。
+   *
+   * 三处都要：
+   *   ① :root → light
+   *   ② :root[data-theme=dark] → dark（手动）
+   *   ③ @media(prefers-color-scheme:dark) 里的 :root:not(...) → dark（系统）
+   *
+   * 第 ③ 处最容易漏，而且只对"从没点过切换按钮"的用户生效 —— 那正是
+   * 大多数首次访问者。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((t) => document.documentElement.setAttribute("data-theme", t), theme);
+    await page.waitForTimeout(120);
+    const cs = await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme);
+    assert.equal(cs, theme, "data-theme=" + theme + " 时 colorScheme 应为 " + theme + "，实际 " + cs);
+    console.log("PASS C-3 data-theme=" + theme.padEnd(5) + " → colorScheme=" + cs);
+  }
+  await page.evaluate(() => document.documentElement.removeAttribute("data-theme"));
+
+  /* ── 断言 25（C-3）：系统偏好暗色（无 data-theme）也要生效 ── */
+  const darkCtx = await controller.browser.newContext({ colorScheme: "dark", viewport: { width: 1440, height: 900 } });
+  const darkPage = await darkCtx.newPage();
+  try {
+    await darkPage.goto(server.base + "/", { waitUntil: "networkidle" });
+    const sys = await darkPage.evaluate(() => ({
+      colorScheme: getComputedStyle(document.documentElement).colorScheme,
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+    }));
+    assert.equal(sys.colorScheme, "dark", "系统偏好暗色且无 data-theme 时 colorScheme 应为 dark，实际 " + sys.colorScheme);
+    console.log("PASS C-3 系统偏好暗色 → colorScheme=" + sys.colorScheme + "（body 背景 " + sys.bodyBg + "）");
+  } finally {
+    await darkCtx.close();
+  }
+
+  /* ── 断言 26（C-3）：后台也生效（admin.css 不得覆盖） ── */
+  /**
+   * 后台共享同一套 :root 令牌，但 admin.css 会额外加载。若它自己声明
+   * `color-scheme: light`，会按层叠顺序把 globals 的 dark 覆盖掉 ——
+   * 后台暗色下滚动条又变白，且没有任何报错。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/admin/login", { waitUntil: "networkidle" });
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+  await page.waitForTimeout(120);
+  const adminCs = await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme);
+  assert.equal(adminCs, "dark", "后台暗色下 colorScheme 也应为 dark（admin.css 不得覆盖），实际 " + adminCs);
+  console.log("PASS C-3 后台 /admin/login 暗色 → colorScheme=" + adminCs);
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
