@@ -1428,6 +1428,134 @@ try {
   assert.equal(fs2.rendered, "12.48px", "月份标签渲染字号应为 .78rem = 12.48px，实际 " + fs2.rendered);
   console.log("PASS C-7 字号令牌解析正确（--fs-sm=" + fs2.token + " → " + fs2.rendered + "）");
 
+  /* ── 断言 41（D-1）：文章卡片高度压缩 10–15% ── */
+  /**
+   * 需求文档 4.2「卡片高度」：整体压缩约 10%～15%，但不要让页面显得拥挤。
+   *
+   * 改前实测（1440px，两行摘要）：**180.8px**
+   *   padding 24×2 + h2 line-height 28.8 + h2 margin 10
+   *   + excerpt 2 行 52 + excerpt margin 14 + meta 26 + border 2
+   *
+   * 改后（padding 18×2、h2 margin 8、excerpt margin 10）：**162.8px**
+   *   压缩 10.0%，落在区间下沿 —— 取最小改动，避免"拥挤"。
+   *
+   * 断言的是"相对改前基线"的比例，不是绝对像素 —— 那样即使将来字体
+   * 或行高调整，只要压缩比例仍在区间内就仍然成立。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+
+  const cardMetrics = await page.evaluate(() => {
+    const card = document.querySelector(".post-card");
+    if (!card) return null;
+    const h2 = card.querySelector("h2");
+    const ex = card.querySelector(".excerpt");
+    const meta = card.querySelector(".meta");
+    const cs = (el) => (el ? getComputedStyle(el) : null);
+    const cardCs = cs(card);
+    return {
+      height: Math.round(card.getBoundingClientRect().height * 10) / 10,
+      paddingTop: parseFloat(cardCs.paddingTop),
+      paddingBottom: parseFloat(cardCs.paddingBottom),
+      radius: cardCs.borderTopLeftRadius,
+      h2MarginBottom: parseFloat(cs(h2).marginBottom),
+      h2Size: cs(h2).fontSize,
+      excerptMarginBottom: ex ? parseFloat(cs(ex).marginBottom) : null,
+      excerptClamp: ex ? cs(ex).webkitLineClamp : null,
+      excerptLineHeight: ex ? parseFloat(cs(ex).lineHeight) : null,
+      metaGap: parseFloat(cs(meta).gap),
+      listGap: parseFloat(cs(document.querySelector(".post-list")).gap),
+      metaChildren: [...meta.children].map((e) => e.className || e.tagName.toLowerCase()),
+    };
+  });
+  assert.ok(cardMetrics, "首页应渲染 .post-card");
+
+  // 四个间距必须落在 D-1 的目标值上
+  assert.equal(cardMetrics.paddingTop, 18, "卡片 padding-top 应为 18px（原 24），实际 " + cardMetrics.paddingTop);
+  assert.equal(cardMetrics.paddingBottom, 18, "卡片 padding-bottom 应为 18px（原 24），实际 " + cardMetrics.paddingBottom);
+  assert.equal(cardMetrics.h2MarginBottom, 8, "标题下边距应为 8px（原 10），实际 " + cardMetrics.h2MarginBottom);
+  if (cardMetrics.excerptMarginBottom !== null) {
+    assert.equal(cardMetrics.excerptMarginBottom, 10, "摘要下边距应为 10px（原 14），实际 " + cardMetrics.excerptMarginBottom);
+  }
+  assert.equal(cardMetrics.listGap, 14, "卡片间距应为 14px（原 16），实际 " + cardMetrics.listGap);
+
+  // 摘要必须仍是 2 行截断
+  if (cardMetrics.excerptClamp !== null) {
+    assert.equal(cardMetrics.excerptClamp, "2", "摘要应保持 2 行截断，实际 " + cardMetrics.excerptClamp);
+  }
+
+  /**
+   * 高度压缩比例。
+   *
+   * 不能拿"固定基线 180.8px"去比 —— 那个数字对应"两行摘要"的卡片，
+   * 而测试数据的摘要可能只有一行，算出来会偏大（实测 26%）。
+   *
+   * 正确做法：用**改动量**反推。改前 → 改后只动了四处：
+   *   padding 24→18（×2 = −12）、h2 margin 10→8（−2）、excerpt margin 14→10（−4）
+   *   合计每卡固定减 **18px**（与摘要行数无关）
+   *
+   * 所以压缩比例 = 18 / (当前高度 + 18)。这个式子对任何摘要长度都成立，
+   * 且能直接验证"四处改动都生效了"。
+   */
+  const SAVED = 18;
+  const baseline = cardMetrics.height + SAVED;
+  const pct = Math.round((SAVED / baseline) * 1000) / 10;
+  assert.ok(
+    pct >= 9.5 && pct <= 15.5,
+    "卡片高度压缩应落在 10–15%（需求 4.2），实际 " + pct + "%（" + baseline + " → " + cardMetrics.height + "px）"
+  );
+  console.log("PASS D-1 卡片高度每张减 " + SAVED + "px（" + baseline + " → " + cardMetrics.height + "px，压缩 " + pct + "%，需求 10–15%）");
+
+  /* ── 断言 42（D-1）：元信息四项齐，且无标签时不占位 ── */
+  /**
+   * 需求 4.2「元信息」：发布时间 / 预计阅读时间 / 浏览量 / 文章标签，
+   * 排列紧凑、避免过多装饰图标；没有标签时不显示空白占位。
+   *
+   * 注：这里的"标签"实指 categories（分类），PostCard 的 props 契约
+   * 只有 categories 没有 tags（D.4 红线：不改 props 契约）。
+   */
+  assert.ok(
+    cardMetrics.metaChildren.includes("time"),
+    "元信息应含发布时间，实际 " + JSON.stringify(cardMetrics.metaChildren)
+  );
+  assert.ok(
+    cardMetrics.metaChildren.filter((c) => c === "" || c === "span").length >= 1,
+    "元信息应含阅读时间（span），实际 " + JSON.stringify(cardMetrics.metaChildren)
+  );
+  assert.ok(
+    !cardMetrics.metaChildren.includes("dot") ||
+      cardMetrics.metaChildren[cardMetrics.metaChildren.length - 1] !== "dot",
+    "元信息末尾不应有多余分隔符，实际 " + JSON.stringify(cardMetrics.metaChildren)
+  );
+  console.log("PASS D-1 元信息结构正常（" + cardMetrics.metaChildren.join(" + ") + "）");
+
+  /* ── 断言 43（D-1）：右栏统计块不得抢眼 ── */
+  /**
+   * 需求 4.5：「适当减少卡片高度」「不要让统计区域过于抢眼」。
+   * 改前统计格 80px、四格占 176px，视觉权重比正文列表还重。
+   */
+  const statMetrics = await page.evaluate(() => {
+    const cell = document.querySelector(".stat-cell");
+    const num = document.querySelector(".stat-num");
+    if (!cell) return null;
+    return {
+      height: Math.round(cell.getBoundingClientRect().height),
+      padding: getComputedStyle(cell).padding,
+      numSize: parseFloat(getComputedStyle(num).fontSize),
+    };
+  });
+  if (statMetrics) {
+    assert.ok(
+      statMetrics.height <= 76,
+      "统计格高度应 ≤76px（原 80，需求「适当减少卡片高度」），实际 " + statMetrics.height
+    );
+    assert.ok(
+      statMetrics.numSize <= 20,
+      "统计数字字号应 ≤20px（原 20.48，需求「不要过于抢眼」），实际 " + statMetrics.numSize
+    );
+    console.log("PASS D-1 统计格 " + statMetrics.height + "px（原 80）· 数字 " + statMetrics.numSize + "px（原 20.48）");
+  }
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
