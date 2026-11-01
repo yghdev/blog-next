@@ -49,7 +49,8 @@ const CALL_SITES: { file: string; variant: "three-col" | "wide"; toc: boolean; n
 
 test("B-1 组件存在且是服务端组件（无 use client）", () => {
   const src = read("components/SiteShell.tsx");
-  assert.match(src, /export function SiteShell/, "应导出 SiteShell");
+  // C-9 起 SiteShell 是 async（要 await getSettingsCached 取品牌信息）
+  assert.match(src, /export (async )?function SiteShell/, "应导出 SiteShell（async 或同步均可）");
   assert.doesNotMatch(src, /^"use client"/m, "SiteShell 应是服务端组件，不加 use client");
   for (const prop of ["variant", "toc", "className", "children"]) {
     assert.ok(src.includes(prop), "SiteShell 应支持 " + prop + " 参数");

@@ -1,3 +1,4 @@
+import { getSettingsCached } from "@/lib/cached";
 import { Sidebar } from "./Sidebar";
 import { RightBar } from "./RightBar";
 
@@ -31,6 +32,15 @@ import { RightBar } from "./RightBar";
  * 宽度全部来自 CSS 令牌（`--w-shell` / `--w-shell-read` / `--w-read`），
  * 组件本身不参与任何加法运算 —— 改宽度只需要改 globals 的 :root。
  *
+ * ## 品牌信息（C-9）
+ *
+ * 站名与简介来自 `settings` 表（后台可改），不再硬编码在组件里。
+ * `SiteShell` 是**唯一同时包住 Sidebar 与正文的服务端组件**，所以由它
+ * 取一次 settings 再往下传 —— `Sidebar` / `MobileNav` 是客户端组件
+ * （要 `usePathname`），不能自己查库。
+ *
+ * 这也是 SiteShell 需要 `async` 的原因。
+ *
  * ## 为什么是服务端组件
  *
  * 它不持有任何状态，只是把三个子块摆好。`Sidebar` 自己是客户端组件
@@ -42,7 +52,7 @@ type Variant = "three-col" | "wide";
 
 type Toc = { level: number; text: string; id: string }[];
 
-export function SiteShell({
+export async function SiteShell({
   variant = "three-col",
   toc,
   className,
@@ -56,9 +66,17 @@ export function SiteShell({
   className?: string;
   children: React.ReactNode;
 }) {
+  const settings = await getSettingsCached();
+  /*
+   * 兜底：settings 可能为空（全新安装、库未初始化）。
+   * 直接把空值传下去会让侧栏渲染成空白 —— 比硬编码更糟。
+   */
+  const siteName = (settings.siteTitle || "").trim() || "flechazo";
+  const siteDesc = (settings.siteDescription || "").trim() || "记录 AI、开发与折腾的日常";
+
   return (
     <div className={"site-shell site-shell--" + variant}>
-      <Sidebar />
+      <Sidebar siteName={siteName} siteDesc={siteDesc} />
       <main className={"content" + (className ? " " + className : "")}>{children}</main>
       {variant === "three-col" ? (
         <div className="toc-col">

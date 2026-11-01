@@ -19,7 +19,15 @@ import { NAV_ITEMS, activeHref } from "@/lib/nav";
  * 代价是多带一点 JS，但它本来就 import 了两个客户端组件
  * （`SidebarTrigger` / `ThemeToggle`），并非纯静态。
  */
-export function Sidebar() {
+export function Sidebar({
+  siteName = "flechazo",
+  siteDesc = "记录 AI、开发与折腾的日常",
+}: {
+  /** 站点名称（来自 settings.siteTitle，由 SiteShell 取并传入） */
+  siteName?: string;
+  /** 站点简介（来自 settings.siteDescription） */
+  siteDesc?: string;
+} = {}) {
   const pathname = usePathname();
   const current = activeHref(pathname);
 
@@ -28,9 +36,9 @@ export function Sidebar() {
       {/* 品牌区：居中大头像 + 名字 + 标语 */}
       <Link href="/" className="brand-block">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/avatar.jpg" alt="flechazo" className="brand-photo" />
-        <div className="brand-title">flechazo</div>
-        <div className="brand-desc">记录 AI、开发与折腾的日常</div>
+        <img src="/avatar.jpg" alt={siteName} className="brand-photo" />
+        <div className="brand-title">{siteName}</div>
+        <div className="brand-desc">{siteDesc}</div>
       </Link>
 
       {/* 虚线边框的搜索框 */}

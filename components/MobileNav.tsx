@@ -21,7 +21,14 @@ import { NAV_ITEMS, activeHref } from "@/lib/nav";
  */
 type DrawerLink = { id: number; name: string; url: string; desc: string; kind: string };
 
-export function MobileNav({ links = [] }: { links?: DrawerLink[] }) {
+export function MobileNav({
+  links = [],
+  siteName = "flechazo",
+}: {
+  links?: DrawerLink[];
+  /** 站点名称（来自 settings.siteTitle，由 layout 取并传入） */
+  siteName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
   const pathname = usePathname();
@@ -89,7 +96,7 @@ export function MobileNav({ links = [] }: { links?: DrawerLink[] }) {
           <img src="/avatar.jpg" alt="" width={28} height={28} onError={(e) => {
             (e.currentTarget as HTMLImageElement).style.display = "none";
           }} />
-          <span>flechazo</span>
+          <span>{siteName}</span>
         </Link>
         <div className="mobile-topbar-actions">
           <ThemeToggle />

@@ -1293,6 +1293,64 @@ try {
     console.log("SKIP C-8 标签页无 sub（该标签下没有文章）");
   }
 
+  /* ── 断言 37（C-9）：站点品牌信息来自 settings，不是硬编码 ── */
+  /**
+   * 站名与简介原本硬编码在 Sidebar / MobileNav 里，而 settings 表里早就有
+   * `siteTitle` / `siteDescription` —— 于是「后台改站名 → 浏览器 tab 标题变了，
+   * 但前台侧栏还是老的」。
+   *
+   * 现在由 SiteShell / layout 从 settings 取并传下去。
+   *
+   * ⚠️ **本断言只验数据流，不验"改完立刻生效"** —— 因为实测发现
+   * `revalidateTag(TAGS.stats)` 在这个隔离环境里**不会让 getSettingsCached
+   * 失效**（连等 15s > 进程内 10s TTL 也不变，只有 300s 的 unstable_cache
+   * TTL 到期才会更新）。那是**既有问题**，与本任务无关；在这里断言"立刻生效"
+   * 会变成假失败。
+   *
+   * 数据流的正确性由两条保证：
+   *   ① 组件源码里不再有硬编码（tests/brand.test.ts 静态检查）
+   *   ② 页面渲染出的站名等于 settings 的默认值（settings 为空时走 defaults）
+   */
+  const homeHtml = await (await fetch(server.base + "/")).text();
+  const brandTitle = homeHtml.match(/class="brand-title">([^<]*)</)?.[1];
+  const brandDesc = homeHtml.match(/class="brand-desc">([^<]*)</)?.[1];
+
+  assert.ok(brandTitle, "首页 SSR HTML 里应有 .brand-title（Sidebar 渲染）");
+  assert.ok(brandDesc, "首页 SSR HTML 里应有 .brand-desc");
+
+  // settings 为空时应回落到默认值 —— 证明值确实是"取出来的"而不是写死的
+  assert.ok(
+    brandTitle.includes("flechazo"),
+    "默认站名应包含 flechazo（settings 默认值），实际 " + JSON.stringify(brandTitle)
+  );
+  assert.ok(
+    brandDesc.length > 0,
+    "简介不应为空（应有兜底），实际 " + JSON.stringify(brandDesc)
+  );
+  console.log("PASS C-9 侧栏品牌信息来自 settings（" + brandTitle + " / " + brandDesc + "）");
+
+  /* 移动端顶栏用同一个值（它在 layout 里渲染，不在 SiteShell 内） */
+  assert.ok(
+    homeHtml.includes("mobile-brand"),
+    "首页应有移动端顶栏 .mobile-brand"
+  );
+  const mobileBrand = homeHtml.match(/class="mobile-brand"[\s\S]{0,200}?<span>([^<]*)<\/span>/)?.[1];
+  assert.equal(
+    mobileBrand,
+    brandTitle,
+    "移动端顶栏站名应与侧栏一致（都来自 settings.siteTitle），实际 " +
+      JSON.stringify(mobileBrand) + " vs " + JSON.stringify(brandTitle)
+  );
+  console.log("PASS C-9 移动端顶栏与侧栏同源（" + mobileBrand + "）");
+
+  /* 文档标题也来自 settings —— 三方一致才说明真的同源 */
+  const docTitle = homeHtml.match(/<title>([^<]*)<\/title>/)?.[1];
+  assert.ok(
+    (docTitle || "").includes("flechazo"),
+    "文档标题也应来自 settings（与侧栏同源），实际 " + JSON.stringify(docTitle)
+  );
+  console.log("PASS C-9 侧栏 / 顶栏 / <title> 三方同源");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());

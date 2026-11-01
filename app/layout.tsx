@@ -61,6 +61,12 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // 品牌信息（C-9）：站名来自 settings，与 <title> 用的是同一份数据源。
+  // 在 layout 里取一次传给 MobileNav —— 它是客户端组件，不能自己查库。
+  // 兜底与 SiteShell 保持一致：settings 为空时不能让顶栏空白。
+  const settings = getSettings();
+  const siteName = (settings.siteTitle || "").trim() || "flechazo";
+
   // 手机端抽屉里的聚合/友链：layout 在服务端取一次数据传下去。
   // MobileNav 是客户端组件（要管抽屉开关），不能直接塞 async server component。
   const drawerLinks = (await listFriendLinksCached()).map((l) => ({
@@ -79,7 +85,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* 侧栏开合状态提到 provider：顶栏（手机）与左栏（平板）各有一个入口，
             内容在服务端渲染好作为 panel 传入 */}
         <SidebarSheetProvider panel={<MobileSidebarContent />}>
-          <FrontOnly><MobileNav links={drawerLinks} /></FrontOnly>
+          <FrontOnly><MobileNav links={drawerLinks} siteName={siteName} /></FrontOnly>
           {children}
           {/* 全站页脚：备案号与页脚文字此前只有后台能填、前台没渲染 */}
           <FrontOnly><SiteFooter /></FrontOnly>
