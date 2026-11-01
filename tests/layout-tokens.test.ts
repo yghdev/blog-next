@@ -111,15 +111,22 @@ test("B-2 friends.css 不得再出现任何宽度公式", () => {
   );
 });
 
-test("B-2 friends.css 使用 --w-shell-read，且不再硬编码 960px 宽度", () => {
-  assert.match(CSS.friends, /var\(--w-shell-read\)/, "friends.css 应使用 --w-shell-read");
-  // 只允许 960px 通过 --w-read 间接出现；直接写死的 960px 宽度是漂移来源
-  const hardcoded = findLines(CSS.friends, /(max-width|grid-template-columns)[^;]*\b960px\b/);
+test("B-2/B-4 friends.css 不再参与任何宽度计算（全部交给全局令牌）", () => {
+  /**
+   * B-2 时这里断言「friends.css 应使用 --w-shell-read」；B-4 之后连
+   * `--w-shell-read` 都不该出现在这个文件里 —— 页面骨架由 SiteShell 的
+   * `variant="wide"` 决定，宽度全部来自 globals 的 :root。
+   *
+   * friends.css 只剩"专题页自己的样式"（hero / 目录 / 申请表单），
+   * 一旦它又开始算宽度，友链页就会再次与其它页错位。
+   */
+  const refs = findLines(CSS.friends, /var\(--w-shell|var\(--w-read\)|960px/);
+  const serious = refs.filter((l) => !/^\s*\*/.test(l.text)); // 注释里的历史说明不算
   assert.deepEqual(
-    hardcoded,
+    serious,
     [],
-    "friends.css 仍硬编码 960px（应改为 var(--w-read) 或 var(--w-shell-read)）：\n" +
-      hardcoded.map((l) => "  第 " + l.line + " 行: " + l.text).join("\n")
+    "friends.css 仍引用骨架宽度令牌或硬编码 960px：\n" +
+      serious.map((l) => "  第 " + l.line + " 行: " + l.text).join("\n")
   );
 });
 

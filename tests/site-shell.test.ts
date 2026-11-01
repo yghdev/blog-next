@@ -105,9 +105,17 @@ test("B-1 只有文章页传 toc，其他页面不得传", () => {
   assert.deepEqual(problems, [], "toc 传参有误：\n  " + problems.join("\n  "));
 });
 
-test("B-1 友链页保留 fr-main 类（friends.css 依赖它）", () => {
-  const src = read("app/friend-links/page.tsx");
-  assert.match(src, /className="fr-main"/, "友链页应把 fr-main 作为 className 传给 SiteShell");
+test("B-1/B-4 友链页不再需要 fr-main（B-4 移除所有相关样式后成为死类）", () => {
+  /**
+   * B-1 时友链页还传 `className="fr-main"`，因为 friends.css 用它写
+   * `max-width: 960px`。B-4 把几何全部交给全局令牌后，这个类没有任何
+   * 样式了 —— 留着既误导人，也会让 design-tokens 的「类名必须有样式」
+   * 检查报红。所以 B-4 把它一并删掉。
+   */
+  const page = read("app/friend-links/page.tsx");
+  const css = read("app/friend-links/friends.css");
+  assert.doesNotMatch(page, /className="fr-main"/, "友链页不应再传 fr-main");
+  assert.doesNotMatch(css, /\.fr-main\s*\{/, "friends.css 不应再有 .fr-main 规则");
 });
 
 test("B-1 SearchBox 已支持 initial（搜索页要复用它）", () => {

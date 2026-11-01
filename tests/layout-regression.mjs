@@ -464,6 +464,77 @@ try {
     console.log("PASS B-1 " + pathName.padEnd(16) + " " + wantClass + " toc=" + (info.hasToc ? "有" : "无"));
   }
 
+  /* ── 断言 14（B-4）：友链页左栏与首页完全对齐 ── */
+  /**
+   * 原实现 friends.css 自己重算骨架，1440px 下友链页左栏 76px、首页 32px。
+   * B-1 把骨架收敛到 SiteShell 之后，剩余的偏移来自 `.site-shell--wide`
+   * 的 `max-width: --w-shell-read`(1352) 在 1440 里居中（左右各 44px）。
+   * B-4 让宽版容器占满、只限 `.content`，两边才真正对齐。
+   */
+  for (const vw of [1440, 1391, 1200, 1100, 900, 821]) {
+    await page.setViewportSize({ width: vw, height: 900 });
+
+    await page.goto(server.base + "/", { waitUntil: "networkidle" });
+    const homeLeft = await page.evaluate(() => {
+      const s = document.querySelector(".sidebar");
+      return s && getComputedStyle(s).display !== "none" ? Math.round(s.getBoundingClientRect().left) : null;
+    });
+
+    await page.goto(server.base + "/friend-links", { waitUntil: "networkidle" });
+    const fr = await page.evaluate(() => {
+      const s = document.querySelector(".sidebar");
+      const c = document.querySelector(".content");
+      const sh = document.querySelector(".site-shell");
+      return {
+        left: s && getComputedStyle(s).display !== "none" ? Math.round(s.getBoundingClientRect().left) : null,
+        content: c ? Math.round(c.getBoundingClientRect().width) : null,
+        shellMax: getComputedStyle(sh).maxWidth,
+        scrollW: document.documentElement.scrollWidth,
+        clientW: document.documentElement.clientWidth,
+      };
+    });
+
+    assert.ok(homeLeft !== null, vw + "px 首页应有可见左栏");
+    assert.ok(fr.left !== null, vw + "px 友链页应有可见左栏");
+    assert.ok(
+      Math.abs(fr.left - homeLeft) <= 1,
+      vw + "px 友链页左栏应于首页对齐（差 ≤1px）：首页 " + homeLeft + "，友链 " + fr.left
+    );
+    assert.ok(fr.scrollW <= fr.clientW + 1, vw + "px 友链页不应横向溢出");
+    console.log("PASS B-4 " + String(vw).padStart(4) + "px 友链 left=" + fr.left + " 首页 left=" + homeLeft + " 差=0");
+  }
+
+  /* ── 断言 15（B-4）：宽版页正文宽度仍符合 §10.3 ── */
+  /**
+   * 放开容器之后要确认正文没被"顺势拉宽"：宽版页上限仍是 --w-read(960)，
+   * 并且 1391 以下随视口线性收缩。
+   */
+  const WIDE_EXPECT = [[1440, 960], [1391, 960], [1200, 808], [1100, 708], [900, 508], [821, 429]];
+  for (const [vw, want] of WIDE_EXPECT) {
+    await page.setViewportSize({ width: vw, height: 900 });
+    await page.goto(server.base + "/friend-links", { waitUntil: "networkidle" });
+    const w = await page.evaluate(() => Math.round(document.querySelector(".content").getBoundingClientRect().width));
+    assert.ok(Math.abs(w - want) <= 2, vw + "px 友链页 content 应为 " + want + "±2，实际 " + w);
+  }
+  console.log("PASS B-4 宽版页正文宽度符合 §10.3（" + WIDE_EXPECT.map(([v, w]) => v + "=" + w).join(" ") + "）");
+
+  /* ── 断言 16（B-4）：移动端骨架 padding 回到全局值 ── */
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(server.base + "/friend-links", { waitUntil: "networkidle" });
+  const frMobile = await page.evaluate(() => {
+    const sh = document.querySelector(".site-shell");
+    return { pad: getComputedStyle(sh).padding };
+  });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const homeMobile = await page.evaluate(() => getComputedStyle(document.querySelector(".site-shell")).padding);
+  assert.equal(
+    frMobile.pad,
+    homeMobile,
+    "375px 下友链页与首页的骨架 padding 应一致（本页不再有 8px vs 14px 的例外）：" +
+      frMobile.pad + " vs " + homeMobile
+  );
+  console.log("PASS B-4 375px 骨架 padding 与首页一致（" + frMobile.pad + "）");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());

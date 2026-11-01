@@ -29,23 +29,14 @@
 
 /* ── 骨架：本页不放右栏，正文走宽版 ──
  *
- * 这里原本自己重算了一遍网格与 max-width，还把 `--w-main` 换成了硬编码
- * 的 960px。结果是 1440px 下本页左栏在 76px、首页在 32px —— 差 44px，
- * 两个页面并排看就是没对齐。
+ * 这里曾经自己重算了一遍网格与 max-width（还把 `--w-main` 换成硬编码
+ * 960px），结果是 1440px 下本页左栏在 76px、首页 32px —— 差 44px。
  *
- * B-2 起宽度全部来自全局令牌（`--w-shell-read` / `--w-read`），本页只
- * 声明"我是宽版"，不再重算任何加法。B-4 会把 `.fr-shell` 这个类彻底去掉，
- * 改用 `SiteShell variant="wide"`。
+ * B-4 起**所有骨架几何都交给全局**：本页只用 `SiteShell variant="wide"`
+ * （B-1 已完成），宽度来自 `--w-shell-read` / `--w-read`。
+ * 这个文件不再对 `.site-shell` / `.content` 写任何几何属性 ——
+ * 一旦有人在这里又加 max-width，两个页面就又会错位。
  */
-.site-shell.fr-shell {
-  grid-template-columns: var(--w-side) minmax(0, 1fr);
-  max-width: var(--w-shell-read);
-  align-items: start;
-}
-.content.fr-main {
-  max-width: var(--w-read);
-  min-width: 0;
-}
 
 /* 等宽小字：编辑式编号、域名、英文标签共用。
    注意不能给 .fr-mono 定死 color —— 它只负责字体；颜色由各处的语义令牌给，
@@ -786,11 +777,7 @@
 }
 
 @media (max-width: 820px) {
-  .site-shell.fr-shell {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 8px 20px calc(40px + var(--safe-bottom));
-  }
-  .content.fr-main { max-width: 100%; }
+  /* 骨架的移动端 padding 用全局值（14px 20px），本页不再例外 */
 
   .fr-hero { padding-bottom: 30px; }
   .fr-hero-meta { margin-bottom: 22px; }

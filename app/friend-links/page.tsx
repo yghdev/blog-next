@@ -125,7 +125,7 @@ export default async function FriendLinksPage() {
 
   return (
     <div className="friends-page">
-      <SiteShell variant="wide" className="fr-main">
+      <SiteShell variant="wide">
             {/* ── 专题头部 ─────────────────────────────────── */}
             <header className="fr-hero">
               <div className="fr-hero-meta">

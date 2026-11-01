@@ -229,8 +229,23 @@ a:hover { color: var(--link-hover); }
 }
 
 .site-shell--wide {
+  /*
+   * 宽版页：容器**占满视口**，只靠 `.content` 的 max-width 限正文。
+   *
+   * 这里曾经写成 `max-width: var(--w-shell-read)`(1352)，于是 1440 视口下
+   * 容器被收窄并居中 —— 左右各留 44px，左栏落到 76px，而首页（三栏，
+   * 容器占满）是 32px。两个页面并排就是没对齐，且 1391 以下因为容器
+   * 已经不收，反而对齐了（所以只在 ≥1392 暴露）。
+   *
+   * 改成容器占满、正文 `max-width: var(--w-read)` 之后：
+   *   左栏恒在 32px（与所有页面一致）；
+   *   正文 = min(960, vw - 64 - 288 - 40)，与 §10.3 的宽版页公式一致；
+   *   宽屏（>1352）时正文右侧自然留白 —— 那是 960 上限的必然结果，
+   *   不是布局错误。
+   */
   grid-template-columns: var(--w-side) minmax(0, 1fr);
-  max-width: var(--w-shell-read);
+  max-width: none;
+  justify-content: start;
 }
 
 .site-shell--wide .content {

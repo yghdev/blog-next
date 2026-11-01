@@ -52,7 +52,7 @@ export function SiteShell({
   variant?: Variant;
   /** 文章目录。只有文章页需要传；其余页面不传，右栏会渲染成不带目录的版本。 */
   toc?: Toc;
-  /** 附加到 `<main>` 上的类名（目前只有友链页用 `fr-main`）。 */
+  /** 附加到 `<main>` 上的类名。目前没有页面在用（友链页的 fr-main 已随 B-4 移除）。 */
   className?: string;
   children: React.ReactNode;
 }) {
