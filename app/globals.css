@@ -397,6 +397,46 @@ a:hover { color: var(--link-hover); }
   letter-spacing: .01em;
 }
 
+/* ── 404 页（C-5：原本全是内联样式）── */
+.notfound {
+  max-width: 480px;
+  margin: 20vh auto;
+  padding: 0 24px;
+  text-align: center;
+}
+.notfound-title {
+  font-family: var(--font-serif);
+  font-size: 2.5rem;
+  color: var(--text-p0);
+  margin: 0 0 12px;
+}
+.notfound-text { color: var(--text-p3); margin-bottom: 24px; }
+
+/* ── 搜索结果计数（C-5：原内联 .82rem + text-p4）── */
+.search-meta {
+  font-size: .82rem;
+  color: var(--text-p4);
+  margin: 0 0 16px;
+}
+
+/* ── 标签页文章计数（C-5：原内联 .85rem，负上边距抵消标题的下边距）── */
+.tag-count {
+  font-size: .85rem;
+  color: var(--text-p4);
+  margin: -16px 0 24px;
+}
+
+/* ── 文章封面（C-5：原内联 width/border-radius/margin/border）── */
+.article-cover {
+  width: 100%;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border);
+}
+
+/* ── 评论错误提示（C-5：原内联 marginBottom:12，与 .notice 组合使用）── */
+.comment-error { margin-bottom: 12px; }
+
 /* ── 文章列表（卡片流） ── */
 .post-list { display: flex; flex-direction: column; gap: 16px; }
 
@@ -818,6 +858,21 @@ a:hover { color: var(--link-hover); }
   border-bottom: 1px solid var(--border);
 }
 .archive-year:first-child { margin-top: 0; }
+/* 年份后面的「N 篇」计数（C-5：原为内联 fontSize/.72rem + fontWeight 400） */
+.archive-year-count {
+  font-size: .72rem;
+  color: var(--text-p4);
+  margin-left: 8px;
+  font-weight: 400;
+}
+/* 每个月一组（原内联 marginBottom:10） */
+.archive-month-group { margin-bottom: 10px; }
+/* 月份标签（原内联 fontSize/.78rem + margin 6px 0 4px） */
+.archive-month {
+  font-size: .78rem;
+  color: var(--text-p4);
+  margin: 6px 0 4px;
+}
 .archive-item {
   display: flex; gap: 16px; align-items: baseline;
   padding: 7px 0; font-size: .92rem;
@@ -980,6 +1035,32 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 
 /* ── 分页 ── */
 .pager { display: flex; justify-content: center; gap: 10px; margin-top: 40px; }
+/*
+ * 分页的当前页（C-5）。
+ *
+ * 原来写的是 `<span className="btn btn-sm" style={{pointerEvents:"none",opacity:.6}}>`
+ * —— 用样式禁用点击是语义错误：它本来就不是按钮（不可点），不该先伪装成
+ * 按钮再用 pointerEvents 把交互掐掉。读屏会把它念成一个按不动的按钮。
+ *
+ * **视觉必须与改前一致**，所以这里精确复刻 `.btn` + `.btn-sm` 的外观，
+ * 再用 `opacity: .6` 表达"不可用"。唯一去掉的是 `pointerEvents: none`
+ * —— 但它是 `<span>`，本来就没有点击行为，去掉不影响任何交互。
+ *
+ * 如果哪天想让"当前页"看起来更轻（不要按钮感），改这里一处即可，
+ * 不再需要去 JSX 里找内联样式。
+ */
+.pager-current {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 5px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  color: var(--text-p0);
+  font-size: .82rem; font-weight: 560;
+  font-family: inherit;
+  opacity: .6;
+  font-variant-numeric: tabular-nums;
+}
 
 /* `.only-mobile` 已删除（C-6）：零引用 */
 

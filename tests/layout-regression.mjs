@@ -40,6 +40,7 @@ try {
   seedAboutPage(server.dataDir);
   seedSiteFooterSettings(server.dataDir);
   const longIds = seedLongStringPosts(server.dataDir);
+  seedPostsForPager(server.dataDir);
 
   controller = await startBrowser();
   const { context } = await controller.newLoggedInContext(server.base, server.fixture);
@@ -1105,6 +1106,93 @@ try {
   assert.equal(afterCleanup.themeToggle, true, "主题切换按钮应存在");
   console.log("PASS C-6 删死类后侧栏/导航/右栏/切换按钮全部正常（rb-title " + afterCleanup.rbTitles + " 个）");
 
+  /* ── 断言 33（C-5）：内联样式改类后，视觉与改前一致 ── */
+  /**
+   * C-5 是**样式搬家**：把 13 处 `style={{…}}` 挪进 CSS 类。视觉必须一致 ——
+   * 唯一有意的差异是分页当前页去掉了 `pointerEvents:none`（它是 `<span>`，
+   * 本来就没有点击行为；`none` 只是把文本选择也一起禁了）。
+   *
+   * 这里断言各元素的**关键计算值**仍等于原内联样式写的那些值。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // 404 页
+  await page.goto(server.base + "/this-page-does-not-exist", { waitUntil: "networkidle" });
+  const nf = await page.evaluate(() => {
+    const box = document.querySelector(".notfound");
+    const h1 = document.querySelector(".notfound-title");
+    const p = document.querySelector(".notfound-text");
+    if (!box || !h1 || !p) return null;
+    const b = getComputedStyle(box), h = getComputedStyle(h1), t = getComputedStyle(p);
+    return {
+      boxMaxWidth: b.maxWidth, boxAlign: b.textAlign, boxPad: b.padding,
+      h1Size: h.fontSize, h1Color: h.color, h1Margin: h.margin,
+      pColor: t.color, pMarginBottom: t.marginBottom,
+    };
+  });
+  assert.ok(nf, "404 页应渲染 .notfound / .notfound-title / .notfound-text");
+  assert.equal(nf.boxMaxWidth, "480px", "404 容器 max-width 应为 480px");
+  assert.equal(nf.boxAlign, "center", "404 容器应居中");
+  assert.equal(nf.h1Size, "40px", "404 标题应为 2.5rem = 40px，实际 " + nf.h1Size);
+  assert.equal(nf.pMarginBottom, "24px", "404 说明文字 margin-bottom 应为 24px");
+  console.log("PASS C-5 404 页语义类还原原内联样式（" + nf.h1Size + " / " + nf.boxMaxWidth + "）");
+
+  // 归档页
+  await page.goto(server.base + "/archives", { waitUntil: "networkidle" });
+  const arch = await page.evaluate(() => {
+    const cnt = document.querySelector(".archive-year-count");
+    const grp = document.querySelector(".archive-month-group");
+    const mon = document.querySelector(".archive-month");
+    if (!cnt || !grp || !mon) return null;
+    const a = getComputedStyle(cnt), b = getComputedStyle(grp), c = getComputedStyle(mon);
+    return {
+      cntSize: a.fontSize, cntColor: a.color, cntMarginLeft: a.marginLeft, cntWeight: a.fontWeight,
+      grpMarginBottom: b.marginBottom,
+      monSize: c.fontSize, monMargin: c.margin,
+    };
+  });
+  assert.ok(arch, "归档页应渲染三个语义类");
+  assert.equal(arch.cntSize, "11.52px", "年份计数 .72rem = 11.52px，实际 " + arch.cntSize);
+  assert.equal(arch.cntMarginLeft, "8px", "年份计数 margin-left 应为 8px");
+  assert.equal(arch.cntWeight, "400", "年份计数 font-weight 应为 400");
+  assert.equal(arch.grpMarginBottom, "10px", "月份组 margin-bottom 应为 10px");
+  assert.equal(arch.monSize, "12.48px", "月份标签 .78rem = 12.48px，实际 " + arch.monSize);
+  assert.equal(arch.monMargin, "6px 0px 4px", "月份标签 margin 应为 6px 0 4px，实际 " + arch.monMargin);
+  console.log("PASS C-5 归档页三个语义类数值正确（" + arch.cntSize + " / " + arch.monSize + "）");
+
+  // 分页当前页
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const pager = await page.evaluate(() => {
+    const el = document.querySelector(".pager-current");
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    return {
+      tag: el.tagName, size: cs.fontSize, weight: cs.fontWeight, pad: cs.padding,
+      radius: cs.borderTopLeftRadius, opacity: cs.opacity,
+      pointerEvents: cs.pointerEvents, bg: cs.backgroundColor,
+    };
+  });
+  assert.ok(pager, "分页当前页应渲染 .pager-current");
+  assert.equal(pager.tag, "SPAN", "分页当前页应是 span（不是被禁用的按钮）");
+  assert.equal(pager.size, "13.12px", "字号 .82rem = 13.12px，实际 " + pager.size);
+  assert.equal(pager.weight, "560", "字重应 560");
+  assert.equal(pager.pad, "5px 12px", "内边距应 5px 12px");
+  assert.equal(pager.radius, "8px", "圆角应 8px");
+  assert.equal(pager.opacity, "0.6", "不透明度应 0.6");
+  assert.equal(pager.pointerEvents, "auto", "不应再用 pointerEvents:none 禁用交互");
+  console.log("PASS C-5 分页当前页视觉一致（span / " + pager.size + " / opacity " + pager.opacity + "，已去掉 pointerEvents:none）");
+
+  // 搜索结果计数 / 标签页计数
+  await page.goto(server.base + "/search?q=" + encodeURIComponent("测试"), { waitUntil: "networkidle" });
+  const sm = await page.evaluate(() => {
+    const el = document.querySelector(".search-meta");
+    return el ? { size: getComputedStyle(el).fontSize, margin: getComputedStyle(el).margin } : null;
+  });
+  if (sm) {
+    assert.equal(sm.size, "13.12px", "搜索计数 .82rem = 13.12px，实际 " + sm.size);
+    console.log("PASS C-5 搜索计数语义类正确（" + sm.size + "）");
+  }
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
@@ -1180,6 +1268,27 @@ function seedLongStringPosts(dataDir) {
     "## 代码\n\n```\nconst x = '" + "a".repeat(150) + "';\n```\n\n段落。", now, now, now).lastInsertRowid);
   db.close();
   return ids;
+}
+
+/**
+ * 造够 21 篇文章，让首页出现分页（PAGE_SIZE = 20）。
+ *
+ * 分页条只在 `total > PAGE_SIZE` 时渲染，不造数据就测不到
+ * `.pager-current`（C-5 把它的内联样式改成了语义类）。
+ */
+function seedPostsForPager(dataDir, n = 21) {
+  const db = new Database(dataDir + "/blog.db");
+  db.pragma("journal_mode = WAL");
+  const now = new Date().toISOString();
+  const ins = db.prepare(
+    "INSERT INTO posts (type, slug, title, content, status, published_at, created_at, updated_at) " +
+    "VALUES ('post', ?, ?, '正文', 'published', ?, ?, ?)"
+  );
+  for (let i = 1; i <= n; i++) {
+    const at = new Date(Date.now() - i * 86400000).toISOString();
+    ins.run("pager-" + i, "分页测试文章 " + i, at, at, at);
+  }
+  db.close();
 }
 
 function seedAboutPage(dataDir) {

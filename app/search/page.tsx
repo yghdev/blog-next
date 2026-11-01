@@ -38,7 +38,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         </div>
 
         {q ? (
-          <p style={{ fontSize: ".82rem", color: "var(--text-p4)", margin: "0 0 16px" }}>
+          <p className="search-meta">
             {hits.length > 0
               ? "找到 " + hits.length + " 篇 · " + (mode === "fts" ? "全文索引" : "关键词匹配")
               : "没有匹配结果 · " + (mode === "fts" ? "全文索引" : "关键词匹配")}

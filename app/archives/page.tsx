@@ -32,13 +32,11 @@ export default async function ArchivesPage() {
           <section key={g.year}>
             <h2 className="archive-year">
               {g.year}
-              <span style={{ fontSize: ".72rem", color: "var(--text-p4)", marginLeft: 8, fontWeight: 400 }}>
-                {g.count} 篇
-              </span>
+              <span className="archive-year-count">{g.count} 篇</span>
             </h2>
             {g.months.map((m) => (
-              <div key={m.ym} style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: ".78rem", color: "var(--text-p4)", margin: "6px 0 4px" }}>{m.label}</div>
+              <div key={m.ym} className="archive-month-group">
+                <div className="archive-month">{m.label}</div>
                 {m.posts.map((p) => (
                   <div key={p.id} className="archive-item slide-up">
                     <span className="date">

@@ -99,8 +99,7 @@ export async function ArticleView({ doc }: { doc: Post }) {
 
             {doc.cover ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={doc.cover} alt={doc.title}
-                   style={{ width: "100%", borderRadius: 12, marginBottom: 20, border: "1px solid var(--border)" }} />
+              <img src={doc.cover} alt={doc.title} className="article-cover" />
             ) : null}
 
             <div className="prose" dangerouslySetInnerHTML={{ __html: html }} />

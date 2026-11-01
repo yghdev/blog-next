@@ -54,7 +54,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         {total > PAGE_SIZE ? (
           <div className="pager">
             {page > 1 ? <a className="btn btn-sm" href={`/?page=${page - 1}`}>上一页</a> : null}
-            <span className="btn btn-sm" style={{ pointerEvents: "none", opacity: .6 }}>
+            <span className="pager-current">
               {page} / {Math.ceil(total / PAGE_SIZE)}
             </span>
             {page * PAGE_SIZE < total ? <a className="btn btn-sm" href={`/?page=${page + 1}`}>下一页</a> : null}

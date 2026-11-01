@@ -24,7 +24,7 @@ export default async function TagPage({ params }: { params: Promise<{ tag: strin
       <Animations />
       <SiteShell variant="three-col">
         <h1 className="page-title">标签：{tag}</h1>
-        <p style={{ fontSize: ".85rem", color: "var(--text-p4)", margin: "-16px 0 24px" }}>
+        <p className="tag-count">
           共 {posts.length} 篇文章
         </p>
         <div className="post-list">

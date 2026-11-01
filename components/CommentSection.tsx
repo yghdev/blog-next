@@ -154,7 +154,7 @@ export function CommentSection({ postId, pageKey }: { postId: number; pageKey: s
 
   return (
     <section className="comments" data-post-id={postId}>
-      {error ? <div className="notice notice-error" style={{ marginBottom: 12 }}>{error}</div> : null}
+      {error ? <div className="notice notice-error comment-error">{error}</div> : null}
       <div ref={hostRef} />
     </section>
   );
