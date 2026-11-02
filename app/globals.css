@@ -1257,7 +1257,23 @@ a:hover { color: var(--link-hover); }
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
-.archive-item a { color: var(--text-p1); }
+/*
+ * 标题（D-5 收尾发现）：长串必须能断行。
+ *
+ * 实测：标题里带一条 120 字符的 URL 时，1440px 下文档 scrollWidth 变成
+ * 1526px（超出 86px）—— 整页出现横向滚动条。
+ *
+ * 两个条件缺一不可：
+ *   · `min-width: 0`  —— flex 子项默认 `min-width: auto`，不会缩到内容宽度以下
+ *   · `overflow-wrap: anywhere` —— 允许在长串内部断行
+ *
+ * 这是 R1 修 `.prose` 时的同一类问题；归档行当时没被纳入，D-5 收尾补上。
+ */
+.archive-item a {
+  color: var(--text-p1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .archive-item a:hover { color: var(--link); }
 
 /*

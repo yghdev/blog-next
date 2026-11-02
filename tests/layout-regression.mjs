@@ -753,6 +753,47 @@ try {
     console.log("PASS R1 " + String(vw).padStart(4) + "px 长串正文不溢出（URL / 单词 / 标题）");
   }
 
+  /**
+   * 断言 22b：**归档页**同样不能被长标题撑破（D-5 收尾时补的）。
+   *
+   * R1 当时只验了文章正文页（`/p/<id>`）—— 但文章标题会同时出现在
+   * 归档页、首页卡片、标签页、搜索结果里。归档行是唯一没做断行处理的地方：
+   * 实测把标题换成 120 字符的 URL 后，1440px 下 scrollWidth 变成 1526px，
+   * 整页出现横向滚动条。
+   *
+   * 触发条件是「flex 子项没写 min-width: 0」+「没有 overflow-wrap」，
+   * 两者缺一不可 —— 所以断言必须真的把长标题种进归档列表里去测。
+   */
+  /**
+   * ⚠️ 必须测**多个视口**，而且窄视口才是关键。
+   *
+   * 第一版只测 1440，结果移除修复后断言仍然通过 —— 因为种子里的
+   * 136 字符英文标题在 1440 下实测宽度 844px，恰好放得下（可用宽度约
+   * 1010px）。也就是说 1440 上根本没有溢出，这条断言等于没测。
+   *
+   * 换成 375（可用宽度 335px）就必然溢出，才能真的守住这条修复。
+   */
+  for (const vw of [1440, 1200, 820, 375]) {
+    await page.setViewportSize({ width: vw, height: 900 });
+    await page.goto(server.base + "/archives", { waitUntil: "networkidle" });
+    const archLong = await page.evaluate(() => {
+      const doc = document.documentElement;
+      const over = [];
+      for (const el of document.querySelectorAll("*")) {
+        if (el.getBoundingClientRect().right > doc.clientWidth + 1) {
+          over.push((el.className || el.tagName).toString().slice(0, 40));
+        }
+      }
+      return { sw: doc.scrollWidth, cw: doc.clientWidth, over: over.slice(0, 3) };
+    });
+    assert.ok(
+      archLong.sw <= archLong.cw + 1,
+      vw + "px 归档页被长标题撑破：" + archLong.sw + " > " + archLong.cw +
+        "（溢出元素：" + archLong.over.join(",") + "）"
+    );
+  }
+  console.log("PASS 断言 22b 归档页长标题不撑破页面（1440/1200/820/375）");
+
   /* ── 断言 23（R1）：代码块必须保留横向滚动，不被换行折断 ── */
   /**
    * 反例守卫：给 `*` 加 overflow-wrap 会把代码也折成一片，缩进语义全毁。
