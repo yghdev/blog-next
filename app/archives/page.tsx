@@ -36,7 +36,12 @@ export default async function ArchivesPage() {
             </h2>
             {g.months.map((m) => (
               <div key={m.ym} className="archive-month-group">
-                <div className="archive-month">{m.label}</div>
+                {/*
+                  需求 8.3「月份作为二级分组」：用 h3 而不是 div。
+                  视觉完全一致，但读屏用户可以用标题快捷键在「年份 → 月份」
+                  之间跳转 —— 归档页正是那种"快速扫一批标题"的页面。
+                */}
+                <h3 className="archive-month">{m.label}</h3>
                 {m.posts.map((p) => (
                   <div key={p.id} className="archive-item slide-up">
                     <span className="date">

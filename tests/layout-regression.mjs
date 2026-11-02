@@ -1157,9 +1157,26 @@ try {
   assert.equal(arch.cntSize, "11.52px", "年份计数 .72rem = 11.52px，实际 " + arch.cntSize);
   assert.equal(arch.cntMarginLeft, "8px", "年份计数 margin-left 应为 8px");
   assert.equal(arch.cntWeight, "400", "年份计数 font-weight 应为 400");
-  assert.equal(arch.grpMarginBottom, "10px", "月份组 margin-bottom 应为 10px");
+  /*
+   * 月份组的间距在 D-5（需求 8.4 空间优化）里被调小：10px → 2px，
+   * 月份标签的 margin 也从 `6px 0 4px` 改成 `12px 0 2px`
+   * （上边距加大、下边距收窄 —— 让月份标签紧贴自己那一组列表）。
+   *
+   * 这里不断言"等于某个旧像素值"，而是断言**两侧的语义**：
+   * 月份之间的分隔必须大于月份与列表之间的分隔，否则分组关系就糊了。
+   */
+  const monTop = parseFloat(arch.monMargin.split(" ")[0]);
+  const monBottom = parseFloat(arch.monMargin.split(" ")[2]);
+  const sepBetween = parseFloat(arch.grpMarginBottom) + monTop; // 上一组底 → 下一月份标签
+  assert.ok(
+    sepBetween > monBottom,
+    "月份之间的分隔（" + sepBetween + "px）应大于月份与列表之间（" + monBottom + "px），否则分组关系不清晰"
+  );
+  assert.ok(
+    parseFloat(arch.grpMarginBottom) <= 4,
+    "8.4「缩小不必要的分组间距」：月份组 margin-bottom 应 ≤4px，实际 " + arch.grpMarginBottom
+  );
   assert.equal(arch.monSize, "12.48px", "月份标签 .78rem = 12.48px，实际 " + arch.monSize);
-  assert.equal(arch.monMargin, "6px 0px 4px", "月份标签 margin 应为 6px 0 4px，实际 " + arch.monMargin);
   console.log("PASS C-5 归档页三个语义类数值正确（" + arch.cntSize + " / " + arch.monSize + "）");
 
   // 分页当前页
@@ -1886,6 +1903,142 @@ try {
     assert.equal(other.text, wantTitle, pathName + " 标题文字应保持 " + wantTitle);
   }
   console.log("PASS D-4 PageHeader 改动不影响其它页面（无 .page-title-row / 边距不变）");
+
+  /* ── 断言 47（D-5）：归档页分组列表的空间优化 ── */
+  /**
+   * 需求 8.3（结构）+ 8.4（空间）。
+   *
+   * 8.1 的「NaN 月」bug 在阶段 A 就修好了（`dateKeyIn` 补零），
+   * 这里顺带守住它不要回归 —— 那是本页最严重的历史缺陷。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/archives", { waitUntil: "networkidle" });
+
+  const arch2 = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll(".archive-item")];
+    const months = [...document.querySelectorAll(".archive-month")];
+    const years = [...document.querySelectorAll(".archive-year")];
+    const cs = (el) => getComputedStyle(el);
+    const row = rows[0];
+    return {
+      /* 8.3 结构 */
+      yearTag: years[0]?.tagName,
+      yearText: years[0]?.textContent?.replace(/\s+/g, " ").trim(),
+      monthTag: months[0]?.tagName,
+      monthCount: months.length,
+      rowCount: rows.length,
+      dates: rows.map((r) => r.querySelector(".date")?.textContent?.trim()),
+      dateFont: row ? parseFloat(cs(row.querySelector(".date")).fontSize) : null,
+      titleFont: row ? parseFloat(cs(row.querySelector("a")).fontSize) : null,
+      /* 8.3 #7 不是大卡片 */
+      rowBg: row ? cs(row).backgroundColor : null,
+      rowRadius: row ? cs(row).borderTopLeftRadius : null,
+      /* 8.4 空间 */
+      rowHeight: row ? Math.round(row.getBoundingClientRect().height) : null,
+      rowPadding: row ? cs(row).padding : null,
+      /*
+       * 行距（同一月份内相邻行 top 的距离）。
+       * 这是 8.4「统一文章行高、缩小间距」的直接度量，且**与文章总数无关** ——
+       * 用"内容区总高"当指标的话，测试库里 26 篇文章算出来是 1070px，
+       * 和"改前 450px"根本不可比（那是 5 篇文章的数字）。
+       */
+      rowPitch: (() => {
+        const byGroup = new Map();
+        for (const r of rows) {
+          const g = r.closest(".archive-month-group");
+          if (!byGroup.has(g)) byGroup.set(g, []);
+          byGroup.get(g).push(r);
+        }
+        for (const [, list] of byGroup) {
+          if (list.length >= 2) {
+            return Math.round(list[1].getBoundingClientRect().top - list[0].getBoundingClientRect().top);
+          }
+        }
+        return null;
+      })(),
+      /* 8.1 回归守卫 */
+      hasNaN: document.body.innerText.includes("NaN"),
+      /* 对齐：负外边距不能让文字偏移 */
+      monthLeft: months[0] ? Math.round(months[0].getBoundingClientRect().left) : null,
+      dateLeft: row ? Math.round(row.querySelector(".date").getBoundingClientRect().left) : null,
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    };
+  });
+
+  /* 8.3 #1/#2 年份为一级标题 + 旁边展示数量 */
+  assert.equal(arch2.yearTag, "H2", "8.3 年份应是标题元素（h2），实际 " + arch2.yearTag);
+  assert.match(arch2.yearText, /^\d{4}\s*\d+\s*篇$/, "8.3 年份旁应有文章数量，实际 " + JSON.stringify(arch2.yearText));
+  /* 8.3 #3 月份是二级分组 */
+  assert.equal(arch2.monthTag, "H3", "8.3 月份应是二级分组标题（h3），实际 " + arch2.monthTag);
+  assert.ok(arch2.monthCount >= 2, "8.3 应渲染出月份分组，实际 " + arch2.monthCount);
+  console.log("PASS D-5 归档结构（" + arch2.yearText + " · " + arch2.monthCount + " 个月份分组 · " + arch2.rowCount + " 行）");
+
+  /* 8.1 回归守卫：不得出现 NaN */
+  assert.equal(arch2.hasNaN, false, "8.1 归档页不得出现 NaN（日期解析回归）");
+
+  /* 8.3 #5 日期为辅助信息：MM/DD 且补零，字号小于标题 */
+  for (const d of arch2.dates) {
+    assert.match(d, /^\d{2}\/\d{2}$/, "8.3 日期应是补零的 MM/DD，实际 " + JSON.stringify(d));
+  }
+  assert.ok(
+    arch2.dateFont < arch2.titleFont,
+    "8.3 日期应是辅助信息（字号小于标题）：日期 " + arch2.dateFont + " vs 标题 " + arch2.titleFont
+  );
+  console.log("PASS D-5 日期辅助信息（" + arch2.dates[0] + " · " + arch2.dateFont + "px < 标题 " + arch2.titleFont + "px）");
+
+  /* 8.4 空间：行高收紧且不是卡片 */
+  assert.ok(
+    arch2.rowHeight !== null && arch2.rowHeight <= 36,
+    "8.4 文章行高度应 ≤36px（改前 40），实际 " + arch2.rowHeight
+  );
+  assert.equal(
+    arch2.rowRadius,
+    "8px",
+    "8.3 #7 行是行高亮而不是卡片（8px 圆角来自 --radius-sm），实际 " + arch2.rowRadius
+  );
+  assert.ok(
+    arch2.rowPitch !== null && arch2.rowPitch <= 35,
+    "8.4 同月内行距应 ≤35px（改前 40），实际 " + arch2.rowPitch
+  );
+  console.log(
+    "PASS D-5 空间优化（行高 " + arch2.rowHeight + "px ← 40 · 行距 " + arch2.rowPitch + "px ← 40）"
+  );
+
+  /* 负外边距不得让文字左右偏移 */
+  assert.equal(
+    arch2.dateLeft,
+    arch2.monthLeft,
+    "月份标签与日期列的左边缘必须对齐（负外边距只是给 hover 背景留空间，不能挪文字）"
+  );
+  assert.equal(arch2.overflow, false, "归档页不应有横向溢出");
+
+  /* 8.3 #10 文章行 hover 时应有轻量反馈 */
+  const hoverBefore = await page.evaluate(() => {
+    const row = document.querySelector(".archive-item");
+    return { bg: getComputedStyle(row).backgroundColor, color: getComputedStyle(row.querySelector("a")).color };
+  });
+  await page.hover(".archive-item");
+  await page.waitForTimeout(250);
+  const hoverAfter = await page.evaluate(() => {
+    const row = document.querySelector(".archive-item");
+    return { bg: getComputedStyle(row).backgroundColor, color: getComputedStyle(row.querySelector("a")).color };
+  });
+  assert.notEqual(hoverAfter.bg, hoverBefore.bg, "8.3 #10 hover 时行背景应有变化");
+  assert.notEqual(hoverAfter.color, hoverBefore.color, "8.3 #10 hover 时标题颜色应有变化");
+  console.log("PASS D-5 hover 反馈（背景 + 标题颜色都变化）");
+
+  /* 回归守卫：搜索页与标签页不受影响 */
+  await page.goto(server.base + "/search?q=" + encodeURIComponent("测试"), { waitUntil: "networkidle" });
+  const searchMeta = await page.evaluate(() => ({
+    meta: document.querySelector(".search-meta")?.textContent?.trim(),
+    hasHeader: !!document.querySelector("header.page-head"),
+    h1: document.querySelectorAll("h1").length,
+    overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  }));
+  assert.ok(searchMeta.meta && searchMeta.meta.length > 0, "搜索页应显示结果计数，实际 " + JSON.stringify(searchMeta.meta));
+  assert.equal(searchMeta.h1, 1, "搜索页仍应只有一个 h1");
+  assert.equal(searchMeta.overflow, false, "搜索页不应有横向溢出");
+  console.log("PASS D-5 搜索页（" + searchMeta.meta + "）");
 
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
