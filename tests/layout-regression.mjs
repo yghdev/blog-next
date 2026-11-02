@@ -42,6 +42,7 @@ try {
   seedSiteFooterSettings(server.dataDir);
   const longIds = seedLongStringPosts(server.dataDir);
   seedPostsForPager(server.dataDir);
+  seedShuoshuo(server.dataDir);
 
   controller = await startBrowser();
   const { context } = await controller.newLoggedInContext(server.base, server.fixture);
@@ -1750,6 +1751,142 @@ try {
   assert.equal(flMobile.heightsEqual, true, "6.4 移动端卡片也应等高");
   console.log("PASS D-3 移动端单列满宽（" + flMobile.cardW + "px）且无横向滚动");
 
+  /* ── 断言 46（D-4）：说说页轻量时间线 ── */
+  /**
+   * 需求文档第五章。5.1 定位是「轻量的个人动态记录页面」——
+   * 与文章列表刻意不同：没有卡片、没有摘要、没有一排元信息徽章。
+   *
+   * 5.3 推荐「轻量时间线」（用户已确认采用），5.4 允许日期拆分样式，
+   * 但要求「必须保证移动端显示正常」。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/shuoshuo", { waitUntil: "networkidle" });
+
+  const shuo = await page.evaluate(() => {
+    const list = document.querySelector(".shuo-list");
+    const items = [...document.querySelectorAll(".shuo-item")];
+    const first = items[0];
+    const cs = (el) => getComputedStyle(el);
+    const content = document.querySelector(".shuo-content");
+    return {
+      /* 5.2 页面顶部 */
+      en: document.querySelector(".page-title-en")?.textContent?.trim(),
+      sub: document.querySelector(".page-sub")?.textContent?.trim(),
+      h1Count: document.querySelectorAll("h1").length,
+      /* 5.3 时间线结构 */
+      listTag: list ? list.tagName : null,
+      itemTag: first ? first.tagName : null,
+      itemCount: items.length,
+      gridCols: first ? cs(first).gridTemplateColumns : null,
+      hasStamp: !!document.querySelector(".shuo-stamp"),
+      stampTag: document.querySelector(".shuo-stamp")?.tagName,
+      stampDateTime: document.querySelector(".shuo-stamp")?.getAttribute("datetime"),
+      days: [...document.querySelectorAll(".shuo-day")].map((e) => e.textContent.trim()),
+      yms: [...document.querySelectorAll(".shuo-ym")].map((e) => e.textContent.trim()),
+      times: [...document.querySelectorAll(".shuo-time")].map((e) => e.textContent.trim()),
+      /* 5.3 视觉要求：无卡片、无阴影、细分割线、舒适行高 */
+      boxShadow: first ? cs(first).boxShadow : null,
+      borderBottom: first ? cs(first).borderBottomWidth : null,
+      hasBg: first ? cs(first).backgroundColor : null,
+      lineHeight: content ? parseFloat(cs(content).lineHeight) : null,
+      fontSize: content ? parseFloat(cs(content).fontSize) : null,
+      /* 5.3 长文本 / 图片 */
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      imgRule: (() => {
+        const img = document.querySelector(".shuo-content img");
+        return img
+          ? { display: cs(img).display, maxWidth: cs(img).maxWidth, radius: cs(img).borderTopLeftRadius }
+          : null;
+      })(),
+    };
+  });
+
+  /* 5.2 英文辅助标题 + 一行说明 */
+  assert.equal(shuo.en, "MOMENTS / DAILY NOTES", "5.2 标题旁应有英文辅助标题，实际 " + JSON.stringify(shuo.en));
+  assert.ok(
+    shuo.sub && shuo.sub.length > 10,
+    "5.2 标题下应有一行简短说明，实际 " + JSON.stringify(shuo.sub)
+  );
+  assert.equal(shuo.h1Count, 1, "5.2 页面仍应只有一个 h1");
+  console.log("PASS D-4 页头（" + shuo.en + " ／ " + shuo.sub + "）");
+
+  /* 5.3 轻量时间线：有序列表 + 左日期 / 右正文 */
+  assert.equal(shuo.listTag, "OL", "5.3 时间线应是有序列表（表达时间顺序），实际 " + shuo.listTag);
+  assert.equal(shuo.itemTag, "LI", "5.3 每个条目应是 li，实际 " + shuo.itemTag);
+  assert.ok(shuo.itemCount >= 4, "5.3 应渲染出条目，实际 " + shuo.itemCount);
+  assert.equal(shuo.stampTag, "TIME", "5.3 日期应用 <time> 表达，实际 " + shuo.stampTag);
+  assert.ok(shuo.stampDateTime, "5.3 <time> 应有可机读的 datetime 属性");
+  const cols = shuo.gridCols.split(" ").filter(Boolean);
+  assert.equal(cols.length, 2, "5.3 时间线应是两列（左日期/右正文），实际 " + shuo.gridCols);
+  assert.equal(cols[0], "72px", "5.3 左栏应定宽 72px（否则日期位数变化会让正文左右跳动），实际 " + cols[0]);
+  console.log("PASS D-4 时间线结构（" + shuo.itemCount + " 条 · 左栏 " + cols[0] + " 定宽）");
+
+  /* 5.4 日期格式：日号补零两位 + 年月 + 时分 */
+  assert.deepEqual(
+    shuo.days,
+    shuo.days.map((d) => d.padStart(2, "0")),
+    "5.4 日号应补零两位，实际 " + JSON.stringify(shuo.days)
+  );
+  for (const ym of shuo.yms) {
+    assert.match(ym, /^\d{4}年\d{1,2}月$/, "5.4 年月格式应为 YYYY年M月，实际 " + JSON.stringify(ym));
+  }
+  for (const t of shuo.times) {
+    assert.match(t, /^\d{2}:\d{2}$/, "5.4 时分应为 HH:mm，实际 " + JSON.stringify(t));
+  }
+  console.log("PASS D-4 日期格式（" + shuo.days[0] + " / " + shuo.yms[0] + " / " + shuo.times[0] + "）");
+
+  /* 5.3 视觉要求 */
+  assert.equal(shuo.boxShadow, "none", "5.3 条目不应有阴影，实际 " + shuo.boxShadow);
+  assert.equal(shuo.borderBottom, "1px", "5.3 应保留 1px 分割线，实际 " + shuo.borderBottom);
+  assert.equal(
+    shuo.hasBg,
+    "rgba(0, 0, 0, 0)",
+    "5.3 不应使用卡片背景（需求「不使用大型卡片」），实际 " + shuo.hasBg
+  );
+  const lhRatio = shuo.lineHeight / shuo.fontSize;
+  assert.ok(lhRatio >= 1.7, "5.3 正文行高应舒适（≥1.7 倍字号），实际 " + lhRatio.toFixed(2));
+  assert.equal(shuo.overflow, false, "5.3 长文本不应撑破容器（页面级横向溢出）");
+  console.log(
+    "PASS D-4 视觉（无阴影 / 1px 分割线 / 无卡片背景 / 行高 " + lhRatio.toFixed(2) + " / 无溢出）"
+  );
+
+  /* 5.4 + 5.3 移动端：日期不折行、无横向溢出 */
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(server.base + "/shuoshuo", { waitUntil: "networkidle" });
+  const shuoMobile = await page.evaluate(() => {
+    const yms = [...document.querySelectorAll(".shuo-ym")];
+    const first = document.querySelector(".shuo-item");
+    return {
+      cols: getComputedStyle(first).gridTemplateColumns.split(" ").filter(Boolean),
+      woundWrap: yms.some((e) => e.getBoundingClientRect().height > 20),
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      itemCount: document.querySelectorAll(".shuo-item").length,
+    };
+  });
+  assert.equal(shuoMobile.overflow, false, "5.4 375px 下不应有横向溢出");
+  assert.equal(shuoMobile.woundWrap, false, "5.4 375px 下年月不得折行（实测 54px 栏会把「月」挤到第二行）");
+  assert.equal(shuoMobile.cols.length, 2, "5.3 移动端仍保持两列时间线");
+  console.log("PASS D-4 移动端（左栏 " + shuoMobile.cols[0] + " · 年月不折行 · 无横向溢出）");
+
+  /* 回归守卫：其他页面的 PageHeader 不得被 D-4 的改动影响 */
+  for (const [pathName, wantTitle] of [["/archives", "归档"], ["/search", "搜索"]]) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(server.base + pathName, { waitUntil: "networkidle" });
+    const other = await page.evaluate(() => ({
+      hasRow: !!document.querySelector(".page-title-row"),
+      hasEn: !!document.querySelector(".page-title-en"),
+      margin: document.querySelector(".page-title")
+        ? getComputedStyle(document.querySelector(".page-title")).margin
+        : null,
+      text: document.querySelector(".page-title")?.textContent?.trim(),
+    }));
+    assert.equal(other.hasRow, false, pathName + " 不该出现 .page-title-row（只有传了 en 的页面才包一层）");
+    assert.equal(other.hasEn, false, pathName + " 不该出现英文辅助标题");
+    assert.equal(other.margin, "0px 0px 32px", pathName + " 的标题下边距必须保持原值，实际 " + other.margin);
+    assert.equal(other.text, wantTitle, pathName + " 标题文字应保持 " + wantTitle);
+  }
+  console.log("PASS D-4 PageHeader 改动不影响其它页面（无 .page-title-row / 边距不变）");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());
@@ -1833,6 +1970,39 @@ function seedLongStringPosts(dataDir) {
  * 分页条只在 `total > PAGE_SIZE` 时渲染，不造数据就测不到
  * `.pager-current`（C-5 把它的内联样式改成了语义类）。
  */
+/**
+ * 造几条说说（D-4）。
+ *
+ * 说说页的空状态与时间线是**两套完全不同的 DOM**：没有数据时渲染
+ * `<EmptyState>`，有数据时渲染 `<ol class="shuo-list">`。不种数据的话
+ * 时间线相关断言会在空状态上直接抛"找不到元素"。
+ *
+ * 内容里混入长 URL 与长段落：需求 5.3 要求「长文本自然换行」，
+ * 而 `.shuo-content` 不在 `.prose` 里、拿不到 R1 的 overflow-wrap 修复，
+ * 曾经一个 180 字符的 URL 就能把整页撑破（D-4 实测三个视口全溢出）。
+ */
+function seedShuoshuo(dataDir) {
+  const db = new Database(dataDir + "/blog.db");
+  db.pragma("journal_mode = WAL");
+  const ins = db.prepare(
+    "INSERT INTO posts (type, slug, title, content, status, published_at, created_at, updated_at) " +
+    "VALUES ('shuoshuo', ?, '', ?, 'published', ?, ?, ?)"
+  );
+  // 固定基准时间：断言要能预知"日"是两位数还是补零后的形态
+  const base = Date.parse("2026-10-29T10:20:00.000Z");
+  const rows = [
+    ["shuo-a", "一条普通的说说，用来验证时间线结构。"],
+    ["shuo-b", "带长链接的说说：https://example.com/" + "a".repeat(180)],
+    ["shuo-c", "> 引用一行\n\n引用之后的正文。"],
+    ["shuo-d", "短句。"],
+  ];
+  rows.forEach(([slug, content], i) => {
+    const at = new Date(base - i * 86400000).toISOString();
+    ins.run(slug, content, at, at, at);
+  });
+  db.close();
+}
+
 function seedPostsForPager(dataDir, n = 21) {
   const db = new Database(dataDir + "/blog.db");
   db.pragma("journal_mode = WAL");

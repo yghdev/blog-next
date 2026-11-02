@@ -1037,16 +1037,156 @@ a:hover { color: var(--link-hover); }
 .toc-list li a:hover { color: var(--text-p0); border-left-color: var(--border-strong); }
 .toc-list li.lv3 a { padding-left: 24px; font-size: .78rem; }
 
-/* ── 说说 ── */
+/* ══════════════════════════════════════════════════════════════
+   说说（D-4，2026-11-01）：轻量时间线
+   ──────────────────────────────────────────────────────────────
+   需求 5.3 的视觉要求逐条对应：
+     · 不使用大型卡片      -> 只有分割线，没有背景/边框容器
+     · 不使用明显的阴影    -> 无 box-shadow
+     · 保留细分割线        -> border-bottom: 1px var(--border)
+     · 正文舒适行高        -> line-height 1.8
+     · 长文本自然换行      -> 继承全局 overflow-wrap
+     · 图片控制宽度与圆角  -> .shuo-content img
+     · 不同类型内容不跳动  -> 左栏定宽（72px），图片按容器缩放
+
+   左栏宽度固定是关键：如果让它按内容自适应，日期位数变化（1 位日 vs
+   2 位日）会让右侧正文整体左右移动，"布局跳动"就出现了。
+   ══════════════════════════════════════════════════════════════ */
+
+.shuo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
 .shuo-item {
-  padding: 22px 0;
+  display: grid;
+  /* 左栏定宽 —— 正文起始线在所有条目上对齐，不随日期位数变化 */
+  grid-template-columns: 72px minmax(0, 1fr);
+  column-gap: 20px;
+  padding: 20px 0;
   border-bottom: 1px solid var(--border);
 }
 .shuo-item:first-child { padding-top: 0; }
 .shuo-item:last-child { border-bottom: none; }
-.shuo-content { color: var(--text-p1); font-size: .95rem; line-height: 1.8; }
-.shuo-content blockquote { border-left: 2px solid var(--border-strong); margin: 0 0 .6em; padding-left: 12px; color: var(--text-p2); }
-.shuo-date { font-size: .78rem; color: var(--text-p4); margin-top: 10px; }
+
+/* 日期栏：日号大字 + 年月小字，作为时间轴锚点 */
+.shuo-stamp {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 1px;
+  line-height: 1;
+}
+.shuo-day {
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 650;
+  line-height: 1.1;
+  color: var(--text-p0);
+  letter-spacing: -.01em;
+  /* 等宽数字：01 与 28 宽度一致，左栏不会忽宽忽窄 */
+  font-variant-numeric: tabular-nums;
+}
+.shuo-ym {
+  font-size: .68rem;
+  line-height: 1.5;
+  color: var(--text-p4);
+  letter-spacing: .01em;
+  font-variant-numeric: tabular-nums;
+  /* 不许折行：「2026年11月」在窄栏里会被断成「2026年11」+「月」，
+     看起来像排版事故。给足栏宽 + nowrap 双保险。 */
+  white-space: nowrap;
+}
+
+.shuo-body { min-width: 0; }
+
+/*
+ * 正文（需求 5.3「长文本自然换行」）。
+ *
+ * `overflow-wrap: anywhere` 是必须的：说说的正文比文章更随意，很容易
+ * 直接贴一条长链接（GitHub 地址、API 路径、没有空格的文件名）。
+ * 中文能在汉字间断行、英文和 URL 不能 —— 缺了这条，一个 180 字符的
+ * URL 就会把整页横向撑破（D-4 实测：1440/820/375 三个视口全部溢出）。
+ *
+ * R1 给 `.prose` 加过同类修复；说说不是 `.prose`，得单独加。
+ */
+.shuo-content {
+  color: var(--text-p1);
+  font-size: .95rem;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.shuo-content > :first-child { margin-top: 0; }
+.shuo-content > :last-child { margin-bottom: 0; }
+.shuo-content blockquote {
+  border-left: 2px solid var(--border-strong);
+  margin: 0 0 .6em;
+  padding-left: 12px;
+  color: var(--text-p2);
+}
+
+/*
+ * 说说里的图片（需求 5.3「可选的图片或附加内容」「需要控制最大宽度和
+ * 圆角」「不同类型的内容不能产生明显的布局跳动」）。
+ *
+ * `height: auto` + `display: block` 是防跳动的关键：inline 图片会在
+ * 基线处留出几像素空隙，长文里看不出来，逐条排列时会让行距忽大忽小。
+ */
+.shuo-content img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: .9em 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+/* 时分：比日期更弱，挂在正文末尾作为"这条是什么时候发的" */
+.shuo-time {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: .72rem;
+  color: var(--text-p4);
+  letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 页面标题旁的英文辅助标题（D-4，需求 5.2「在标题旁边加入英文辅助标题」）。
+ *
+ * `baseline` 对齐而不是居中：英文小字要与中文标题的**基线**齐平，
+ * 居中会让它看起来浮在半空。
+ */
+.page-title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.page-title-en {
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .14em;
+  color: var(--text-p4);
+  font-family: var(--font-sans);
+  /* 与中文标题同排时稍微下移，避免贴着基线显得拥挤 */
+  padding-bottom: 4px;
+}
+
+@media (max-width: 820px) {
+  /* 移动端把日期栏收窄，正文拿到更多宽度（需求 5.4「必须保证移动端显示正常」） */
+  .shuo-item {
+    /* 62px 而不是 54：实测「2026年11月」在 .64rem 下约 55px，
+       54px 会把「月」挤到第二行（截图确认过）。 */
+    grid-template-columns: 62px minmax(0, 1fr);
+    column-gap: 14px;
+    padding: 18px 0;
+  }
+  .shuo-day { font-size: 1.3rem; }
+  .shuo-ym { font-size: .64rem; }
+  .page-title-en { font-size: .66rem; letter-spacing: .1em; padding-bottom: 3px; }
+}
 
 /* ── 归档 ── */
 .archive-year {

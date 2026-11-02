@@ -20,15 +20,33 @@ import type { ReactNode } from "react";
 export function PageHeader({
   title,
   sub,
+  en,
 }: {
   /** 页面标题文字 */
   title: ReactNode;
   /** 可选副标题，渲染为 `.page-sub` */
   sub?: ReactNode;
+  /**
+   * 可选英文辅助标题（D-4，需求 5.2「在标题旁边加入英文辅助标题」）。
+   *
+   * 只在**传了**的时候才把标题包进 `.page-title-row` —— 不传时仍渲染
+   * 原样的裸 `<h1>`，避免为了一个新页面改掉其它 4 个页面的结构。
+   *
+   * 标成 `aria-hidden`：它是对中文标题的装饰性重复，读屏念一遍
+   * 「说说 MOMENTS / DAILY NOTES」只会干扰。
+   */
+  en?: string;
 }) {
   return (
     <header className="page-head">
-      <h1 className="page-title">{title}</h1>
+      {en ? (
+        <div className="page-title-row">
+          <h1 className="page-title">{title}</h1>
+          <span className="page-title-en" aria-hidden="true">{en}</span>
+        </div>
+      ) : (
+        <h1 className="page-title">{title}</h1>
+      )}
       {sub ? <p className="page-sub">{sub}</p> : null}
     </header>
   );
