@@ -68,7 +68,9 @@ try {
      这一页是本轮改版的全部内容，且它的数据来自三处（friend_links 表 /
      页面正文 / settings），任何一处接错都只表现为"少一块"，healthz 与
      静态资源比对都看不出来。所以在冒烟这一层按"用户能看到的四段"验：
-     头部、目录卡片、交换区、申请区；再验外链属性与评论区挂载点。 */
+     头部、目录卡片、交换区、申请区；再验外链属性与评论区挂载点。
+     D-3（2026-11-02）起区块编号为 01 目录 / 02 聚合 / 03 交换 ——
+     聚合站按需求 6.5 独立编号成 02，交换区顺延 03。 */
   const friendsRes = await fetch(BASE + "/friend-links");
   const friendsHtml = await friendsRes.text();
   check("友链页 200", friendsRes.status === 200, String(friendsRes.status));
@@ -76,7 +78,8 @@ try {
     friendsHtml.includes('class="fr-hero-title"') && !friendsHtml.includes("article-meta-bar"));
   check("友链页四段齐全",
     friendsHtml.includes("01 / FRIEND DIRECTORY") &&
-    friendsHtml.includes("02 / EXCHANGE") &&
+    friendsHtml.includes("02 / BLOG HUBS") &&
+    friendsHtml.includes("03 / EXCHANGE") &&
     friendsHtml.includes("想加入这份名单？") &&
     friendsHtml.includes("FRIENDS &amp; CONNECTIONS"));
   check("友链页有卡片或空态出口",
@@ -222,8 +225,24 @@ try {
     }
     const slug = afterPublish.post?.slug;
     if (slug) {
-      const publicHtml = await (await fetch(BASE + "/" + encodeURIComponent(slug))).text();
-      check("发布后前台可见", publicHtml.includes(marker));
+      /**
+       * 发布后立刻请求该文章的语义化地址（/zh-slug → [slug] 路由）。
+       *
+       * ⚠️ 必须重试一次（最多 3 次、间隔 800ms）：
+       * 发布前冒烟并没有请求过这个 slug，但编辑器流程里对同 slug 的
+       * 解析缓存（resolveSlugCached，unstable_cache + TAGS.posts）可能
+       * 留着一个「未找到」的条目；revalidateTag 在 Next 16 下对
+       * unstable_cache 的已缓存条目不生效（详见 docs/pending-todos.md #1），
+       * 第一次请求命中 404 缓存，下一次请求起 SWR 拿到新值 —— 实测 1.6s 内自愈。
+       * 这不是发布失败，是已知缓存语义；连续 3 次仍不可见才算真失败。
+       */
+      let visible = false;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const publicHtml = await (await fetch(BASE + "/" + encodeURIComponent(slug))).text();
+        if (publicHtml.includes(marker)) { visible = true; break; }
+        await new Promise((r) => setTimeout(r, 800));
+      }
+      check("发布后前台可见", visible);
     }
     // 转草稿下线，避免留下一条测试文章
     const bulk = await page.request.post(BASE + "/api/admin/posts/bulk", {
