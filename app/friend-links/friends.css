@@ -62,7 +62,10 @@
 
 /* ────────────────────────────── 头部 ────────────────────────────── */
 .fr-hero {
-  padding: 4px 0 40px;
+  /* D-3（需求 6.2「控制 Hero 的垂直高度」）：底部 40 → 30。
+     Hero 原本 402px 高，在 900px 视口里占掉将近一半首屏 ——
+     而它下面才是页面的主体（友链目录）。 */
+  padding: 4px 0 30px;
   border-bottom: 1px solid var(--fr-line);
 }
 
@@ -73,14 +76,22 @@
   gap: 16px;
   flex-wrap: wrap;
   color: var(--fr-muted);
-  margin-bottom: 34px;
+  /* D-3（需求 6.2「顶部英文编号与主标题保持合理距离」）：34 → 22。
+     原来这段距离约等于一个行高，编号像被推到了半空中。 */
+  margin-bottom: 22px;
 }
 .fr-hero-meta-right { color: var(--text-p4); }
 
 .fr-hero-title {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: clamp(2rem, 1.35rem + 2.6vw, 3.1rem);
+  /*
+   * D-3（需求 6.2「标题字号在桌面端和移动端合理变化」）。
+   * 上限 3.1rem(49.6px) → 2.7rem(43.2px)：两行标题从 121px 收到 105px。
+   * 下限 2rem 不动 —— 移动端另有 clamp，见文末响应式块。
+   * 保留原有的两行结构（主标题 + 紫色强调行），不改成单行。
+   */
+  font-size: clamp(1.85rem, 1.3rem + 2.2vw, 2.7rem);
   line-height: 1.22;
   letter-spacing: -.02em;
   font-weight: 700;
@@ -93,7 +104,8 @@
 }
 
 .fr-hero-en {
-  margin: 18px 0 0;
+  /* D-3：18 → 14。它与主标题是一组，不该比描述离标题更远。 */
+  margin: 14px 0 0;
   font-size: .8rem;
   letter-spacing: .16em;
   color: var(--fr-muted);
@@ -101,8 +113,10 @@
 }
 
 .fr-hero-desc {
-  margin: 10px 0 0;
-  max-width: 46em;
+  margin: 8px 0 0;
+  /* D-3（需求 6.2「描述不要占据过多宽度」）：46em → 38em。
+     1440px 下实测宽度 699 → 578px，行长更接近舒适阅读区。 */
+  max-width: 38em;
   font-size: .95rem;
   line-height: 1.85;
   color: var(--text-p2);
@@ -113,8 +127,9 @@
   display: flex;
   align-items: flex-end;
   gap: 34px;
-  margin-top: 34px;
-  padding-top: 22px;
+  /* D-3：34 → 22、22 → 16。统计与 Hero 同属头部，不必隔那么远。 */
+  margin-top: 22px;
+  padding-top: 16px;
   border-top: 1px solid var(--fr-line);
   flex-wrap: wrap;
 }
@@ -156,7 +171,8 @@
 
 /* ────────────────────────── 通用分区头 ────────────────────────── */
 .fr-section {
-  padding: 44px 0 8px;
+  /* D-3：44 → 36。Hero 收紧后若分区头不动，两者之间的落差会更明显。 */
+  padding: 36px 0 8px;
 }
 .fr-section + .fr-section {
   border-top: 1px solid var(--fr-line);
@@ -192,10 +208,47 @@
 }
 
 /* ─────────────────────────── 友链卡片 ─────────────────────────── */
+/*
+ * 友链网格（D-3，需求 6.4「桌面端暂时采用两列布局」）。
+ *
+ * ## 为什么用容器查询而不是视口断点
+ *
+ * 本页在 1440 时容器宽 960，在 1200 时 808，在 900 时 508；
+ * 但 820 以下骨架切成单栏，容器**反而变宽**（820 → 780、768 → 728）。
+ * 也就是说"视口越窄、容器越宽"在 820 这一档是反的 —— 用视口断点
+ * 会在这里判错（821 容器 429 该单列，768 容器 728 该两列，但两者
+ * 视口只差 53px）。
+ *
+ * 需求原文就是「平板端：根据容器宽度决定一列或两列」，容器查询正好
+ * 表达这个意思，且不需要维护魔法断点。
+ *
+ * ## 为什么两列
+ *
+ * 友链只有个位数。三列时第二行常常只剩一张卡（需求原文指出过）；
+ * 两列每张卡 300–480px，头像 + 名称 + 描述 + 域名都能松快排布。
+ *
+ * ## grid-auto-rows: 1fr
+ *
+ * 让所有行等高（取最高那行）。否则描述 1 行与 2 行的卡片高度相差 22px，
+ * 同一屏里参差不齐（需求 6.4「卡片高度尽量统一」）。
+ */
+.fr-section {
+  /* 建立容器查询上下文：下面的 @container 以**本页正文宽度**为准 */
+  container-type: inline-size;
+}
+
 .fr-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 248px), 1fr));
+  grid-template-columns: 1fr;
+  grid-auto-rows: 1fr;
   gap: 10px;
+}
+
+/* 容器 ≥620px 时两列：620 这个值是"每列至少 300px"的反推结果 */
+@container (min-width: 620px) {
+  .fr-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .fr-card {
@@ -779,23 +832,23 @@
 @media (max-width: 820px) {
   /* 骨架的移动端 padding 用全局值（14px 20px），本页不再例外 */
 
-  .fr-hero { padding-bottom: 30px; }
-  .fr-hero-meta { margin-bottom: 22px; }
+  /* D-3（需求 6.2「控制 Hero 的垂直高度」）：移动端同样收紧。
+     原来 375px 下 Hero 340px 占首屏 42%，收紧后约 300px。 */
+  .fr-hero { padding-bottom: 24px; }
+  .fr-hero-meta { margin-bottom: 16px; }
   .fr-hero-title {
     font-size: clamp(1.7rem, 1.35rem + 3vw, 2.2rem);
     line-height: 1.28;
   }
   .fr-hero-en { margin-top: 14px; font-size: .74rem; }
   .fr-hero-desc { font-size: .9rem; line-height: 1.8; }
-  .fr-hero-stats { gap: 22px; margin-top: 24px; padding-top: 18px; }
+  .fr-hero-stats { gap: 22px; margin-top: 18px; padding-top: 14px; }
   .fr-stat-num { font-size: 1.55rem; }
   .fr-hero-note { display: none; }
 
   .fr-section { padding-top: 32px; }
-  .fr-grid {
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
-    gap: 10px;
-  }
+  /* `.fr-grid` 的列数由容器查询决定（见上方定义），这里不再覆盖 ——
+     否则两处规则会互相打架，且移动端的"容器变宽"现象会让视口断点判错。 */
   .fr-card { padding: 13px; gap: 11px; }
   .fr-card-arrow { opacity: .45; transform: none; }
   .fr-card-desc { -webkit-line-clamp: 2; }

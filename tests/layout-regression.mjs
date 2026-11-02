@@ -1639,6 +1639,117 @@ try {
   assert.equal(aboutMobile.tocVisible, false, "375px 下右栏目录应隐藏（需求 7.7「移动端根据空间决定」）");
   console.log("PASS D-2 移动端无溢出且目录隐藏");
 
+  /* ── 断言 45（D-3）：友链页 Hero 收紧 + 桌面两列 + 卡片等高 ── */
+  /**
+   * 需求文档第六章。6.1 明确「只进行局部优化，不允许推翻重做」，
+   * 所以这里验的都是**可量化**的局部指标，不验整体重设计。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/friend-links", { waitUntil: "networkidle" });
+
+  const fl = await page.evaluate(() => {
+    const hero = document.querySelector(".fr-hero");
+    const grid = document.querySelector(".fr-grid");
+    const cards = [...document.querySelectorAll(".fr-grid a.fr-card")];
+    const heights = cards.map((c) => Math.round(c.getBoundingClientRect().height));
+    const cols = grid
+      ? getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length
+      : 0;
+    return {
+      heroHeight: hero ? Math.round(hero.getBoundingClientRect().height) : null,
+      titleSize: parseFloat(getComputedStyle(document.querySelector(".fr-hero-title")).fontSize),
+      descWidth: Math.round(document.querySelector(".fr-hero-desc").getBoundingClientRect().width),
+      gridWidth: grid ? Math.round(grid.getBoundingClientRect().width) : 0,
+      cols,
+      cardCount: cards.length,
+      heights,
+      heightsEqual: new Set(heights).size === 1,
+      hubTitle: document.querySelector(".fr-hubs-title")?.textContent?.trim(),
+      hubRows: document.querySelectorAll(".fr-hub-list .fr-hub").length,
+      sectionIndexes: [
+        ...document.querySelectorAll(".fr-section-index, .fr-hubs-title, .fr-apply-index"),
+      ].map((e) => e.textContent.trim()),
+      statNums: [...document.querySelectorAll(".fr-stat-num")].map((e) => e.textContent.trim()),
+    };
+  });
+
+  /* 6.2 Hero 高度：改前 402px，收紧后应明显低于它 */
+  assert.ok(
+    fl.heroHeight !== null && fl.heroHeight <= 365,
+    "6.2 Hero 高度应 ≤365px（改前 402），实际 " + fl.heroHeight
+  );
+  /* 6.2 标题字号：桌面端上限从 3.1rem 收到 2.7rem = 43.2px */
+  assert.ok(
+    fl.titleSize <= 44,
+    "6.2 主标题桌面字号应 ≤44px（改前 49.6），实际 " + fl.titleSize
+  );
+  /* 6.2 描述宽度：「不要占据过多宽度」，38em 上限 */
+  assert.ok(
+    fl.descWidth <= 600,
+    "6.2 描述宽度应 ≤600px（改前 699），实际 " + fl.descWidth
+  );
+  console.log(
+    "PASS D-3 Hero 收紧 " + fl.heroHeight + "px（改前 402）· 标题 " + fl.titleSize +
+    "px（改前 49.6）· 描述 " + fl.descWidth + "px（改前 699）"
+  );
+
+  /* 6.4 桌面端两列（需求原文：三列时第二行只剩一张卡） */
+  assert.equal(fl.cols, 2, "6.4 桌面端应为 2 列（改前 3 列），实际 " + fl.cols + " 列（容器宽 " + fl.gridWidth + "）");
+  assert.ok(fl.cardCount >= 4, "6.4 应有足够卡片可验证布局，实际 " + fl.cardCount);
+  console.log("PASS D-3 桌面端 " + fl.cols + " 列（容器 " + fl.gridWidth + "px，" + fl.cardCount + " 张卡）");
+
+  /* 6.4 卡片高度统一 */
+  assert.equal(
+    fl.heightsEqual,
+    true,
+    "6.4 卡片高度应统一，实际各种高度：" + JSON.stringify([...new Set(fl.heights)])
+  );
+  console.log("PASS D-3 卡片等高（" + fl.heights[0] + "px × " + fl.cardCount + "）");
+
+  /* 6.5 聚合站独立成区、编号 02、数量动态 */
+  assert.equal(fl.hubTitle, "02 / BLOG HUBS", "6.5 聚合站区块应编号为 02 / BLOG HUBS，实际 " + JSON.stringify(fl.hubTitle));
+  assert.ok(fl.hubRows >= 1, "6.5 聚合站列表应至少 1 条（动态获取），实际 " + fl.hubRows);
+  console.log("PASS D-3 聚合站独立成区（" + fl.hubTitle + " · " + fl.hubRows + " 条）");
+
+  /* 区块编号必须连续且不重复（我第一版把 hubs 编成 02 与交换友链撞号了） */
+  const nums = fl.sectionIndexes.map((t) => (t.match(/^(\d{2})/) || [])[1]).filter(Boolean);
+  assert.deepEqual(
+    nums,
+    [...new Set(nums)],
+    "区块编号不得重复，实际：" + JSON.stringify(fl.sectionIndexes)
+  );
+  assert.deepEqual(nums, ["01", "02", "03"], "区块编号应从 01 连续编号，实际：" + JSON.stringify(nums));
+  console.log("PASS D-3 区块编号连续不撞号（" + fl.sectionIndexes.join(" · ") + "）");
+
+  /* 6.3 统计必须动态（数字来自 friends.length / hubs.length） */
+  const friendsCount = await page.evaluate(() => document.querySelectorAll(".fr-grid a.fr-card").length);
+  assert.equal(
+    fl.statNums[0],
+    String(friendsCount).padStart(2, "0"),
+    "6.3 友链数量应为实际卡片数（补零两位），实际 " + fl.statNums[0] + " vs " + friendsCount
+  );
+  console.log("PASS D-3 统计动态（朋友 " + fl.statNums[0] + " / 聚合 " + (fl.statNums[1] || "-") + "）");
+
+  /* 6.4 移动端单列 + 无横向滚动 */
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(server.base + "/friend-links", { waitUntil: "networkidle" });
+  const flMobile = await page.evaluate(() => {
+    const grid = document.querySelector(".fr-grid");
+    const cards = [...document.querySelectorAll(".fr-grid a.fr-card")];
+    return {
+      cols: getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length,
+      cardW: Math.round(cards[0].getBoundingClientRect().width),
+      gridW: Math.round(grid.getBoundingClientRect().width),
+      overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      heightsEqual: new Set(cards.map((c) => Math.round(c.getBoundingClientRect().height))).size === 1,
+    };
+  });
+  assert.equal(flMobile.cols, 1, "6.4 移动端应为单列，实际 " + flMobile.cols);
+  assert.equal(flMobile.overflow, false, "6.4 移动端不应出现横向滚动");
+  assert.equal(flMobile.cardW, flMobile.gridW, "6.4 移动端卡片应占满内容区（" + flMobile.cardW + " vs " + flMobile.gridW + "）");
+  assert.equal(flMobile.heightsEqual, true, "6.4 移动端卡片也应等高");
+  console.log("PASS D-3 移动端单列满宽（" + flMobile.cardW + "px）且无横向滚动");
+
   console.log("\nAll A-4 layout checks passed.");
 } catch (e) {
   if (server?.logs) console.error(server.logs());

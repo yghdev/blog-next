@@ -198,9 +198,15 @@ export default async function FriendLinksPage() {
 
               {hubs.length > 0 ? (
                 <div className="fr-hubs">
+                  {/*
+                    需求 6.5 建议这里的编号与上面的「01 / FRIEND DIRECTORY」
+                    统一成二级序号（原为「AGGREGATORS / 聚合」）。
+                    编号让读者一眼看出"聚合站是目录之后的第二块"，
+                    而不是一个孤立的附加框。
+                  */}
                   <div className="fr-hubs-head">
-                    <span className="fr-hubs-title fr-mono">AGGREGATORS / 聚合</span>
-                    <span className="fr-hubs-hint">友链接力与博客聚合入口</span>
+                    <span className="fr-hubs-title fr-mono">02 / BLOG HUBS</span>
+                    <span className="fr-hubs-hint">聚合 / 友链接力</span>
                   </div>
                   <ul className="fr-hub-list">
                     {hubs.map((l) => (
@@ -229,11 +235,16 @@ export default async function FriendLinksPage() {
               ) : null}
             </section>
 
-            {/* ── 02 / 交换友链 ─────────────────────────────── */}
+            {/* ── 03 / 交换友链 ─────────────────────────────── */}
+            {/*
+              编号顺延为 03：D-3 把上方的聚合站区块编成了 02 / BLOG HUBS
+              （需求 6.5），这一块原来是 02，会与它撞号。
+              页面顺序仍是：01 目录 → 02 聚合 → 03 交换 → APPLY 申请。
+            */}
             <section className="fr-section" aria-labelledby="fr-exchange-title">
               <div className="fr-section-head">
                 <h2 id="fr-exchange-title" className="fr-section-heading">
-                  <span className="fr-section-index fr-mono">02 / EXCHANGE</span>
+                  <span className="fr-section-index fr-mono">03 / EXCHANGE</span>
                   <span className="fr-section-cn" aria-hidden="true">交换友链</span>
                   <span className="fr-sr-only">交换友链</span>
                 </h2>

@@ -55,8 +55,37 @@ try {
   assert.match(first.text, /互联网的另一端，/, "主标题缺失");
   assert.match(first.text, /也有有趣的人。/, "主标题第二行缺失");
   assert.match(first.text, /FRIENDS &amp; CONNECTIONS|FRIENDS & CONNECTIONS/, "英文辅助标题缺失");
+  /**
+   * 区块编号（D-3 起为三段式）。
+   *
+   * 原来只有两段：`01 / FRIEND DIRECTORY` + `02 / EXCHANGE`。
+   * D-3 按需求 6.5 把聚合站独立编号成 `02 / BLOG HUBS`，交换区顺延为
+   * `03 / EXCHANGE` —— 所以这里**从两条松散的 match 改成断言完整序列**：
+   * 不仅三个编号都在，还要求它们按页面顺序出现且不撞号。
+   */
+  const sectionIdx = [...first.text.matchAll(/(\d{2}) \/ (?:FRIEND DIRECTORY|BLOG HUBS|EXCHANGE)/g)]
+    .map((m) => m[1]);
+  /*
+   * 注意：HTML 里这些文案会出现**两遍** —— 一遍是可读的 HTML，
+   * 一遍是 Next 内嵌的 RSC payload（客户端导航用的序列化数据）。
+   * 所以先按"相邻去重"压掉重复，再断言顺序。
+   */
+  const WANT = ["01", "02", "03"];
+  /* 第一遍（可读 HTML）里的编号必须是 01 → 02 → 03 */
+  const firstPass = sectionIdx.slice(0, WANT.length);
+  assert.deepEqual(
+    firstPass,
+    WANT,
+    "区块编号应为 01 目录 → 02 聚合 → 03 交换，实际：" + JSON.stringify(sectionIdx)
+  );
+  /* 若存在第二遍（RSC payload），它必须与第一遍完全一致 */
+  const rest = sectionIdx.slice(WANT.length);
+  if (rest.length > 0) {
+    assert.deepEqual(rest, WANT, "RSC payload 里的编号应与 HTML 一致，实际：" + JSON.stringify(rest));
+  }
   assert.match(first.text, /01 \/ FRIEND DIRECTORY/, "目录编号缺失");
-  assert.match(first.text, /02 \/ EXCHANGE/, "交换区编号缺失");
+  assert.match(first.text, /02 \/ BLOG HUBS/, "聚合站编号缺失");
+  assert.match(first.text, /03 \/ EXCHANGE/, "交换区编号缺失");
   assert.match(first.text, /让我们也成为彼此的链接。/, "交换区主标题缺失");
   assert.match(first.text, /想加入这份名单？/, "申请区标题缺失");
   assert.match(first.text, /感谢每一位愿意分享自己小世界的人。/, "页面致谢文案缺失");
