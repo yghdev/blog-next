@@ -30,6 +30,23 @@
   --accent-soft: rgba(217,119,87,.10);
   --bg-warm: #faf9f7;
   --bg-tint: rgba(47,122,107,.035);
+  /*
+   * 导航选中态的填充色（C-10）。
+   *
+   * 选中态只用**填充**表达：不用红点（会把内容挤偏）、不用描边 + 阴影
+   * （像张浮起来的卡片）、更不做位移。填充比 hover 的 --bg-subtle 多一点
+   * 主色，才能一眼分出"当前页"和"鼠标正停在这"。
+   */
+  --nav-active-bg: rgba(47,122,107,.085);
+  /*
+   * 侧栏悬浮按钮组（2026-11-06）：半透明深灰玻璃。
+   * 浅色页面上深灰胶囊对比清楚；暗色下再压暗一点，靠描边与阴影定形。
+   */
+  --dock-bg: rgba(32, 32, 32, .55);
+  --dock-fg: rgba(255, 255, 255, .96);
+  --dock-border: rgba(255, 255, 255, .18);
+  --dock-line: rgba(255, 255, 255, .18);
+  --dock-shadow: 0 8px 24px rgba(0, 0, 0, .22), 0 1px 2px rgba(0, 0, 0, .14);
   --cat-1: #2f7a6b;  --cat-1-bg: rgba(47,122,107,.10);
   --cat-2: #6b7fa3;  --cat-2-bg: rgba(107,127,163,.10);
   --cat-3: #a3766b;  --cat-3-bg: rgba(163,118,107,.10);
@@ -41,9 +58,20 @@
   --card-bg: #fcfcfb;
   --radius: 24px;
   --fs: 16px;
-  /* 两栏 sticky 的统一基线。原先 .sidebar 40px / .toc-col 48px 各自为政，
-     滚动时右栏比左栏低 8px，视觉上明显没对齐。 */
-  --sticky-top: 40px;
+  /*
+   * 左栏导航 sticky 的基线（C-10 由 40 改 48；2026-11-06 起右栏已改为随正文滚动）。
+   *
+   * 这个值**必须等于 `.site-shell` 的 padding-top**。它原来是 40，比骨架
+   * 上内边距 48 少 8px —— 于是页面刚往下滚的那 8px 里，左栏还在文档流里
+   * 跟着内容一起上移，滚到第 8px 才被"钉"住。实测（1440×900）：
+   *
+   *   scrollY 0 → 48px   1px → 47px   …   8px → 40px   9px → 40px（钉住）
+   *
+   * 用户看到的就是「开始滚的一瞬间左栏跟着上去一小下，然后突然卡住」，
+   * 也就是反馈里的"抖动了一下"。把基线对齐到 48 之后，第 0px 就已经在
+   * 钉住的位置上，位移量为零。
+   */
+  --sticky-top: 48px;
 
   /*
    * ── 组件刻度（C-7）──
@@ -161,6 +189,12 @@
   --dark-accent: #e08968;
   --dark-accent-soft: rgba(224,137,104,.14);
   --dark-bg-tint: rgba(95,191,168,.06);
+  --dark-nav-active-bg: rgba(95,191,168,.12);
+  --dark-dock-bg: rgba(42, 42, 42, .62);
+  --dark-dock-fg: rgba(255, 255, 255, .94);
+  --dark-dock-border: rgba(255, 255, 255, .14);
+  --dark-dock-line: rgba(255, 255, 255, .14);
+  --dark-dock-shadow: 0 8px 24px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
   --dark-cat-1: #5fbfa8;
   --dark-cat-1-bg: rgba(95,191,168,.13);
   --dark-cat-2: #8fa3c9;
@@ -216,6 +250,12 @@
     --accent: var(--dark-accent);
     --accent-soft: var(--dark-accent-soft);
     --bg-tint: var(--dark-bg-tint);
+    --nav-active-bg: var(--dark-nav-active-bg);
+    --dock-bg: var(--dark-dock-bg);
+    --dock-fg: var(--dark-dock-fg);
+    --dock-border: var(--dark-dock-border);
+    --dock-line: var(--dark-dock-line);
+    --dock-shadow: var(--dark-dock-shadow);
     --cat-1: var(--dark-cat-1);
     --cat-1-bg: var(--dark-cat-1-bg);
     --cat-2: var(--dark-cat-2);
@@ -269,6 +309,12 @@
     --accent: var(--dark-accent);
     --accent-soft: var(--dark-accent-soft);
     --bg-tint: var(--dark-bg-tint);
+    --nav-active-bg: var(--dark-nav-active-bg);
+    --dock-bg: var(--dark-dock-bg);
+    --dock-fg: var(--dark-dock-fg);
+    --dock-border: var(--dark-dock-border);
+    --dock-line: var(--dark-dock-line);
+    --dock-shadow: var(--dark-dock-shadow);
     --cat-1: var(--dark-cat-1);
     --cat-1-bg: var(--dark-cat-1-bg);
     --cat-2: var(--dark-cat-2);
@@ -381,22 +427,22 @@ a:hover { color: var(--link-hover); }
 
 .site-shell--wide {
   /*
-   * 宽版页：容器**占满视口**，只靠 `.content` 的 max-width 限正文。
+   * 宽版页 = 左导航 + 更宽的正文（没有右栏）。**只改列数，不改容器几何**。
    *
-   * 这里曾经写成 `max-width: var(--w-shell-read)`(1352)，于是 1440 视口下
-   * 容器被收窄并居中 —— 左右各留 44px，左栏落到 76px，而首页（三栏，
-   * 容器占满）是 32px。两个页面并排就是没对齐，且 1391 以下因为容器
-   * 已经不收，反而对齐了（所以只在 ≥1392 暴露）。
+   * 演进过程（两次都踩在同一个坑上）：
+   *   1. 最初写成 `max-width: var(--w-shell-read)`(1352)：1440 视口下容器
+   *      被收窄并居中，左栏落到 76px，而首页是三栏、容器占满 → 左栏 32px，
+   *      两个页面并排就错位（≥1392 才暴露）；
+   *   2. 修法是改成 `max-width: none` + `justify-content: start`，1440 下
+   *      确实对齐了 —— 但视口 > 1552（--w-shell）时**标准页的容器会居中**
+   *      （左右各留 (vw-1552)/2），宽版页仍贴左，于是点「友链」左栏直接
+   *      横跳（实测 1920 视口：标准页 216px / 宽版页 32px，差 184px）。
    *
-   * 改成容器占满、正文 `max-width: var(--w-read)` 之后：
-   *   左栏恒在 32px（与所有页面一致）；
-   *   正文 = min(960, vw - 64 - 288 - 40)，与 §10.3 的宽版页公式一致；
-   *   宽屏（>1352）时正文右侧自然留白 —— 那是 960 上限的必然结果，
-   *   不是布局错误。
+   * 现在：容器宽度与居中完全继承 `.site-shell`（max-width: --w-shell +
+   * margin: 0 auto），宽版页只覆盖列数。这样 32–2560 任意宽度下，左栏
+   * 的位置在所有页面都是同一个值；正文仍由 `.content` 的 --w-read(960) 限宽。
    */
   grid-template-columns: var(--w-side) minmax(0, 1fr);
-  max-width: none;
-  justify-content: start;
 }
 
 .site-shell--wide .content {
@@ -405,20 +451,65 @@ a:hover { color: var(--link-hover); }
 }
 
 .sidebar {
-  position: sticky;
+  /*
+   * 左栏 = **固定**（2026-11-06 第三次调整）。
+   *
+   * 演进：先是 sticky（滚到底会在页尾释放一次），后来为了让三个图标贴在
+   * 视口底部把栏高拉到 820px —— 但 sticky 的释放点 = 行底 − stickyTop −
+   * 自身高度，栏越高释放得越早（实测页尾前 ~150px 就会整体上滑，
+   * 用户看到"菜单栏又动了一下"）。只要栏高接近视口高，sticky 就必然在
+   * 页尾释放，这是几何上的死结，所以改成脱离文档流的固定定位。
+   *
+   * 位置：水平方向与 `.site-shell` 的居中规则用同一个公式
+   *   shellLeft = max(0, (clientWidth − --w-shell) / 2) + padding-left(32px)
+   * 固定定位的百分比基准正是 clientWidth（不含滚动条，已实测 15px 滚动条下
+   * 仍与骨架逐像素一致），所以左栏在所有页面、所有宽度下都停在同一列。
+   *
+   * 高度铺到视口底（减 sticky 基线），底栏用 margin-top:auto 落在离底 32px；
+   * 底色取页面色，避免滚到页脚时从图标下方的空隙里透出来。
+   */
+  position: fixed;
   top: var(--sticky-top);
+  left: max(32px, calc((100% - var(--w-shell)) / 2 + 32px));
+  width: var(--w-side);
+  height: calc(100dvh - var(--sticky-top));
+  padding: 8px 0 32px;
   display: flex;
   flex-direction: column;
-  align-self: start;
-  padding-top: 8px;
+  background: var(--bg);
+  z-index: var(--z-base);
+  /* 视口很矮（横屏平板）时内容超高：让左栏自己滚，别把图标顶出屏幕 */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-.nav {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 0 4px;   /* 收窄一点，与搜索框视觉对齐 */
+/*
+ * 左栏脱离文档流后，栅格里的两个流内子元素必须显式占位，
+ * 否则浏览器会把它们自动排到第 1、2 列（正文跑到左栏列里）。
+ */
+.content {
+  grid-column: 2;
+  min-width: 0;
 }
+
+.toc-col {
+  grid-column: 3;
+}
+
+/*
+ * 右栏（目录 / 统计 / 友链 / 标签云）跟随正文一起滚动，不再 sticky。
+ *
+ * 2026-11-06 用户要求「右侧栏改为随中间栏同步滚动」：它应当像正文的
+ * 一部分那样走，而不是自己钉在视口里等一个释放点。左栏导航保持 sticky。
+ * 因此原来的 RailSync / `--rail-sync-min` 同步机制一并移除。
+ */
+
+/*
+ * `.nav` 的基础规则原来写在这里（`padding: 0 4px`，为的是"与搜索框视觉对齐"，
+ * 而侧栏里的搜索框早已移除），与下方导航区的那条重复且值不同。
+ * C-10 起**只在导航区保留一条**（见「左侧栏导航（C-10 重做）」），
+ * 这里不再重复声明 —— 两处同权重声明谁生效取决于源码顺序，是事故温床。
+ */
 /*
  * 这里原本有三条 `.nav a` / `.nav a:hover` / `.nav-item.is-active` 之外的旧规则
  * （padding 6px 10px / radius 8px / font-size .925rem）。
@@ -435,7 +526,6 @@ a:hover { color: var(--link-hover); }
 /* `.sidebar-footer` 已删除（C-6）：零引用，侧栏底部现在用 .side-bottom */
 
 /* ── 主内容区 ── */
-.content { min-width: 0; }
 
 /*
  * 页面标题（C-8：由 <PageHeader> 统一渲染）。
@@ -490,105 +580,10 @@ a:hover { color: var(--link-hover); }
   border: 0;
 }
 
-/* ══════════════════════════════════════════════════════════════
-   关于页（D-2，2026-11-01）
-   ──────────────────────────────────────────────────────────────
-   需求文档第七章：轻量的个人介绍页。不做求职简历，也不做作品集。
-
-   结构：hero（头像 + 问候语 + 一句介绍 + 兴趣标签）→ 正文各节。
-   所有文案都来自 content/pages/about.md，这里只管排版。
-   ══════════════════════════════════════════════════════════════ */
-
 /*
- * 关于页的根容器。本身不设任何视觉属性 —— 它是给"整页级"样式留的挂钩
- * （比如将来想让关于页的正文行宽比文章更窄，就写 `.about .prose { max-width: … }`）。
- *
- * 但必须**存在一条规则**：tests/design-tokens.test.ts 有断言"静态 className
- * 必须有对应样式"，否则 JSX 里写了个不存在的类名会静默失效。
+ * `.about*` 系列样式已删除（2026-11-06）：关于页从"独立 hero 版式"改成
+ * 与归档 / 说说一致的静态页（PageHeader + .prose），不再需要专属排版。
  */
-.about { display: block; }
-
-.about-hero {
-  padding: 4px 0 26px;
-  margin-bottom: 26px;
-  border-bottom: 1px solid var(--border);
-}
-
-/* `.about-avatar` 已移除：hero 不再放头像（左栏品牌区已有同一个头像，
-   同屏两个重复）。 */
-
-.about-hero-text { flex: 1; min-width: 0; }
-
-/* 「你好，我是 flechazo。」—— 用衬线体，比正文大一档，但不做成巨型标题 */
-.about-greeting {
-  font-family: var(--font-serif);
-  font-size: 1.45rem;
-  font-weight: 650;
-  line-height: 1.4;
-  color: var(--text-p0);
-  margin: 0 0 6px;
-  letter-spacing: .01em;
-}
-
-/* 「一个喜欢折腾技术、探索新事物的学生。」—— 弱一档，作为补充说明 */
-.about-tagline {
-  font-size: .95rem;
-  line-height: 1.7;
-  color: var(--text-p3);
-  margin: 0 0 14px;
-}
-
-/*
- * 兴趣标签（需求 7.2「少量兴趣标签」/ 7.3「轻量标签」）。
- *
- * 来源是正文「我在关注什么」那节的四个短段落 —— 由 AboutView 提取，
- * 不在组件里写死。视觉上做成轻量 pill，不用大卡片。
- */
-.about-focus {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.about-focus-item {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 11px;
-  /* 胶囊圆角（999px）：C-7 没有定义 --radius-pill，因为当时零引用。
-     这里第一次真正需要它 —— 等下次有人加 token 时再提取。 */
-  border-radius: 999px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  color: var(--text-p2);
-  font-size: .78rem;
-  line-height: 1.5;
-  letter-spacing: .01em;
-}
-
-/*
- * 注：「我在关注什么」这一节**已从正文移除**（顶部做成标签了，避免重复），
- * 所以这里不需要针对它的样式。曾经写过一个 `.about-focus-section` 规则，
- * 但那个类名从未被使用 —— 属于死 CSS，已删除。
- */
-
-/* 正文各节的标题间距：关于页比文章更紧凑（内容密度高、段落短） */
-.about-body h2 { margin-top: 1.7em; }
-.about-body h2:first-child { margin-top: 0; }
-.about-body ul { margin-bottom: 1em; }
-
-/* 移动端：头像缩小、hero 改为纵向，避免挤压文字 */
-@media (max-width: 820px) {
-  .about-hero {
-    padding-bottom: 20px;
-    margin-bottom: 20px;
-  }
-  .about-greeting { font-size: 1.2rem; }
-  .about-tagline { font-size: .88rem; margin-bottom: 12px; }
-  .about-focus-item { font-size: .74rem; padding: 3px 9px; }
-}
 
 /* ── 404 页（C-5：原本全是内联样式）── */
 .notfound {
@@ -987,10 +982,12 @@ a:hover { color: var(--link-hover); }
 .article-nav-item:hover .article-nav-title { color: var(--text-p0); }
 
 /* ── 目录 ── */
-/* 外层列也要参与 sticky，否则父级高度不够，sticky 会失效跟着滚走 */
+/*
+ * 右栏与正文同一滚动上下文（2026-11-06 需求）：**不 sticky**。
+ * 之前这里写成 `position: sticky; top: var(--sticky-top)`，右栏会自己钉住，
+ * 与「随中间栏同步滚动」相反。现在让它留在正常流里，top 永远等于 .content top。
+ */
 .toc-col {
-  position: sticky;
-  top: var(--sticky-top);
   align-self: start;
   /*
    * 这里**故意不加** max-height / overflow-y（A-4）。
@@ -1517,7 +1514,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
     max-width: none;
     justify-content: start;
   }
-  /* 宽版页在两栏区保持自己的上限，不被上面的规则波及 */
+  /* 宽版页在两栏区同样是"容器占满、只有两列"（与标准页几何一致） */
   .site-shell--wide {
     max-width: none;
     justify-content: start;
@@ -1553,7 +1550,8 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
      已无必要；保留它反而会让以后想在小屏露出右栏时改不动。 */
   .toc-col { display: none; }
 
-  .content { max-width: 100%; }
+  /* 桌面用显式列号（左栏 fixed 后必须），单栏时恢复自动放置 */
+  .content { max-width: 100%; grid-column: auto; }
   /* `.article-title` 的移动端字号覆盖**移到文件末尾**了（C-6）：
      放在这里（媒体查询早于末尾的基础定义）会被后者的 2.05rem 压掉，
      导致移动端标题一直是 32.8px。详见文末的 820 断点块。 */
@@ -1590,23 +1588,118 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 }
 .mobile-brand img { border-radius: 50%; object-fit: cover; }
 
-.mobile-menu-btn {
+/*
+ * ── 侧栏悬浮按钮组（2026-11-06，第三次调整）──
+ *
+ * 一个竖排胶囊里放 N 枚 44×44 圆形按钮：
+ *   · 回到顶部（滚过 400px 才出现，在胶囊最上方，带一条细分割线）
+ *   · 打开菜单（≤820）
+ *   · 打开右侧栏（≤1391）
+ *
+ * 用户要求：这三件事必须在**同一处**，不要拆成两个浮钮；且回到顶部
+ * 在任意宽度都要有 —— 所以胶囊**所有宽度都渲染**，PC（≥1392）里只剩
+ * "回到顶部"那一枚（导航与右栏本来就在页面上，不需要另开入口）。
+ *
+ * 断点规则：
+ *   ≥821  → 隐藏"菜单"
+ *   ≥1392 → 隐藏"右侧栏"和分割线；未滚动时整组淡出（此时胶囊里没有任何按钮）
+ *
+ * 位置：右下角（右 12px、底 24px + 安全区），所有视口一致。
+ * 视觉：半透明深灰玻璃、完整胶囊圆角、1px 描边 + 阴影。
+ * 层级用 --z-topbar：正文之上、抽屉（--z-drawer）之下；任一抽屉打开时整组淡出。
+ */
+.mobile-dock {
+  position: fixed;
+  /*
+   * 固定在**右下角**（2026-11-06 第三次微调）：右 12px、底 24px + 安全区，
+   * 所有视口同一位置。之前是 top:50% 垂直居中，手机上会飘在屏幕中间偏上、
+   * 挡住正文；右下角既是拇指区，也和常见的"回到顶部"位置一致。
+   * 胶囊底边固定，新增按钮（回到顶部）向上生长，位置不跳。
+   */
+  right: 12px;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  z-index: var(--z-topbar);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  /* 完整胶囊：竖排时首尾都是半圆 */
+  border-radius: 999px;
+  background: var(--dock-bg);
+  color: var(--dock-fg);
+  border: 1px solid var(--dock-border);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  backdrop-filter: saturate(180%) blur(16px);
+  box-shadow: var(--dock-shadow);
+  transition: opacity .16s var(--ease);
+}
+/* 每个图标各自一个 44×44 的圆形热区 */
+.mobile-dock-btn {
   width: var(--tap);
   height: var(--tap);
   display: grid;
   place-content: center;
-  gap: 4px;
-  border: none;
-  background: none;
-  cursor: pointer;
   padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color .16s var(--ease), transform .12s var(--ease);
 }
-.mobile-menu-btn span {
+.mobile-dock-btn:hover { background: rgba(255, 255, 255, .12); }
+.mobile-dock-btn:active { background: rgba(255, 255, 255, .2); transform: scale(.94); }
+.mobile-dock-btn svg { display: block; }
+/* 「回到顶部」与下面动作之间的细分割线 */
+.mobile-dock-sep {
+  width: 20px;
+  height: 1px;
+  background: var(--dock-line);
+}
+/* 任一抽屉打开时把悬浮组藏起来（遮罩半透明，留着会看到"变暗但仍像可点"） */
+body:has(.mobile-drawer-mask) .mobile-dock,
+body:has(.mobile-sidebar-mask) .mobile-dock {
+  opacity: 0;
+  pointer-events: none;
+}
+/* 平板以上：导航已经在左栏里 */
+@media (min-width: 821px) {
+  .mobile-dock > .mobile-dock-btn[data-dock="menu"] { display: none; }
+}
+/* PC：右栏已在页面上，胶囊里只剩"回到顶部"；没滚动时整组不出现 */
+@media (min-width: 1392px) {
+  .mobile-dock > .mobile-dock-btn[data-dock="sidebar"] { display: none; }
+  .mobile-dock-sep { display: none; }
+  .mobile-dock:not(.is-scrolled) { opacity: 0; pointer-events: none; }
+}
+
+/* ── 聚合站小图标（2026-11-06）──
+ * 站点自己的 /favicon.ico → 名称首字。固定 18×18，失败切换不产生 CLS。
+ * 尺寸与原来的 .fl-ico emoji 槽一致，右侧栏的行高不会变。 */
+.hub-avatar {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  color: var(--text-p3);
+}
+.hub-avatar img {
   display: block;
-  width: 19px;
-  height: 1.8px;
-  border-radius: 2px;
-  background: var(--text-p0);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hub-avatar-letter {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 /* ── 抽屉 ── */
@@ -1637,13 +1730,23 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   /* 100dvh：iOS 地址栏收放时不会把抽屉底部顶出屏幕 */
   height: 100dvh;
   background: var(--bg);
-  padding: 0 8px calc(24px + env(safe-area-inset-bottom, 0px));
-  overflow-y: auto;
-  /* 锁死滚动链：抽屉滑到底不再带着底层页面一起滚 */
+  padding: 0 8px;
+  /* 抽屉本身不滚（2026-11-06）：头部固定、内容区自己滚、底栏图标固定在底部。
+     之前整张抽屉 overflow-y:auto，友链一多，底栏会被推到很下面、要滚到底才看得到。 */
+  overflow: hidden;
+  /* 锁死滚动链：内容区滑到底不再带着底层页面一起滚 */
   overscroll-behavior: contain;
   animation: slideIn .22s cubic-bezier(.22,.61,.36,1);
   display: flex;
   flex-direction: column;
+}
+.mobile-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* 最后一条与底栏之间留一点呼吸，避免贴住分割线 */
+  padding-bottom: 8px;
 }
 .mobile-drawer-head {
   display: flex;
@@ -1674,21 +1777,25 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 }
 .mobile-drawer-item:active { background: var(--bg-subtle); }
 .mobile-drawer-item.active {
-  background: var(--bg-subtle);
+  /* C-10：与桌面左栏同一套选中语言 —— 用主色填充，不用描边/圆点 */
+  background: var(--nav-active-bg);
   color: var(--text-p0);
   font-weight: 600;
 }
 .mobile-drawer-item .mi { font-size: 1.1rem; width: 22px; text-align: center; }
 
 .mobile-drawer-foot {
-  margin-top: auto;
-  display: flex;
-  gap: 18px;
-  padding: 20px 14px 0;
+  /* 2026-11-06：与桌面左栏底栏同一组图标按钮、同样的三等分等间距；
+     固定在抽屉底部，底部留 18px + 安全区（不贴边） */
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  justify-items: center;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px calc(18px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border);
-  font-size: .82rem;
 }
-.mobile-drawer-foot a { color: var(--text-p3); }
 
 /* ── 手机抽屉里的聚合/友链 ── */
 .mobile-drawer-links {
@@ -1785,7 +1892,8 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   flex-direction: column;
   align-items: center;
   text-align: center;
-  margin-bottom: 30px;
+  /* 22 + 导航区 padding-top 18 = 40px，和品牌区自身的行距节奏一致 */
+  margin-bottom: 22px;
 }
 .brand-photo {
   width: 88px;
@@ -1810,96 +1918,154 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   line-height: 1.5;
 }
 
-/* ── 左侧栏导航（图标 + 文字，active 描边） ── */
-.nav { display: flex; flex-direction: column; gap: 2px; }
+/* ── 左侧栏导航（C-10 重做） ──
+ *
+ * 改版前的问题（都是实测看出来的，不是口味问题）：
+ *   1. 选中项靠「1px 描边 + 白底 + 阴影」强调，在一列扁平文字里像张浮起来
+ *      的卡片，和整体极简风格不搭；
+ *   2. 选中项末尾多一个 7px 红点，而导航行是 `justify-content: center` ——
+ *      多出来的那 19px（点 + gap）把图标和文字整体往左推了约 9.5px。
+ *      于是点一下别的页面，菜单文字会左右"跳"一下（反馈里的"向左浮偏移"）；
+ *   3. `.nav-txt` 写死 `width: 3.2em`，靠"恰好都是两个汉字"才没露馅 ——
+ *      换成长短不一的标签（比如「文章列表」）就塌了。
+ *
+ * 现在的做法：
+ *   · 文字**居中**（2026-11-06 用户要求）—— `.nav-item` 用 justify-content:
+ *     center，图标绝对定位挂在文字左侧，不参与居中计算，所以"文字中心 =
+ *     侧栏中心"与文本长度无关；
+ *   · 选中态只用填充色，不位移、不描边、不投影。填充值来自 --nav-active-bg
+ *     （主色 8.5%），与 hover 的 --bg-subtle 明确区分。
+ */
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+  padding-top: 18px;
+  /* 品牌区与菜单之间的细分隔线：让"个人名片"和"站点导航"成为两个层次 */
+  border-top: 1px solid var(--border);
+}
 .nav-item {
-  position: relative;
   display: flex;
   align-items: center;
+  /* 菜单文字居中（2026-11-06 用户要求）；图标绝对定位，不把文字挤偏 */
   justify-content: center;
-  gap: 12px;
-  padding: 13px 16px;
-  border-radius: 13px;
+  padding: 10px 12px;
+  border-radius: 10px;
   color: var(--text-p2);
-  font-size: .95rem;
-  border: 1px solid transparent;
-  transition: background .18s, color .18s, border-color .18s;
+  font-size: .92rem;
+  letter-spacing: .01em;
+  /* 只过渡 background/color：不涉及 transform，选中时不会有任何位移 */
+  transition: background-color .16s var(--ease), color .16s var(--ease);
+}
+/* 文字是唯一的流内子元素 → 文字中心 = 行中心；图标挂在它左边 10px 处 */
+.nav-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
 }
 .nav-ico {
-  font-size: 1rem;
-  width: 22px;
+  position: absolute;
+  right: 100%;
+  margin-right: 10px;
+  width: 20px;
+  font-size: .95rem;
+  line-height: 1;
   text-align: center;
   opacity: .55;
-  transition: opacity .18s;
   flex-shrink: 0;
+  transition: opacity .16s var(--ease);
 }
 .nav-txt {
-  width: 3.2em;
-  flex-shrink: 0;
-  text-align: left;
+  /* 文字取自然宽度并居中；整组（图标 + 文字）在行内居中 */
+  flex: 0 1 auto;
+  min-width: 0;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 .nav-item:hover { background: var(--bg-subtle); color: var(--text-p0); }
 .nav-item:hover .nav-ico { opacity: .9; }
+/* 选中态：只有填充色。规则写在 hover 之后，保证悬停到当前项时填充不被盖掉 */
 .nav-item.is-active {
+  background: var(--nav-active-bg);
   color: var(--text-p0);
   font-weight: 600;
-  border-color: var(--border-strong);
-  background: var(--bg);
-  box-shadow: 0 1px 3px rgba(0,0,0,.04);
 }
 .nav-item.is-active .nav-ico { opacity: 1; }
-.nav-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--accent); flex-shrink: 0;
+/*
+ * 键盘焦点（C-10 顺带补齐）。
+ *
+ * 全站此前没有任何 `:focus-visible` 规则，导航只能吃到浏览器默认焦点环 ——
+ * 在当前配色里是一圈系统蓝，和低饱和青绿不搭。这里只给左栏这几个可交互
+ * 元素换成主色焦点环；不动全局，避免波及正文链接与后台。
+ */
+.nav-item:focus-visible,
+.side-bottom a:focus-visible,
+.side-bottom .theme-toggle:focus-visible,
+.mobile-drawer-foot a:focus-visible,
+.mobile-drawer-foot .theme-toggle:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--link) 55%, transparent);
+  outline-offset: 2px;
 }
 
-/* ── 左栏底部的侧栏入口（平板 821~1200px 用；≤820px 左栏整体隐藏） ── */
-.side-sheet-entry {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 28px;
-  padding: 0 18px;
-  font-size: .8rem;
-  color: var(--text-p3);
+/* `.nav-dot` 已删除（C-10）：选中态不再用红点标注 —— 它既是唯一的暖色点缀
+   （和全站低饱和青绿不搭），也是文字左右位移的根源。 */
+
+/*
+ * `.side-sheet-entry` / `.side-sheet-btn` 已删除（2026-11-06）：
+ * 平板区（821–1391）右栏隐藏时，原来靠左栏底部一个"侧栏"按钮补入口。
+ * 现在统一改用右侧悬浮按钮组（`.mobile-dock`）—— 悬浮组在 ≤1391 可见，
+ * 821–1391 只显示"右侧栏"一枚（导航本来就在左栏）。
+ */
+
+/* ── 左栏底部：三个等间距的图标按钮（主题 / RSS / 后台） ──
+ *
+ * 2026-11-06 需求：主题切换、RSS、设置**放到底部等间距**，且**不用文字**、
+ * 统一用图标。做法是三等分栅格：每格 1fr、按钮在格内居中，三个按钮的中心
+ * 间距完全相等；不用 `space-between`（那会让两端贴边、中间空隙更大，
+ * 目测不等距），也不用固定 gap（三按钮 + 固定 gap 在窄栏里会被挤偏）。
+ *
+ * 三个按钮共用同一尺寸与同一套 hover：34×34、1px 边框、hover 时主色 +
+ * 淡青底 + 主色边框 —— 视觉上它们是同一组控件，而不是"一个按钮 + 两个链接"。 */
+.side-bottom-wrap {
+  /* auto：把底栏推到底；padding-top 保证内容过高（auto 归零）时也不贴住导航 */
+  margin-top: auto;
+  padding-top: 26px;
 }
-.side-sheet-btn {
-  width: 30px;
-  height: 30px;
+.side-bottom {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  justify-items: center;
+  align-items: center;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--border);
+}
+/* 图标按钮：桌面左栏底栏与手机抽屉底栏共用同一套尺寸与反馈 */
+/* 只有图标本身：**不画外框**（2026-11-06 需求）。悬停/聚焦的反馈靠
+   一块淡青底的圆角区域表达，不再用 1px 边框把三个按钮圈成三个方块。 */
+.side-icon-btn {
+  width: 34px;
+  height: 34px;
   display: grid;
   place-content: center;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: none;
-  color: var(--text-p2);
-  cursor: pointer;
   padding: 0;
-  transition: color .15s, border-color .15s, background .15s;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text-p3);
+  cursor: pointer;
+  transition: color .16s var(--ease), background-color .16s var(--ease);
 }
-.side-sheet-btn:hover {
+.side-icon-btn:hover {
   color: var(--link);
-  border-color: color-mix(in oklab, var(--link) 30%, transparent);
   background: var(--bg-tint);
 }
-
-/* 桌面（>1200px）：右栏已经在显示，入口多余，隐藏 */
-/* 「侧栏」入口在 821–1391 可见（两栏区，右栏已隐藏、顶栏还没出现）；
-   1392 起三栏自带右栏，不需要这个入口。区间必须与上面的断点严格互补。 */
-@media (min-width: 1392px) {
-  .side-sheet-entry { display: none; }
-}
-
-/* ── 底部链接 ── */
-.side-bottom {
-  display: flex;
-  justify-content: center;   /* 居中 */
-  gap: 22px;
-  margin-top: 34px;
-  padding: 16px 18px;
-  font-size: .84rem;
-}
-.side-bottom a { color: var(--text-p3); transition: color .15s; }
-.side-bottom a:hover { color: var(--text-p0); }
+/* 主题按钮与它们同组：同样去掉边框（.theme-toggle 基础样式里那圈透明边） */
+.side-bottom .theme-toggle,
+.mobile-drawer-foot .theme-toggle { border: 0; }
+.side-bottom svg,
+.mobile-drawer-foot svg { display: block; }
 
 /* ── 文章页头部增强 ── */
 .article-header {
@@ -2014,8 +2180,6 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 }
 
 /* 触发按钮：与搜索按钮同尺寸，hover 态稍微加深，提示可点 */
-.mobile-sidebar-btn svg { display: block; }
-.mobile-sidebar-btn:active { opacity: .6; }
 
 /* ── 手机端搜索态顶部栏 ── */
 .mobile-searchbar { padding: 0 12px; }
@@ -2325,7 +2489,6 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   border-color: var(--border-strong);
   transform: translateY(-1px);
 }
-.fl-hub img { display: block; height: 18px; width: auto; border-radius: 3px; }
 .fl-hub .fl-name { font-size: .8rem; }
 
 /* ── 浏览量徽标 ── */
@@ -2376,13 +2539,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   border-radius: 10px;
 }
 
-/* 桌面左栏底部：与 RSS/设置同一行排版，居中 */
-.side-theme {
-  display: flex;
-  justify-content: center;
-  margin-top: 18px;
-  padding: 0 18px;
-}
+/* `.side-theme` 已删除（C-10）：主题按钮并进 .side-bottom 的一条底栏 */
 
 /* 暗色下按钮本身不加额外补偿：颜色全部走 token，已随 data-theme 切换 */
 

@@ -1,46 +1,66 @@
-import { notFound } from "next/navigation";
+import fs from "node:fs";
+import path from "node:path";
 import type { Metadata } from "next";
-import { getPageBySlugCached } from "@/lib/cached";
-import { AboutView } from "@/components/AboutView";
-import { articleMetadata } from "@/components/ArticleView";
+import { SiteShell } from "@/components/SiteShell";
+import { PageHeader } from "@/components/PageHeader";
+import { renderMarkdown } from "@/lib/markdown";
 
 export const dynamic = "force-dynamic";
 
+export const metadata: Metadata = { title: "关于" };
+
 /**
- * 关于页（D-2，2026-11-01）。
+ * 关于页（2026-11-06 改为**静态页**）。
  *
- * ## 为什么从 `app/[slug]` 独立出来
+ * ## 为什么不再从数据库取
  *
- * 需求文档 7.1–7.7 要求关于页有自己的视觉特色：顶部个人介绍（头像 +
- * 名字 + 一句介绍 + 兴趣标签）、关注方向、正在做的事、本站、联系。
- * 这些是**结构化的版面**，不是一篇普通 Markdown 能表达的。
+ * 之前它读 `posts` 表里 `type=page, slug=about` 的记录（D-2），于是：
+ *   · 全新安装 / 演示库没有这条记录时整页 404；
+ *   · 它是导航里唯一"内容存在数据库"的页面，和归档 / 说说 / 友链这类
+ *     静态页不是同一种东西，版式也因此分叉（hero vs 普通页面标题）。
  *
- * 但内容必须仍然来自 `content/pages/about.md`（D.4 红线：结构化区块的
- * 内容不允许写死在组件里）。所以：
+ * 现在与它们一致：**内容来自仓库里的 `content/pages/about.md`**（不查库），
+ * 版式走 `PageHeader + .prose` 的标准页面结构，右栏回到完整版
+ * （统计 / 聚合 / 友链 / 标签云），和归档、说说页完全同构。
  *
- *   - `about.md` 提供全部**文案**（含各节标题与列表）
- *   - `AboutView` 提供**版式**（把 md 渲染出的 HTML 放进带样式的容器，
- *     并把顶部的问候语与头像单独提出来做 hero）
+ * ## 文件怎么找
  *
- * ## 路由优先级
- *
- * Next 里静态路由优先于动态路由，所以 `/about` 会走这里，
- * `app/[slug]` 不再接管。旧的 `/about` 链接与搜索引擎索引不受影响
- * （URL 没变，只是渲染方式变了）。
- *
- * ## 与 ArticleView 的差异
- *
- * 不显示发布日期、阅读时长、浏览量 —— 关于页不是文章，那些元信息没有意义。
- * 保留右栏目录（需求 7.7）。
+ * 与 `lib/friend-links-page-source.ts` 同一套策略：standalone 产物的
+ * 运行目录是 `.next/standalone`，而 `content/` 在 dist 根，最多上溯 4 层。
+ * 打包脚本会把 `content/` 复制进 dist，所以线上也能读到。
  */
-export async function generateMetadata(): Promise<Metadata> {
-  const doc = await getPageBySlugCached("about");
-  if (!doc) return { title: "关于" };
-  return articleMetadata(doc);
+function readAboutMarkdown(): string {
+  const rel = path.join("content", "pages", "about.md");
+  let dir = process.cwd();
+  for (let i = 0; i < 4; i++) {
+    const candidate = path.join(dir, rel);
+    if (fs.existsSync(candidate)) {
+      try {
+        return fs.readFileSync(candidate, "utf8");
+      } catch {
+        return "";
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return "";
+}
+
+/** 去掉 front matter（title/date/slug 这些元数据在这个页面上用不到） */
+function stripFrontMatter(md: string): string {
+  const m = md.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n/);
+  return m ? md.slice(m[0].length) : md;
 }
 
 export default async function AboutPage() {
-  const doc = await getPageBySlugCached("about");
-  if (!doc) notFound();
-  return <AboutView doc={doc} />;
+  const { html } = renderMarkdown(stripFrontMatter(readAboutMarkdown()));
+
+  return (
+    <SiteShell variant="three-col">
+      <PageHeader title="关于" />
+      <div className="prose" dangerouslySetInnerHTML={{ __html: html }} />
+    </SiteShell>
+  );
 }

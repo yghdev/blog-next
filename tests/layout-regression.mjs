@@ -15,10 +15,11 @@
  *   - `overflow: hidden` 的容器：裁切但不可滚，不抢滚轮；
  *   - 隐藏元素（display:none / visibility:hidden / 0 尺寸）。
  *
- * ## 为什么要断言 sidebar 与 toc-col 的 top 相等
+ * ## 为什么要断言 sidebar 与 toc-col 的滚动关系
  *
- * 两栏都是 sticky，但原值一个 40px、一个 48px，滚动时右栏比左栏低 8px，
- * 视觉上"两栏没对齐"。统一到 `--sticky-top` 之后这个差值必须为 0。
+ * 2026-11-06 起：左栏导航 sticky（top 对齐 `--sticky-top`），右栏改为
+ * **随正文同步滚动**（`position: static`，top 恒等于 `.content` top）。
+ * 旧版两栏都 sticky、靠 RailSync 撑同高同步释放的做法已移除。
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -38,7 +39,6 @@ try {
   seedFriendLinks(server.dataDir, 18);
   // 造一篇带长目录的文章，让文章页的 .toc-list 也有机会超长
   const tocPostId = seedArticleWithToc(server.dataDir);
-  seedAboutPage(server.dataDir);
   seedSiteFooterSettings(server.dataDir);
   const longIds = seedLongStringPosts(server.dataDir);
   seedPostsForPager(server.dataDir);
@@ -123,24 +123,24 @@ try {
   );
   console.log("PASS A-4 页面统一滚动，右栏自身 scrollTop 保持 0");
 
-  /* ── 断言 3：.sidebar 与 .toc-col 的 sticky top 必须相等 ── */
+  /* ── 断言 3（2026-11-06 需求）：左栏 fixed，右栏跟随正文（不再 sticky） ── */
   for (const pathName of ["/", "/archives"]) {
     await page.goto(server.base + pathName, { waitUntil: "networkidle" });
     const tops = await page.evaluate(() => {
       const g = (sel) => {
         const el = document.querySelector(sel);
-        return el ? getComputedStyle(el).top : null;
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        return { position: cs.position, top: cs.top };
       };
       return { sidebar: g(".sidebar"), tocCol: g(".toc-col") };
     });
     assert.ok(tops.sidebar !== null && tops.tocCol !== null, pathName + " 两栏都应存在");
-    assert.equal(
-      tops.tocCol,
-      tops.sidebar,
-      pathName + " 的 .sidebar 与 .toc-col 的 sticky top 必须相等：" +
-        JSON.stringify(tops)
-    );
-    console.log("PASS A-4 " + pathName + " 两栏 sticky top 对齐（" + tops.sidebar + "）");
+    assert.equal(tops.sidebar.position, "fixed", pathName + " 左栏应为固定定位（fixed），实际 " + tops.sidebar.position);
+    assert.equal(tops.sidebar.top, "48px", pathName + " 左栏 top 应为 48px，实际 " + tops.sidebar.top);
+    assert.equal(tops.tocCol.position, "static", pathName + " 右栏应随正文滚动（position: static），实际 " + tops.tocCol.position);
+    assert.equal(tops.tocCol.top, "auto", pathName + " 右栏不应再设置 sticky top，实际 " + tops.tocCol.top);
+    console.log("PASS A-4 " + pathName + " 左栏 fixed（top=48px），右栏随正文（static）");
   }
 
   /* ── 断言 4：文章页目录超长时，只有 .toc-list 自己滚（且不把滚动链传给页面） ── */
@@ -225,11 +225,15 @@ try {
       (r.tocVisible ? "（右栏可见）" : "（右栏隐藏）"));
   }
 
-  /* ── 断言 6（B-7）：导航项恢复 .nav-item 的设计值 ── */
+  /* ── 断言 6（B-7+C-10）：导航项必须落在当前设计值上 ── */
   /**
-   * 旧版 `.nav a`（特异性 0,1,1）一直压着 `.nav-item`（0,1,0），
-   * 实测导航项渲染成 `6px 10px / 8px / .925rem`。
-   * 删掉 `.nav a` 三条规则后必须回到设计值，否则说明还有别的东西在压。
+   * 这条断言原本守的是 B-7：旧版 `.nav a`（特异性 0,1,1）压着 `.nav-item`
+   * （0,1,0），实测渲染成 `6px 10px / 8px / .925rem`；删掉旧规则后应回到
+   * 当时的设计值 `13px 16px / 13px / .95rem`。
+   *
+   * C-10 重做选中态时导航改为**文字居中**（图标绝对定位挂在文字左侧），
+   * 设计值因此变成 `10px 12px / 10px / .92rem`。断言的**意图不变**：
+   * 计算值必须等于设计值 —— 只要还有别的规则在压，这里就会红。
    */
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(server.base + "/", { waitUntil: "networkidle" });
@@ -246,11 +250,11 @@ try {
     };
   });
   assert.ok(navStyle, "侧栏应有 .nav-item");
-  assert.equal(navStyle.paddingTop, "13px", ".nav-item padding-top 应为 13px，实际 " + navStyle.paddingTop);
-  assert.equal(navStyle.paddingLeft, "16px", ".nav-item padding-left 应为 16px，实际 " + navStyle.paddingLeft);
-  assert.equal(navStyle.radius, "13px", ".nav-item border-radius 应为 13px，实际 " + navStyle.radius);
-  assert.equal(navStyle.fontSize, "15.2px", ".nav-item font-size 应为 .95rem = 15.2px，实际 " + navStyle.fontSize);
-  console.log("PASS B-7 .nav-item 恢复设计值（padding 13px 16px / radius 13px / 15.2px）");
+  assert.equal(navStyle.paddingTop, "10px", ".nav-item padding-top 应为 10px，实际 " + navStyle.paddingTop);
+  assert.equal(navStyle.paddingLeft, "12px", ".nav-item padding-left 应为 12px，实际 " + navStyle.paddingLeft);
+  assert.equal(navStyle.radius, "10px", ".nav-item border-radius 应为 10px，实际 " + navStyle.radius);
+  assert.equal(navStyle.fontSize, "14.72px", ".nav-item font-size 应为 .92rem = 14.72px，实际 " + navStyle.fontSize);
+  console.log("PASS B-7/C-10 .nav-item 落在设计值上（padding 10px 12px / radius 10px / 14.72px）");
 
   /* ── 断言 7（B-7）：每页有且只有一个导航项高亮，包括原来漏掉的 3 个 ── */
   /**
@@ -296,10 +300,215 @@ try {
     console.log("PASS B-7 " + pathName.padEnd(14) + " 高亮 " + want + " 项" + (want ? "（" + label + "）" : ""));
   }
 
+  /* ── 断言 7b（C-10）：选中态只用填充色 —— 无圆点、无位移、无线框、无投影 ── */
+  /**
+   * 用户反馈原话：「选中状态不要加红点标注，也不要向左浮偏移，也不要用线框
+   * 强调，直接用填充色表示」。这四条都能变成可测量的事实：
+   *
+   *   · 圆点：DOM 里不该再有 `.nav-dot`（它当初还在 `justify-content: center`
+   *     的行里多占了"7px + gap"的宽度，把图标和文字整体挤左约 9.5px ——
+   *     这就是"向左浮偏移"的真正来源，不是 CSS transform）
+   *   · 位移：选中项与未选中项的图标左边缘、文字左边缘必须完全重合
+   *   · 线框/投影：border-width 为 0、box-shadow 为 none
+   *   · 填充：背景不透明，且**不等于页面背景色**（改版前是 `background: var(--bg)`
+   *     白底 + 描边，远看就是没有填充）
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const navActive = await page.evaluate(() => {
+    const items = [...document.querySelectorAll(".sidebar .nav .nav-item")];
+    const active = items.find((e) => e.classList.contains("is-active"));
+    const other = items.find((e) => !e.classList.contains("is-active"));
+    if (!active || !other) return null;
+    const box = (el) => {
+      const ico = el.querySelector(".nav-ico").getBoundingClientRect();
+      const txt = el.querySelector(".nav-txt").getBoundingClientRect();
+      return { icoLeft: +ico.left.toFixed(2), txtLeft: +txt.left.toFixed(2) };
+    };
+    const cs = getComputedStyle(active);
+    return {
+      dots: document.querySelectorAll(".nav-dot").length,
+      bg: cs.backgroundColor,
+      shadow: cs.boxShadow,
+      borderWidths: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+      transform: cs.transform,
+      ariaCurrent: active.getAttribute("aria-current"),
+      pageBg: getComputedStyle(document.body).backgroundColor,
+      activeBox: box(active),
+      otherBox: box(other),
+    };
+  });
+  assert.ok(navActive, "侧栏应有选中项与未选中项各至少一个");
+  assert.equal(navActive.dots, 0, "选中态不应再用红点标注（.nav-dot 应已删除）");
+  assert.equal(navActive.transform, "none", "选中项不应有任何位移（transform 必须为 none）：" + navActive.transform);
+  assert.equal(navActive.shadow, "none", "选中项不应有投影：" + navActive.shadow);
+  assert.deepEqual(navActive.borderWidths, ["0px", "0px", "0px", "0px"],
+    "选中项不应有线框：" + JSON.stringify(navActive.borderWidths));
+  assert.notEqual(navActive.bg, "rgba(0, 0, 0, 0)", "选中项应有填充色，实际透明");
+  assert.notEqual(navActive.bg, navActive.pageBg,
+    "选中项填充不能等于页面背景色（否则等于没填充）：" + navActive.bg);
+  assert.equal(navActive.ariaCurrent, "page", "选中项应带 aria-current=page，读屏用户与视觉用户看到的是同一件事");
+  assert.ok(Math.abs(navActive.activeBox.icoLeft - navActive.otherBox.icoLeft) <= 0.5,
+    "选中项的图标不能比未选中项更靠左（" + navActive.activeBox.icoLeft + " vs " + navActive.otherBox.icoLeft + "）");
+  assert.ok(Math.abs(navActive.activeBox.txtLeft - navActive.otherBox.txtLeft) <= 0.5,
+    "选中项的文字不能比未选中项更靠左（" + navActive.activeBox.txtLeft + " vs " + navActive.otherBox.txtLeft + "）");
+  console.log("PASS C-10 选中态只有填充色（bg=" + navActive.bg + "，无圆点/位移/线框/投影，aria-current=page）");
+
+  /* ── 断言 7b-2（2026-11-06 需求）：菜单文字必须居中 ── */
+  /**
+   * 反馈原话「左侧菜单文字居中」—— 把"居中"变成可测量的东西：
+   * 每一项 `.nav-txt` 的水平中心都必须等于侧栏（`.sidebar`）的水平中心。
+   * 图标是绝对定位的装饰，不能参与居中计算；因此这里只量文字。
+   */
+  const navCentering = await page.evaluate(() => {
+    const side = document.querySelector(".sidebar").getBoundingClientRect();
+    const sideCenter = (side.left + side.right) / 2;
+    const items = [...document.querySelectorAll(".sidebar .nav-item")].map((el) => {
+      const txt = el.querySelector(".nav-txt").getBoundingClientRect();
+      return {
+        label: (el.textContent || "").trim(),
+        textCenter: +((txt.left + txt.right) / 2).toFixed(2),
+      };
+    });
+    return { sideCenter: +sideCenter.toFixed(2), items };
+  });
+  assert.ok(navCentering.items.length === 5, "侧栏应有 5 个导航项");
+  for (const it of navCentering.items) {
+    assert.ok(
+      Math.abs(it.textCenter - navCentering.sideCenter) <= 0.5,
+      "菜单文字应水平居中：「" + it.label + "」文字中心 " + it.textCenter +
+        " 与侧栏中心 " + navCentering.sideCenter + " 偏差 " +
+        Math.abs(it.textCenter - navCentering.sideCenter).toFixed(2) + "px"
+    );
+  }
+  console.log("PASS C-10 菜单文字居中（5 项文字中心均 = 侧栏中心 " + navCentering.sideCenter + "，偏差 ≤ 0.5px）");
+
+  /* ── 断言 7c（2026-11-06 需求）：左栏固定不动，右栏随正文同步滚动 ── */
+  /**
+   * 最终形态（第三次调整）：
+   *   · 左栏导航 `position: fixed` —— 整段滚动里 top 恒等于 --sticky-top，
+   *     滚到页脚也不会动。之前的 sticky 方案在"图标贴视口底部"把栏高撑到
+   *     约 820px 之后，必然在页尾释放一次（用户看到"菜单栏又上滑一段"），
+   *     这是几何死结，只能改成脱离文档流的固定定位；
+   *   · 右栏随正文同步滚动 —— 任意 scrollY 下 top 与 `.content` 一致。
+   * 左栏的水平位置另有一条断言（断言 9b：四模板 × 三档视口一致）。
+   */
+  for (const pathName of ["/", "/archives"]) {
+    await page.goto(server.base + pathName, { waitUntil: "networkidle" });
+    const railData = await page.evaluate(async () => {
+      const doc = document.documentElement;
+      const top = (sel) => {
+        const el = document.querySelector(sel);
+        return el ? +el.getBoundingClientRect().top.toFixed(2) : null;
+      };
+      const side = document.querySelector(".sidebar");
+      const toc = document.querySelector(".toc-col");
+      const pinned = parseFloat(getComputedStyle(side).top);
+      const max = doc.scrollHeight - innerHeight;
+      const out = [];
+      for (let y = 0; y <= max; y += 25) {
+        scrollTo(0, y);
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        out.push({ y: window.scrollY, side: top(".sidebar"), toc: top(".toc-col"), content: top(".content") });
+      }
+      return {
+        pinned,
+        out,
+        position: getComputedStyle(side).position,
+        syncVar: document.querySelector(".site-shell").style.getPropertyValue("--rail-sync-min").trim(),
+        tocPosition: toc ? getComputedStyle(toc).position : null,
+      };
+    });
+
+    assert.equal(railData.position, "fixed", pathName + " 左栏应为固定定位，实际 " + railData.position);
+    assert.equal(railData.syncVar, "", pathName + " 已移除 RailSync，不应再写 --rail-sync-min");
+    assert.notEqual(railData.tocPosition, "sticky", pathName + " 右栏不应再 sticky，实际 " + railData.tocPosition);
+    for (const s of railData.out) {
+      assert.ok(
+        Math.abs(s.side - railData.pinned) <= 1,
+        pathName + " 左栏必须全程不动：scrollY=" + s.y + " 时 top=" + s.side + "（应为 " + railData.pinned + "）"
+      );
+      assert.ok(
+        Math.abs(s.toc - s.content) <= 2,
+        pathName + " 右栏应与正文同步滚动：scrollY=" + s.y + " 时 toc=" + s.toc + " content=" + s.content
+      );
+    }
+    console.log("PASS C-11-new " + pathName.padEnd(10) + " 左栏 fixed 全程不动、右栏随正文滚动");
+  }
+
+  /* ── 断言 7d（2026-11-06 需求）：文章内页右栏只显示目录 ── */
+  await page.goto(server.base + "/p/" + tocPostId, { waitUntil: "networkidle" });
+  const articleRail = await page.evaluate(() => {
+    const rail = document.querySelector(".toc-col");
+    return {
+      blocks: rail ? rail.querySelectorAll(".rb-block").length : 0,
+      toc: !!rail?.querySelector(".toc-list"),
+      stats: !!rail?.querySelector(".stat-grid"),
+      friends: !!rail?.querySelector(".link-list, .fl-item, .friend-links, .fl-hub"),
+      tags: !!rail?.querySelector(".tag-cloud"),
+    };
+  });
+  assert.equal(articleRail.blocks, 1, "文章内页右栏应只有目录这一个区块，实际 " + articleRail.blocks);
+  assert.equal(articleRail.toc, true, "文章内页右栏应有目录");
+  assert.equal(articleRail.stats, false, "文章内页右栏不应再渲染统计");
+  assert.equal(articleRail.friends, false, "文章内页右栏不应再渲染友链");
+  assert.equal(articleRail.tags, false, "文章内页右栏不应再渲染标签云");
+  console.log("PASS 文章内页右栏只显示目录");
+
+  /* ── 断言 7e（2026-11-06 需求）：底栏三个图标按钮等间距 ── */
+  /**
+   * 需求原话：「主题切换、RSS、设置按钮放到底部等间距放置，不用文字统一用图标」。
+   * 三条都可测量：
+   *   · 三个子元素（主题按钮 + 2 个链接），且每个都有 svg（不再有文字）
+   *   · 底栏 textContent 为空（"RSS / 设置" 不再以文字出现）
+   *   · 三个按钮中心两两间距相等（容差 1px）—— 三等分栅格应当正好相等
+   * 另外每个仅图标控件都必须有 aria-label，否则读屏用户听到的是空白。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const bottomBar = await page.evaluate(() => {
+    const bar = document.querySelector(".side-bottom");
+    const kids = [...bar.children].map((el) => {
+      const b = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return {
+        center: +(((b.left + b.right) / 2)).toFixed(2),
+        w: +b.width.toFixed(1),
+        h: +b.height.toFixed(1),
+        svg: !!el.querySelector("svg"),
+        label: el.getAttribute("aria-label") || el.getAttribute("title") || "",
+        borders: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+      };
+    });
+    return {
+      count: kids.length,
+      kids,
+      gaps: kids.slice(1).map((k, i) => +(k.center - kids[i].center).toFixed(2)),
+      text: (bar.textContent || "").trim(),
+    };
+  });
+  assert.equal(bottomBar.count, 3, "底栏应有 3 个控件（主题 / RSS / 后台），实际 " + bottomBar.count);
+  assert.equal(bottomBar.text, "", "底栏不应再有文字（RSS/设置已改为图标），实际 " + JSON.stringify(bottomBar.text));
+  for (const k of bottomBar.kids) {
+    assert.ok(k.svg, "底栏每个控件都应是图标（svg），实际缺少：" + JSON.stringify(k));
+    assert.ok(k.w === 34 && k.h === 34, "底栏图标按钮应为 34×34，实际 " + k.w + "×" + k.h);
+    assert.ok(k.label.length > 0, "仅图标控件必须有 aria-label / title，实际：" + JSON.stringify(k));
+    assert.deepEqual(
+      k.borders,
+      ["0px", "0px", "0px", "0px"],
+      "三个图标不应被外框线包裹（border-width 必须为 0）：" + JSON.stringify(k)
+    );
+  }
+  assert.ok(
+    Math.abs(bottomBar.gaps[0] - bottomBar.gaps[1]) <= 1,
+    "三个按钮中心间距应相等，实际 " + JSON.stringify(bottomBar.gaps)
+  );
+  console.log("PASS 底栏 3 个图标按钮等间距、无外框（间距 " + JSON.stringify(bottomBar.gaps) + "，均 34×34，均有 aria-label）");
+
   /* ── 断言 8（B-7）：移动端抽屉与桌面用同一套标签与顺序 ── */
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(server.base + "/", { waitUntil: "networkidle" });
-  await page.locator(".mobile-menu-btn").click();
+  await page.locator('.mobile-dock-btn[aria-label="打开菜单"]').click();
   await page.waitForTimeout(200);
   const drawerLabels = await page.locator(".mobile-drawer-item").evaluateAll((els) =>
     els.map((e) => (e.textContent || "").trim())
@@ -312,6 +521,247 @@ try {
   const drawerActive = await page.locator(".mobile-drawer-item.active").count();
   assert.equal(drawerActive, 1, "首页抽屉应有 1 个高亮项，实际 " + drawerActive);
   console.log("PASS B-7 移动端抽屉标签/顺序与桌面一致，高亮 1 项");
+
+  /* ── 断言 8b（2026-11-06 需求）：手机抽屉底栏 = 同一组三图标，且固定在底部 ── */
+  /**
+   * 需求：移动端同步改。三条事实：
+   *   · 抽屉底栏与桌面左栏底栏是同一组 3 个图标按钮（无文字、均有 svg + aria-label）
+   *   · 三个按钮等间距（抽屉宽度内三等分）
+   *   · 底栏固定在抽屉底部、图标离底边 18px 不贴边；内容区自己滚（友链多时
+   *     不再把底栏推到很下面）
+   */
+  const drawerFoot = await page.evaluate(() => {
+    const drawer = document.querySelector(".mobile-drawer").getBoundingClientRect();
+    const body = document.querySelector(".mobile-drawer-body");
+    const foot = document.querySelector(".mobile-drawer-foot");
+    const kids = [...foot.children].map((el) => {
+      const b = el.getBoundingClientRect();
+      return {
+        center: +((b.left + b.right) / 2).toFixed(1),
+        w: +b.width.toFixed(1),
+        h: +b.height.toFixed(1),
+        svg: !!el.querySelector("svg"),
+        label: el.getAttribute("aria-label") || "",
+      };
+    });
+    // 量按钮盒子（34×34）而不是图形本身：18px 是"控件到抽屉边缘"的距离
+    const controlBottoms = [...foot.children].map((x) => x.getBoundingClientRect().bottom);
+    const footRect = foot.getBoundingClientRect();
+    return {
+      count: kids.length,
+      kids,
+      text: (foot.textContent || "").trim(),
+      gaps: kids.slice(1).map((k, i) => +(k.center - kids[i].center).toFixed(1)),
+      iconGapToBottom: +(drawer.bottom - Math.max(...controlBottoms)).toFixed(1),
+      footVisible: footRect.top >= 0 && footRect.bottom <= innerHeight + 1,
+      bodyScrollable: body.scrollHeight > body.clientHeight + 1,
+    };
+  });
+  assert.equal(drawerFoot.count, 3, "抽屉底栏应有 3 个图标按钮，实际 " + drawerFoot.count);
+  assert.equal(drawerFoot.text, "", "抽屉底栏不应再有文字，实际 " + JSON.stringify(drawerFoot.text));
+  for (const k of drawerFoot.kids) {
+    assert.ok(k.svg, "抽屉底栏每个控件都应是图标：" + JSON.stringify(k));
+    assert.ok(k.w === 34 && k.h === 34, "抽屉底栏图标应为 34×34，实际 " + k.w + "×" + k.h);
+    assert.ok(k.label.length > 0, "仅图标控件必须有 aria-label：" + JSON.stringify(k));
+  }
+  assert.ok(
+    Math.abs(drawerFoot.gaps[0] - drawerFoot.gaps[1]) <= 1,
+    "抽屉底栏三个按钮应等间距，实际 " + JSON.stringify(drawerFoot.gaps)
+  );
+  assert.equal(drawerFoot.footVisible, true, "抽屉底栏应固定在可视区域内（不应被内容顶出屏幕）");
+  assert.ok(drawerFoot.bodyScrollable, "内容区应是独立滚动区（友链多时内容自己滚）");
+  assert.ok(
+    Math.abs(drawerFoot.iconGapToBottom - 18) <= 2,
+    "底栏按钮离抽屉底边应约 18px（不贴边），实际 " + drawerFoot.iconGapToBottom + "px"
+  );
+  console.log("PASS 手机抽屉底栏 3 个图标等间距、固定底部、离底 18px");
+
+  /* ── 断言 8c（2026-11-06 需求）：悬浮"玻璃胶囊"（回到顶部 / 菜单 / 右侧栏，同一处）── */
+  /**
+   * 用户要求：半透明深灰底、完整胶囊圆角、每个图标独立圆形热区、
+   * 1px 描边 + 阴影、**固定在右下角**（右 12px / 底 24px，各视口一致）；
+   * 且**回到顶部与菜单/侧栏必须放在同一处**，不能拆成两个浮钮；
+   * 回到顶部在任意宽度（含 PC）都要有。
+   *
+   * 断点差异：
+   *   ≤820     → 回到顶部（滚动后）+ 菜单 + 右侧栏
+   *   821–1391 → 回到顶部（滚动后）+ 右侧栏
+   *   ≥1392    → 只剩回到顶部；未滚动时整组淡出（胶囊里没有任何按钮）
+   */
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const dock = await page.evaluate(() => {
+    const el = document.querySelector(".mobile-dock");
+    const cs = getComputedStyle(el);
+    const btns = [...el.querySelectorAll(".mobile-dock-btn")].map((b) => {
+      const r = b.getBoundingClientRect();
+      const bcs = getComputedStyle(b);
+      return {
+        label: b.getAttribute("aria-label") || "",
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        radius: bcs.borderTopLeftRadius,
+        visible: r.width > 0,
+      };
+    });
+    const r = el.getBoundingClientRect();
+    const m = cs.backgroundColor.match(/rgba?\(([^)]+)\)/);
+    const parts = m ? m[1].split(",").map((x) => x.trim()) : [];
+    return {
+      exists: !!el,
+      display: cs.display,
+      gapRight: Math.round(innerWidth - r.right),
+      gapBottom: Math.round(innerHeight - r.bottom),
+      viewportH: innerHeight,
+      radius: cs.borderTopLeftRadius,
+      borderWidth: cs.borderTopWidth,
+      boxShadow: cs.boxShadow,
+      bg: cs.backgroundColor,
+      bgAlpha: parts.length === 4 ? parseFloat(parts[3]) : 1,
+      labels: btns.filter((b) => b.visible).map((b) => b.label),
+      btns,
+      oldMenu: document.querySelectorAll(".mobile-menu-btn").length,
+      oldSidebar: document.querySelectorAll(".mobile-sidebar-btn").length,
+    };
+  });
+  assert.equal(dock.exists, true, "手机端应有悬浮按钮组 .mobile-dock");
+  assert.equal(dock.display, "flex", "手机端悬浮按钮组应可见，实际 display=" + dock.display);
+  assert.equal(dock.oldMenu, 0, "顶栏原来的汉堡按钮应已移除");
+  assert.equal(dock.oldSidebar, 0, "顶栏原来的侧栏按钮应已移除");
+  assert.ok(Math.abs(dock.gapRight - 12) <= 1, "悬浮组离屏幕右侧应为 12px，实际 " + dock.gapRight + "px");
+  assert.equal(dock.radius, "999px", "胶囊应为完整圆角（999px），实际 " + dock.radius);
+  assert.equal(dock.borderWidth, "1px", "胶囊应有 1px 轻微描边，实际 " + dock.borderWidth);
+  assert.notEqual(dock.boxShadow, "none", "胶囊应有阴影");
+  assert.ok(dock.bgAlpha !== null && dock.bgAlpha < 1, "底色应是半透明（alpha < 1），实际 " + dock.bg);
+  assert.ok(
+    Math.abs(dock.gapBottom - 24) <= 2,
+    "悬浮组应贴在右下角（离底 24px），实际 " + dock.gapBottom + "px"
+  );
+  assert.deepEqual(dock.labels, ["打开菜单", "打开侧栏"], "顶部时胶囊应只有菜单/右侧栏两枚，实际 " + JSON.stringify(dock.labels));
+  for (const b of dock.btns.filter((x) => x.visible)) {
+    assert.ok(b.w === 44 && b.h === 44, "悬浮按钮应为 44×44 热区，实际 " + b.w + "×" + b.h);
+    assert.equal(b.radius, "50%", "每枚按钮应是独立圆形热区，实际圆角 " + b.radius);
+  }
+  console.log("PASS 悬浮组 = 12px 玻璃胶囊（半透明 " + dock.bg + " / 圆角 " + dock.radius + " / 1px 描边 + 阴影 / 圆形 44×44）");
+
+  /* 回到顶部与它们同处一个胶囊（不是第二个浮钮） */
+  await page.evaluate(() => scrollTo(0, 900));
+  await page.waitForTimeout(500);
+  const scrolled = await page.evaluate(() => ({
+    groups: document.querySelectorAll(".mobile-dock").length,
+    separate: document.querySelectorAll(".back-to-top").length,
+    labels: [...document.querySelectorAll(".mobile-dock-btn")]
+      .filter((b) => b.getBoundingClientRect().width > 0)
+      .map((b) => b.getAttribute("aria-label")),
+  }));
+  assert.equal(scrolled.groups, 1, "悬浮按钮组应只有一个，实际 " + scrolled.groups);
+  assert.equal(scrolled.separate, 0, "不应再有第二个独立的回到顶部浮钮");
+  assert.deepEqual(scrolled.labels, ["回到顶部", "打开菜单", "打开侧栏"], "滚动后回到顶部应出现在同一个胶囊里，实际 " + JSON.stringify(scrolled.labels));
+  console.log("PASS 回到顶部与菜单/侧栏同处一个胶囊（滚动后三枚）");
+
+  await page.locator('.mobile-dock-btn[data-dock="top"]').click();
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => Math.round(window.scrollY)), 0, "点回到顶部应回到页面顶部");
+  const labelsAtTop = await page.evaluate(() =>
+    [...document.querySelectorAll(".mobile-dock-btn")].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.getAttribute("aria-label"))
+  );
+  assert.deepEqual(labelsAtTop, ["打开菜单", "打开侧栏"], "回到顶部后该枚应消失，实际 " + JSON.stringify(labelsAtTop));
+  console.log("PASS 回到顶部生效，按钮随即从胶囊中隐藏");
+
+  /* 抽屉打开时整组淡出；两枚按钮分别打开两种抽屉 */
+  await page.locator('.mobile-dock-btn[aria-label="打开菜单"]').click();
+  await page.waitForTimeout(250);
+  assert.equal(await page.evaluate(() => !!document.querySelector(".mobile-drawer")), true, "点悬浮按钮应打开导航抽屉");
+  const dockHidden = await page.evaluate(() => {
+    const cs = getComputedStyle(document.querySelector(".mobile-dock"));
+    return { opacity: cs.opacity, pointerEvents: cs.pointerEvents };
+  });
+  assert.equal(dockHidden.opacity, "0", "抽屉打开时悬浮组应隐藏，实际 opacity=" + dockHidden.opacity);
+  assert.equal(dockHidden.pointerEvents, "none", "抽屉打开时悬浮组不应可点");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(200);
+  await page.locator('.mobile-dock-btn[aria-label="打开侧栏"]').click();
+  await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => !!document.querySelector(".mobile-sidebar")), true, "点悬浮按钮应打开右侧栏抽屉");
+  console.log("PASS 悬浮组打开两种抽屉且打开时淡出");
+
+  /* 桌面（≥1392）：胶囊仍在，但只剩"回到顶部"；未滚动时整组淡出 */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const desktopTop = await page.evaluate(() => {
+    const el = document.querySelector(".mobile-dock");
+    return {
+      display: getComputedStyle(el).display,
+      opacity: getComputedStyle(el).opacity,
+      visibleBtns: [...el.querySelectorAll(".mobile-dock-btn")].filter((b) => b.getBoundingClientRect().width > 0).length,
+    };
+  });
+  assert.equal(desktopTop.display, "flex", "PC 端也应有悬浮组（回到顶部在里面），实际 " + desktopTop.display);
+  assert.equal(desktopTop.opacity, "0", "PC 顶部时胶囊应隐藏（里面没有按钮），实际 opacity=" + desktopTop.opacity);
+  assert.equal(desktopTop.visibleBtns, 0, "PC 顶部时胶囊内不应有可见按钮，实际 " + desktopTop.visibleBtns);
+  await page.evaluate(() => scrollTo(0, 900));
+  await page.waitForTimeout(500);
+  const desktopScrolled = await page.evaluate(() => {
+    const el = document.querySelector(".mobile-dock");
+    const top = el.querySelector('[data-dock="top"]');
+    return {
+      opacity: getComputedStyle(el).opacity,
+      labels: [...el.querySelectorAll(".mobile-dock-btn")].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.getAttribute("aria-label")),
+      box: top ? Math.round(top.getBoundingClientRect().width) : 0,
+    };
+  });
+  assert.equal(desktopScrolled.opacity, "1", "PC 滚动后胶囊应出现，实际 opacity=" + desktopScrolled.opacity);
+  assert.deepEqual(desktopScrolled.labels, ["回到顶部"], "PC 的胶囊里只应有回到顶部，实际 " + JSON.stringify(desktopScrolled.labels));
+  assert.equal(desktopScrolled.box, 44, "PC 回到顶部应为 44×44，实际 " + desktopScrolled.box);
+  await page.locator('.mobile-dock-btn[data-dock="top"]').click();
+  await page.waitForTimeout(1200);
+  assert.equal(await page.evaluate(() => Math.round(window.scrollY)), 0, "PC 点回到顶部应回到页面顶部");
+  console.log("PASS PC 端：胶囊里只剩回到顶部（滚动出现 / 点击回顶）");
+
+  /* 平板（1000）：胶囊 = 回到顶部 + 右侧栏（没有菜单按钮） */
+  await page.setViewportSize({ width: 1000, height: 800 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  await page.evaluate(() => scrollTo(0, 900));
+  await page.waitForTimeout(500);
+  const tabletLabels = await page.evaluate(() =>
+    [...document.querySelectorAll(".mobile-dock-btn")].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.getAttribute("aria-label"))
+  );
+  assert.deepEqual(tabletLabels, ["回到顶部", "打开侧栏"], "平板胶囊应为 回到顶部 + 右侧栏，实际 " + JSON.stringify(tabletLabels));
+  console.log("PASS 1000px 平板：胶囊 = 回到顶部 + 右侧栏");
+
+  /* ── 断言 8e（2026-11-06 需求）：右侧栏聚合站用站点自己的图标，失败退回名称首字 ── */
+  /**
+   * 之前聚合站一律显示固定的 🚇，多个聚合站排在一起分不出谁是谁。
+   * 现在每个聚合站：`<origin>/favicon.ico` → 失败退回名称首字。
+   * 测试环境是离线探针库（hub 的 URL 是 example 域名），图标必然加载失败，
+   * 正好断言降级路径：每个 .fl-hub 里都有 .hub-avatar，内容是名称首字。
+   */
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(server.base + "/", { waitUntil: "networkidle" });
+  const hubIcons = await page.evaluate(() => {
+    return [...document.querySelectorAll(".fl-hub")].map((h) => {
+      const av = h.querySelector(".hub-avatar");
+      return {
+        name: (h.querySelector(".fl-name")?.textContent || "").trim(),
+        hasAvatar: !!av,
+        letter: av ? (av.textContent || "").trim() : null,
+        emoji: (h.textContent || "").includes("🚇"),
+      };
+    });
+  });
+  assert.ok(hubIcons.length > 0, "前置：演示数据里应有聚合站条目（.fl-hub）");
+  for (const h of hubIcons) {
+    assert.equal(h.hasAvatar, true, "聚合站条目应有 .hub-avatar：" + JSON.stringify(h));
+    assert.equal(h.emoji, false, "聚合站不应再用固定的 🚇 emoji：" + JSON.stringify(h));
+    assert.equal(
+      h.letter,
+      Array.from(h.name)[0],
+      "图标加载失败时应显示名称首字：" + JSON.stringify(h)
+    );
+  }
+  console.log("PASS 聚合站图标按站点取（离线降级为首字），共 " + hubIcons.length + " 个");
+
+
 
   /* ── 断言 9（B-3）：14 档视口 × 标准页/宽版页，对照路线图 §10.3 ── */
   /**
@@ -383,6 +833,31 @@ try {
       " left=" + std.sideLeft + " toc=" + (std.toc ? "有" : "无"));
   }
 
+  /* ── 断言 9b（2026-11-06）：左栏横向位置在所有模板 / 宽度下必须一致 ── */
+  /**
+   * 「点友链页左栏会横跳」。根因不在左栏自己，而在**容器几何**：
+   * 标准页（three-col）有 max-width: --w-shell(1552) + margin:auto，
+   * 视口 > 1552 时容器居中；而宽版页（wide）曾写 `max-width: none`，
+   * 于是贴左。实测 1920 视口：标准页 sidebar.left = 216、友链页 = 32，
+   * 差 184px —— 点一下导航整列家具就横移。
+   *
+   * 断言方式：同一视口下把四个模板各量一次，左栏 left 的最大差 ≤ 1px。
+   * 覆盖 1440（不居中）/ 1600 / 1920（居中）三档，正好卡住这个分界。
+   */
+  for (const vw of [1440, 1600, 1920]) {
+    await page.setViewportSize({ width: vw, height: 900 });
+    const lefts = [];
+    for (const pathName of ["/", "/archives", "/friend-links", "/search"]) {
+      await page.goto(server.base + pathName, { waitUntil: "networkidle" });
+      lefts.push(await page.evaluate(() => Math.round(document.querySelector(".sidebar").getBoundingClientRect().left)));
+    }
+    assert.ok(
+      Math.max(...lefts) - Math.min(...lefts) <= 1,
+      vw + "px 下不同模板的左栏横向位置必须一致，实测（/ 归档 友链 搜索）= " + JSON.stringify(lefts)
+    );
+    console.log("PASS 左栏横向位置一致（" + vw + "px: " + JSON.stringify(lefts) + "）");
+  }
+
   /* ── 断言 10（B-3）：断点内连续性 —— 1202/1201/1200/1199 恒为 800 ── */
   /**
    * 原实现在 1201→1200 之间从 449 跳到 760（差 311px）。本任务的真正目标
@@ -397,18 +872,41 @@ try {
   assert.deepEqual(continuity, [800, 800, 800, 800], "1202/1201/1200/1199 应恒为 800，实际 " + JSON.stringify(continuity));
   console.log("PASS B-3 断崖消失：1202/1201/1200/1199 = " + JSON.stringify(continuity));
 
-  /* ── 断言 11（B-3）：side-sheet-entry 显隐区间与断点严格互补 ── */
-  for (const [vw, wantVisible] of [[1392, false], [1391, true], [1201, true], [821, true], [820, false]]) {
+  /* ── 断言 11（B-3 / 2026-11-06）：右栏入口落在悬浮组里，按断点增减 ── */
+  /**
+   * 右栏在 ≤1391 隐藏（B-3）。入口从"左栏底部的小按钮"改成右侧悬浮组里的
+   * 一枚（与手机端同一套交互）：
+   *   · ≥1392：右栏已在页面上 → 胶囊里没有导航按钮；未滚动时整组淡出
+   *   · 821–1391：导航已在左栏 → 只显示"右侧栏"一枚
+   *   · ≤820：显示两枚（菜单 + 右侧栏）
+   * 旧的 `.side-sheet-entry` 必须彻底消失，否则会出现两个入口。
+   */
+  for (const [vw, wantBtns, wantHiddenAtTop] of [[1392, 0, true], [1391, 1, false], [1201, 1, false], [821, 1, false], [820, 2, false]]) {
     await page.setViewportSize({ width: vw, height: 900 });
     await page.goto(server.base + "/", { waitUntil: "networkidle" });
-    const visible = await page.evaluate(() => {
-      const el = document.querySelector(".side-sheet-entry");
-      if (!el) return false;
-      const cs = getComputedStyle(el);
-      return cs.display !== "none" && el.getBoundingClientRect().width > 0;
+    const info = await page.evaluate(() => {
+      const dock = document.querySelector(".mobile-dock");
+      if (!dock) return { exists: false, buttons: 0, opacity: null, oldEntry: 0 };
+      return {
+        exists: true,
+        display: getComputedStyle(dock).display,
+        // 只数"导航类"按钮（菜单/右侧栏），"回到顶部"在未滚动时不渲染
+        buttons: [...dock.querySelectorAll('.mobile-dock-btn[data-dock="menu"], .mobile-dock-btn[data-dock="sidebar"]')]
+          .filter((b) => b.getBoundingClientRect().width > 0).length,
+        opacity: getComputedStyle(dock).opacity,
+        oldEntry: document.querySelectorAll(".side-sheet-entry").length,
+      };
     });
-    assert.equal(visible, wantVisible, vw + "px 的「侧栏」入口可见性应为 " + wantVisible);
-    console.log("PASS B-3 " + String(vw).padStart(4) + "px 侧栏入口 " + (visible ? "可见" : "隐藏"));
+    assert.equal(info.exists, true, vw + "px 应有悬浮按钮组");
+    assert.equal(info.display, "flex", vw + "px 悬浮组应参与布局（display:flex），实际 " + info.display);
+    assert.equal(info.buttons, wantBtns, vw + "px 导航类按钮数应为 " + wantBtns + "，实际 " + info.buttons);
+    assert.equal(info.oldEntry, 0, vw + "px 不应再出现旧的左栏底部 .side-sheet-entry 入口");
+    if (wantHiddenAtTop) {
+      assert.equal(info.opacity, "0", vw + "px 顶部时胶囊应淡出（里面没有按钮），实际 opacity=" + info.opacity);
+    } else {
+      assert.equal(info.opacity, "1", vw + "px 胶囊应有按钮可见，实际 opacity=" + info.opacity);
+    }
+    console.log("PASS " + String(vw).padStart(4) + "px 右栏入口：胶囊按钮 " + info.buttons + " 枚" + (wantHiddenAtTop ? "（顶部整组淡出）" : ""));
   }
 
   /* ── 断言 12（B-1）：搜索页不再空出 320px 右栏 ── */
@@ -667,7 +1165,7 @@ try {
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(server.base + "/", { waitUntil: "networkidle" });
-  await page.locator(".mobile-menu-btn").click();
+  await page.locator('.mobile-dock-btn[aria-label="打开菜单"]').click();
   await page.waitForTimeout(200);
   // 抽屉里的「侧栏」是右侧那个（MobileSidebar），顶部汉堡打开的是导航抽屉
   const drawerOpened = await page.evaluate(() => !!document.querySelector(".mobile-drawer"));
@@ -681,7 +1179,7 @@ try {
 
   /* 右侧栏抽屉（MobileSidebar）：点顶部栏的侧栏按钮打开 */
   await page.goto(server.base + "/", { waitUntil: "networkidle" });
-  await page.locator(".mobile-sidebar-btn").click();
+  await page.locator('.mobile-dock-btn[aria-label="打开侧栏"]').click();
   await page.waitForTimeout(400);
   const mobileBlocks = await page.evaluate(() => {
     const sb = document.querySelector(".mobile-sidebar");
@@ -989,12 +1487,14 @@ try {
   });
 
   // 这些是设计值 —— 与 C-1 改前的实测完全一致
+  // 设计值在 C-10 改过一次（13px/16px/13px/.95rem → 10px/12px/10px/.92rem），
+  // 这条断言守的是"当前设计值"，不是某个历史数值
   assert.deepEqual(visual.navItem, {
-    paddingTop: "13px",
-    paddingLeft: "16px",
-    borderTopLeftRadius: "13px",
-    fontSize: "15.2px",
-  }, "导航项的计算样式应仍是设计值（C-1 不该影响任何视觉）：" + JSON.stringify(visual.navItem));
+    paddingTop: "10px",
+    paddingLeft: "12px",
+    borderTopLeftRadius: "10px",
+    fontSize: "14.72px",
+  }, "导航项的计算样式应等于当前设计值：" + JSON.stringify(visual.navItem));
   assert.ok(visual.body, "body 应存在");
   assert.ok(visual.shell, ".site-shell 应存在");
   console.log("PASS C-1 删除死 token 后视觉无变化（nav-item " + JSON.stringify(visual.navItem) + "）");
@@ -1458,15 +1958,17 @@ try {
     return {
       token: cs.getPropertyValue("--tap").trim(),
       tokenLg: cs.getPropertyValue("--tap-lg").trim(),
-      menuBtn: box(".mobile-menu-btn"),
+      dockMenu: box('.mobile-dock-btn[aria-label="打开菜单"]'),
+      dockSidebar: box('.mobile-dock-btn[aria-label="打开侧栏"]'),
       iconBtn: box(".mobile-icon-btn"),
     };
   });
   assert.equal(tap.token, "44px", "--tap 应为 44px，实际 " + tap.token);
   assert.equal(tap.tokenLg, "48px", "--tap-lg 应为 48px，实际 " + tap.tokenLg);
-  if (tap.menuBtn) {
-    assert.equal(tap.menuBtn.w, 44, "汉堡按钮宽度应为 44px，实际 " + tap.menuBtn.w);
-    assert.equal(tap.menuBtn.h, 44, "汉堡按钮高度应为 44px，实际 " + tap.menuBtn.h);
+  for (const [name, b] of [["打开菜单", tap.dockMenu], ["打开侧栏", tap.dockSidebar]]) {
+    if (!b) continue;
+    assert.equal(b.w, 44, name + "按钮宽度应为 44px，实际 " + b.w);
+    assert.equal(b.h, 44, name + "按钮高度应为 44px，实际 " + b.h);
   }
   if (tap.iconBtn) {
     assert.ok(tap.iconBtn.w >= 44, "图标按钮热区宽度应 ≥44px，实际 " + tap.iconBtn.w);
@@ -1616,75 +2118,46 @@ try {
     console.log("PASS D-1 统计格 " + statMetrics.height + "px（原 80）· 数字 " + statMetrics.numSize + "px（原 20.48）");
   }
 
-  /* ── 断言 44（D-2）：关于页独立路由与版式 ── */
+  /* ── 断言 44（D-2 → 2026-11-06）：关于页是静态页，版式与其它页面一致 ── */
   /**
-   * 需求文档第七章：轻量的个人介绍页（不做求职简历，也不做作品集）。
+   * 关于页此前读 posts 表里的 page 记录（D-2），演示库/全新安装没有这条记录
+   * 时整页 404。现在改成静态页：内容来自 content/pages/about.md，不查库；
+   * 版式与归档 / 说说同构（PageHeader + .prose + 完整右栏）。
    *
-   * 关键约束（D.4 红线）：内容必须来自 content/pages/about.md，不许写死在
-   * 组件里。所以这里既验版式，也验"渲染出的文案确实出自 md"。
+   * 这条断言顺便守住"不查库"这件事：测试**故意不再 seed** 关于页记录。
    */
   await page.setViewportSize({ width: 1440, height: 900 });
   const aboutRes = await page.goto(server.base + "/about", { waitUntil: "networkidle" });
-  assert.equal(aboutRes.status(), 200, "/about 应可访问（不能被 [slug] 吃掉或 404）");
+  assert.equal(aboutRes.status(), 200, "/about 应可访问（静态页，不依赖库里有没有 page 记录）");
 
   const about = await page.evaluate(() => {
-    const hero = document.querySelector(".about-hero");
-    const greeting = document.querySelector(".about-greeting");
-    const tagline = document.querySelector(".about-tagline");
-    const focus = [...document.querySelectorAll(".about-focus-item")].map((e) => e.textContent.trim());
-    const h2 = [...document.querySelectorAll(".about-body h2")].map((e) => e.textContent.trim());
-    const tocLinks = [...document.querySelectorAll(".toc-list a")].map((a) => a.textContent.trim());
-    const h1 = document.querySelector("h1");
+    const title = document.querySelector(".page-title");
     return {
-      hasHero: !!hero,
-      greeting: greeting ? greeting.textContent.trim() : null,
-      greetingSize: greeting ? parseFloat(getComputedStyle(greeting).fontSize) : null,
-      tagline: tagline ? tagline.textContent.trim() : null,
-      focus,
-      h2,
-      tocLinks,
-      h1Text: h1 ? h1.textContent.trim() : null,
-      h1Hidden: h1 ? getComputedStyle(h1).position === "absolute" : false,
-      hasDate: !!document.querySelector(".article-meta-bar, .article-title"),
+      pageTitle: title ? title.textContent.trim() : null,
+      h2: [...document.querySelectorAll(".prose h2")].map((e) => e.textContent.trim()),
+      hasHero: !!document.querySelector(".about-hero"),
+      hasArticleMeta: !!document.querySelector(".article-meta-bar, .article-title"),
+      hasToc: !!document.querySelector(".toc-list"),
+      hasStats: !!document.querySelector(".stat-grid"),
+      proseText: (document.querySelector(".prose")?.textContent || "").slice(0, 200),
       scrollW: document.documentElement.scrollWidth,
       clientW: document.documentElement.clientWidth,
     };
   });
 
-  assert.equal(about.hasHero, true, "关于页应有 .about-hero（需求 7.2 页面顶部）");
-  assert.ok(about.greeting && about.greeting.includes("你好"), "7.2 顶部应有问候语，实际 " + JSON.stringify(about.greeting));
-  assert.ok(
-    about.tagline && about.tagline.length > 8,
-    "7.2 应有一句个人介绍（来自 about.md 第二段），实际 " + JSON.stringify(about.tagline)
-  );
-  assert.equal(about.focus.length, 4, "7.3 应有 4 个方向标签，实际 " + about.focus.length + "：" + JSON.stringify(about.focus));
-  console.log("PASS D-2 关于页 hero 正确（" + about.greeting + " / " + about.focus.length + " 个方向标签）");
-
-  /* 需求 7.4/7.5/7.6：三个正文小节 */
+  assert.equal(about.pageTitle, "关于", "关于页应有标准页面标题「关于」，实际 " + JSON.stringify(about.pageTitle));
+  assert.equal(about.hasHero, false, "关于页不应再有专属 hero（应与其它页面同构）");
+  assert.equal(about.hasArticleMeta, false, "关于页不应出现文章元信息（日期/阅读时长/浏览量）");
+  assert.equal(about.hasToc, false, "关于页与其它列表页一致：右栏不再有目录");
+  assert.equal(about.hasStats, true, "关于页右栏应是标准完整版（含站点统计）");
   for (const want of ["我在做什么", "本站", "联系"]) {
-    assert.ok(about.h2.includes(want), "7.4–7.6 应有「" + want + "」一节，实际 " + JSON.stringify(about.h2));
+    assert.ok(about.h2.includes(want), "应有「" + want + "」一节，实际 " + JSON.stringify(about.h2));
   }
-  console.log("PASS D-2 正文小节齐全（" + about.h2.join(" / ") + "）");
+  assert.ok(about.proseText.includes("你好，我是 flechazo"), "正文应来自 about.md，实际开头：" + JSON.stringify(about.proseText.slice(0, 40)));
+  assert.ok(about.scrollW <= about.clientW + 1, "关于页不应横向溢出");
+  console.log("PASS D-2 关于页 = 静态页（PageHeader「关于」+ 正文 + 完整右栏，无 hero / 无目录）");
 
-  /* 需求 7.7：右栏目录 + 目录项与正文实际章节一致 */
-  assert.ok(about.tocLinks.length > 0, "7.7 关于页应保留右栏目录");
-  assert.deepEqual(
-    about.tocLinks.slice().sort(),
-    about.h2.slice().sort(),
-    "目录项必须与正文实际章节一致（否则会有指向不存在锚点的死链）"
-  );
-  console.log("PASS D-2 目录与正文章节一致（" + about.tocLinks.length + " 项）");
-
-  /* 可访问性：必须有 h1，且不能重复显示标题 */
-  assert.equal(about.h1Text, "关于", "关于页应有 h1「关于」，实际 " + JSON.stringify(about.h1Text));
-  assert.equal(about.h1Hidden, true, "h1 应视觉隐藏（sr-only），不能与 hero 重复显示");
-  console.log("PASS D-2 关于页有 h1 且视觉隐藏（不重复标题）");
-
-  /* 关于页不是文章：不应显示发布元信息 */
-  assert.equal(about.hasDate, false, "关于页不应显示文章元信息（日期/阅读时长/浏览量）");
-  console.log("PASS D-2 关于页不显示文章元信息");
-
-  /* 移动端：无横向溢出，目录隐藏 */
+  /* 移动端：无横向溢出，右栏隐藏 */
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(server.base + "/about", { waitUntil: "networkidle" });
   const aboutMobile = await page.evaluate(() => ({
@@ -1695,8 +2168,8 @@ try {
     })(),
   }));
   assert.equal(aboutMobile.overflow, false, "375px 下关于页不应横向溢出");
-  assert.equal(aboutMobile.tocVisible, false, "375px 下右栏目录应隐藏（需求 7.7「移动端根据空间决定」）");
-  console.log("PASS D-2 移动端无溢出且目录隐藏");
+  assert.equal(aboutMobile.tocVisible, false, "375px 下右栏应隐藏");
+  console.log("PASS D-2 移动端无溢出且右栏隐藏");
 
   /* ── 断言 45（D-3）：友链页 Hero 收紧 + 桌面两列 + 卡片等高 ── */
   /**
@@ -2209,34 +2682,6 @@ function seedPostsForPager(dataDir, n = 21) {
     const at = new Date(Date.now() - i * 86400000).toISOString();
     ins.run("pager-" + i, "分页测试文章 " + i, at, at, at);
   }
-  db.close();
-}
-
-function seedAboutPage(dataDir) {
-  /**
-   * 用**真实的** content/pages/about.md 建页面，而不是占位文本。
-   *
-   * D-2 起关于页有独立版式（hero + 关注方向标签 + 若干小节），
-   * 版式是按 md 的**真实结构**（开头两段 + h2 分节）驱动的。
-   * 用「这是关于页的正文。」这种占位内容，提取不到问候语和方向标签，
-   * 断言会假失败 —— 而且更重要的是：占位数据测不出真实内容会不会排版塌掉。
-   */
-  const raw = fs.readFileSync(new URL("../content/pages/about.md", import.meta.url), "utf8");
-  const m = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-  const meta = m ? m[1] : "";
-  const content = m ? m[2] : raw;
-  const pick = (key) => {
-    const mm = meta.match(new RegExp("^" + key + ":\\s*\"?(.*?)\"?$", "m"));
-    return mm ? mm[1] : "";
-  };
-
-  const db = new Database(dataDir + "/blog.db");
-  db.pragma("journal_mode = WAL");
-  const now = new Date().toISOString();
-  db.prepare(
-    "INSERT INTO posts (type, slug, title, content, status, published_at, created_at, updated_at) " +
-    "VALUES ('page', 'about', ?, ?, 'published', ?, ?, ?)"
-  ).run(pick("title") || "关于", content, now, now, now);
   db.close();
 }
 

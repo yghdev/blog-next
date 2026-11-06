@@ -4,61 +4,56 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * 关于页独立路由（D-2，2026-11-01）。
+ * 关于页（D-2 起；2026-11-06 改为**静态页**）。
  *
- * ## 为什么新增 `app/about/page.tsx`
+ * ## 为什么从"数据库 page 记录"改成"仓库里的 md"
  *
- * 需求文档 7.1–7.7 要求关于页有自己的视觉特色：顶部个人介绍、关注方向、
- * 正在做的事、本站、联系。这些是**结构化版面**，普通 Markdown 文章表达不了。
+ * 之前 `/about` 读 `posts` 表里 `type=page, slug=about` 的记录。带来的问题：
  *
- * 但内容必须仍来自 `content/pages/about.md`（D.4 红线：结构化区块的内容
- * 不允许写死在组件里）。所以拆成：
+ *   1. 全新安装 / 演示库没有这条记录时整页 404（实测预览环境就是 404）；
+ *   2. 它是导航里唯一依赖库内容的页面，和归档 / 说说 / 友链这些静态页
+ *      不是同一种东西，版式也因此分叉（专属 hero vs 标准页面标题）。
  *
- *   `app/about/page.tsx`   —— 路由 + metadata（取数）
- *   `components/AboutView.tsx` —— 版式（把 md 渲染成 hero + 正文）
+ * 现在与它们同构：内容来自 `content/pages/about.md`（不查库），
+ * 版式是 `PageHeader + .prose`，右栏是标准完整版。
  *
- * ## 路由优先级
+ * ## 仍然保留的约束（D.4 红线）
  *
- * Next 里静态路由优先于动态路由，所以 `/about` 会走新路由，`app/[slug]`
- * 不再接管。URL 没变，旧链接与搜索引擎索引不受影响。
+ * 「关于页的文案必须来自 `content/pages/about.md`，不允许写死在组件里」——
+ * 这条现在更严格了：页面根本不再有"组件里写文案"的可能，它只负责读文件、
+ * 渲染 Markdown。
  */
 
 const ROOT = process.cwd();
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
-test("D-2 存在独立的 app/about/page.tsx 路由", () => {
+test("D-2 关于页是独立路由，且不再查库", () => {
   const f = path.join(ROOT, "app/about/page.tsx");
   assert.ok(fs.existsSync(f), "应有 app/about/page.tsx");
   const src = read("app/about/page.tsx");
   assert.match(src, /export const dynamic = "force-dynamic"/, "应与其它前台页面一致，按请求实时渲染");
-  assert.match(src, /getPageBySlugCached\("about"\)/, "应仍从数据库读 about 页面（不是硬编码内容）");
-  assert.match(src, /generateMetadata/, "应有 generateMetadata（SEO）");
+  assert.match(src, /content",\s*"pages",\s*"about\.md"/, "应从 content/pages/about.md 读取内容");
+  assert.doesNotMatch(
+    src,
+    /getPageBySlugCached|getPageBySlug\b/,
+    "不应再依赖 posts 表里的 page 记录（演示库/全新安装没有这条记录）"
+  );
 });
 
-test("D-2 内容必须来自 about.md，组件里不得写死文案", () => {
+test("D-2 版式与其它静态页一致（PageHeader + prose，无专属 hero）", () => {
+  const src = read("app/about/page.tsx");
+  assert.match(src, /<PageHeader title="关于"/, "应使用统一的 PageHeader");
+  assert.match(src, /className="prose"/, "正文应走 .prose（与归档/说说的正文同一套排版）");
+  assert.doesNotMatch(src, /about-hero|AboutView/, "不应再有专属 hero 版式");
+});
+
+test("D-2 PageHeader 渲染的是 h1（可访问性）", () => {
   /**
-   * 这是 D.4 红线的直接检查：结构化区块的**内容**必须来自 md 或 settings。
-   * 组件里只允许出现"版式"相关的类名与结构性文字（如 aria-label）。
+   * 关于页没有文章标题，h1 由 PageHeader 提供。
+   * 页面没有 h1 是明确的可访问性缺陷 —— 读屏用户靠它判断"这是什么页"。
    */
-  // 去掉注释再查 —— 注释里举例说明 md 结构是允许的，那不是"写死文案"
-  const src = read("components/AboutView.tsx")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/^\s*\/\/.*$/gm, "");
-  const forbidden = [
-    "一个喜欢折腾技术、探索新事物的学生",
-    "AI & Artificial Intelligence",
-    "Development & Programming",
-    "Self-hosting",
-    "Open Source",
-    "折腾各种自托管服务",
-    "用 AI 结对开发一些小工具",
-  ];
-  const leaked = forbidden.filter((t) => src.includes(t));
-  assert.deepEqual(
-    leaked,
-    [],
-    "AboutView 里写死了本应来自 about.md 的文案：" + leaked.join(", ")
-  );
+  const src = read("components/PageHeader.tsx");
+  assert.match(src, /<h1\b/, "PageHeader 应输出 h1");
 });
 
 test("D-2 about.md 的章节结构与需求对应", () => {
@@ -107,26 +102,4 @@ test("D-2 联系方式必须真实存在（不得凭空生成）", () => {
   // 真实存在的渠道：评论区 + 友链页
   assert.ok(md.includes("留言") || md.includes("评论"), "应保留「在文章下方留言」");
   assert.ok(md.includes("/friend-links"), "应保留友链页链接");
-});
-
-test("D-2 AboutView 必须给页面一个 h1（可访问性）", () => {
-  /**
-   * 关于页不是文章，没有 .article-title，所以最容易漏掉 h1 ——
-   * 第一次实现时实测 h1Count 就是 0。读屏用户靠 h1 判断"这是什么页"，
-   * 搜索引擎也靠它，不能没有。
-   */
-  const src = read("components/AboutView.tsx");
-  assert.match(src, /<h1\b/, "应有 h1");
-  assert.match(src, /className="sr-only"/, "h1 应视觉隐藏（sr-only），不能重复显示标题");
-});
-
-test("D-2 目录必须与正文实际章节一致（不能留死锚点）", () => {
-  /**
-   * `toc` 是按**完整 md** 生成的，而 AboutView 会把「我在关注什么」那一节
-   * 从正文里移除（顶部已做成标签，避免重复）。若不同步剔除 toc，
-   * 目录里会留一个指向不存在锚点的链接。
-   */
-  const src = read("components/AboutView.tsx");
-  assert.match(src, /visibleToc/, "应过滤 toc 以匹配正文实际章节");
-  assert.match(src, /toc=\{visibleToc\}/, "应把过滤后的 toc 传给 SiteShell");
 });

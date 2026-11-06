@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SidebarTrigger } from "./SidebarSheet";
-import { ThemeToggle } from "./ThemeToggle";
+import { SideBottomActions } from "./SideBottomActions";
 import { NAV_ITEMS, activeHref } from "@/lib/nav";
 
 /**
- * 桌面端左侧栏 —— 参照 xaoxuu.com：居中大头像 + 衬线站名 + 虚线搜索框 + 图标导航
+ * 桌面端左侧栏 —— 居中大头像 + 衬线站名 + 图标导航（C-10 重做选中态）
  *
  * ## 为什么是客户端组件（B-7）
  *
@@ -17,7 +16,13 @@ import { NAV_ITEMS, activeHref } from "@/lib/nav";
  * 「忘写」这个错误在类型上就不可能发生：`Sidebar` 不再接受 `active`。
  *
  * 代价是多带一点 JS，但它本来就 import 了两个客户端组件
- * （`SidebarTrigger` / `ThemeToggle`），并非纯静态。
+ * （`SideBottomActions` 里的 `ThemeToggle`），并非纯静态。
+ *
+ * ## 选中态的语言（C-10）
+ *
+ * 只用**填充色**：不加红点、不加描边/投影、不做任何位移（理由见 globals.css
+ * 的「左侧栏导航（C-10 重做）」）。同时补上 `aria-current="page"` ——
+ * 视觉玩家看到的是填充，读屏用户听到的也应该是"当前页"，两者不能只有一半。
  */
 export function Sidebar({
   siteName = "flechazo",
@@ -41,9 +46,7 @@ export function Sidebar({
         <div className="brand-desc">{siteDesc}</div>
       </Link>
 
-      {/* 虚线边框的搜索框 */}
-
-      {/* 图标导航 */}
+      {/* 图标导航：选中项只有填充色（见 globals.css） */}
       <nav className="nav">
         {NAV_ITEMS.map((n) => {
           const isActive = current === n.href;
@@ -52,32 +55,23 @@ export function Sidebar({
               key={n.href}
               href={n.href}
               className={"nav-item" + (isActive ? " is-active" : "")}
+              aria-current={isActive ? "page" : undefined}
             >
-              <span className="nav-ico">{n.icon}</span>
-              <span className="nav-txt">{n.label}</span>
-              {isActive ? <span className="nav-dot" /> : null}
+              {/* 图标 + 文字作为一组，但**文字本身**居中：图标绝对定位到文字左侧，
+                  不参与居中计算（2026-11-06 用户要求「菜单文字居中」）。 */}
+              <span className="nav-label">
+                <span className="nav-ico" aria-hidden>{n.icon}</span>
+                <span className="nav-txt">{n.label}</span>
+              </span>
             </Link>
           );
         })}
       </nav>
 
-
-      {/* 平板（821~1391px，B-3 起）：右栏已隐藏但顶栏还没出现，
-          这里补一个侧栏入口，避免这一区间完全看不到统计/外链/标签。
-          ≤820px 时左栏整体隐藏，此按钮自然不可见。 */}
-      <div className="side-sheet-entry">
-        <SidebarTrigger className="side-sheet-btn" />
-        <span>侧栏</span>
-      </div>
-
-      {/* 亮/暗主题切换：桌面放在左栏底部，手机在顶栏（见 MobileNav） */}
-      <div className="side-theme">
-        <ThemeToggle />
-      </div>
-
-      <div className="side-bottom">
-        <a href="/rss.xml" title="RSS">RSS</a>
-        <a href="/admin" title="管理后台">设置</a>
+      <div className="side-bottom-wrap">
+        <div className="side-bottom">
+          <SideBottomActions />
+        </div>
       </div>
     </aside>
   );

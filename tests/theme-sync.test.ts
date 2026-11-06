@@ -6,12 +6,12 @@ import path from "node:path";
 /**
  * 主题切换多实例同步与主题色单源（C-4，2026-11-01）。
  *
- * ## 问题一：4 个实例各持 state，互相不同步
+ * ## 问题一：多个实例各持 state，互相不同步
  *
- * `<ThemeToggle />` 在项目里有 4 个实例：
- *   components/Sidebar.tsx        桌面左栏底部
- *   components/MobileNav.tsx      手机顶栏
- *   components/admin/AdminShell.tsx  后台侧栏 + 后台顶栏
+ * `<ThemeToggle />` 在项目里有 5 个实例、4 个可见入口：
+ *   components/SideBottomActions.tsx  桌面左栏底栏 + 手机抽屉底栏（共用组件）
+ *   components/MobileNav.tsx          手机顶栏
+ *   components/admin/AdminShell.tsx   后台侧栏 + 后台顶栏
  *
  * 每个都 `useState<Theme | null>(null)`，只在自己被点时更新自己。
  * 于是在桌面点侧栏那个切换按钮 → 手机顶栏那个的 `aria-label` 仍是旧值。
@@ -106,13 +106,16 @@ test("C-4 ThemeScript 的脚本必须引用常量而不是字面量", () => {
   assert.doesNotMatch(src, /#fffefc|#141414/i, "ThemeScript 的脚本字面量里不应再有原始色值");
 });
 
-test("C-4 四个 ThemeToggle 实例都还在（不能靠删实例解决同步）", () => {
+test("C-4 主题切换的所有入口都还在（不能靠删实例解决同步）", () => {
   /**
-   * 反例守卫：最省事的"修复"是把重复实例删掉。但侧栏/顶栏/后台的两处
-   * 都是不同断点下的必要入口，删了就没有切换按钮了。
+   * 反例守卫：最省事的"修复"是把重复实例删掉。但侧栏 / 手机顶栏 / 手机抽屉 /
+   * 后台的两处都是不同断点下的必要入口，删了就没有切换按钮了。
+   *
+   * 2026-11-06：桌面左栏底栏与手机抽屉底栏抽成 `SideBottomActions`（两个入口
+   * 共用一份实现），所以实例分布变成 3 个文件、5 个 <ThemeToggle>。
    */
   const expected: [string, number][] = [
-    ["components/Sidebar.tsx", 1],
+    ["components/SideBottomActions.tsx", 1],
     ["components/MobileNav.tsx", 1],
     ["components/admin/AdminShell.tsx", 2],
   ];

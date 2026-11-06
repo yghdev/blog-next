@@ -66,7 +66,7 @@ export async function ArticleView({ doc }: { doc: Post }) {
     <>
       <Animations />
       <Lightbox />
-      <SiteShell variant="three-col" toc={toc}>
+      <SiteShell variant="three-col" toc={toc} tocOnly>
           <article>
             <header className="article-header">
               {cats.length > 0 ? (

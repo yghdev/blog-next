@@ -1,6 +1,7 @@
 import { listFriendLinksCached } from "@/lib/cached";
 import type { FriendLink } from "@/lib/friend-links";
 import { SidebarBlock } from "./rightbar/Blocks";
+import { HubAvatar } from "./HubAvatar";
 
 /**
  * 侧栏「友链 / 聚合」区块（2026-10-23，B-8 重构）。
@@ -33,7 +34,8 @@ export function HubCard({ link }: { link: FriendLink }) {
       rel="noopener noreferrer"
       title={link.desc || link.name}
     >
-      <span className="fl-ico" aria-hidden>🚇</span>
+      {/* 2026-11-06：不再用固定的 🚇，改取站点自己的 favicon（失败退回首字） */}
+      <HubAvatar name={link.name} url={link.url} />
       <span className="fl-body">
         <span className="fl-name">{link.name}</span>
         {link.desc ? <span className="fl-desc">{link.desc}</span> : null}

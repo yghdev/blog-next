@@ -39,7 +39,6 @@ Open Source
 - **评论**：自建的 Artalk，数据也在自己手里
 - **部署**：构建成 standalone 产物，用 systemd + nginx 跑在一台自己的云服务器上
 
-没有 WordPress，没有第三方建站平台。内容全部是我的，随时可以打包搬走。
 
 ## 联系
 

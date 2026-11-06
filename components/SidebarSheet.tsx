@@ -12,8 +12,8 @@ import { useScrollLock } from "./ui/useScrollLock";
  *   右栏没了、顶栏也没有，侧栏入口完全不可见。
  *
  * 解决：状态放在 context 里，两个位置各放一个触发按钮 ——
- *   - 顶栏（手机，≤820px 可见）
- *   - 左侧栏底部（平板，821~1200px 可见）
+ *   - 手机悬浮按钮组（≤820px 可见；2026-11-06 起从顶栏移到这里）
+ *   - 左侧栏底部（平板，821~1391px 可见）
  *   两个按钮的可见性由 CSS 断点保证互斥，不会同时出现。
  *
  * 面板用 Portal 挂到 body：顶部栏有 backdrop-filter，会给 position:fixed
@@ -72,13 +72,21 @@ export function SidebarSheetProvider({ panel, children }: { panel: ReactNode; ch
 }
 
 /** 触发按钮：面板图标（区别于汉堡导航菜单与搜索） */
-export function SidebarTrigger({ className = "mobile-icon-btn" }: { className?: string }) {
+export function SidebarTrigger({
+  className = "mobile-icon-btn",
+  dataDock,
+}: {
+  className?: string;
+  /** 供悬浮组的断点规则定位（如 data-dock="sidebar"） */
+  dataDock?: string;
+}) {
   const ctx = useContext(SidebarCtx);
   if (!ctx) return null;
   return (
     <button
       type="button"
       className={className}
+      data-dock={dataDock}
       aria-label="打开侧栏"
       title="侧栏"
       onClick={ctx.open}

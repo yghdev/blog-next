@@ -55,13 +55,23 @@ type Toc = { level: number; text: string; id: string }[];
 export async function SiteShell({
   variant = "three-col",
   toc,
+  tocOnly = false,
   className,
   children,
 }: {
   /** 骨架形态：三栏（带右栏）或宽版（无右栏）。默认三栏。 */
   variant?: Variant;
-  /** 文章目录。只有文章页需要传；其余页面不传，右栏会渲染成不带目录的版本。 */
+  /**
+   * 文章目录。只有文章页需要传：
+   *   · 不传（首页 / 归档 / 说说…）→ 右栏是完整版（统计 + 友链 + 标签云）
+   *   · 传了但目录为空（文章没有任何小标题）→ 右栏为空，一列空白
+   */
   toc?: Toc;
+  /**
+   * 文章内页：右侧栏只显示目录组件（2026-11-06 用户要求）。
+   * 不影响首页 / 归档等页面的统计、友链、标签云。
+   */
+  tocOnly?: boolean;
   /** 附加到 `<main>` 上的类名。目前没有页面在用（友链页的 fr-main 已随 B-4 移除）。 */
   className?: string;
   children: React.ReactNode;
@@ -80,7 +90,7 @@ export async function SiteShell({
       <main className={"content" + (className ? " " + className : "")}>{children}</main>
       {variant === "three-col" ? (
         <div className="toc-col">
-          <RightBar toc={toc} />
+          <RightBar toc={toc} tocOnly={tocOnly} />
         </div>
       ) : null}
     </div>
