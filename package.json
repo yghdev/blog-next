@@ -22,6 +22,7 @@
     "test:browser": "node tests/browser-split.mjs",
     "test:friends-edge": "node tests/friend-links-page-edge.mjs",
     "test:friends": "node tests/friend-links-page.mjs && node tests/friend-links-page-edge.mjs",
+    "test:legacy": "node tests/legacy-path.mjs",
     "test:integration": "node tests/run-integration.mjs",
     "test:ui": "node tests/ui-kit.mjs",
     "test:dark": "node tests/dark-mode.mjs",

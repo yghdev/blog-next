@@ -43,6 +43,7 @@ const LOG_DIR = path.join(ROOT, ".tmp-tests", "integration-logs");
  */
 const SUITES = [
   { name: "test:next",        label: "HTTP 集成（缓存 / 308 / 搜索 / RSS / sitemap）" },
+  { name: "test:legacy",      label: "旧 WordPress 日期路径（308 / 归档 / 不过度接管）" },
   { name: "test:browser",     label: "双 context 隔离（storage + cookies）" },
   { name: "test:ui",          label: "UI 原子件与热区" },
   { name: "test:layout",      label: "布局回归（滚动容器唯一性 / sticky 对齐 / 10 档断点）" },
