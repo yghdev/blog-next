@@ -1,4 +1,4 @@
-import { getSettingsCached } from "@/lib/cached";
+import { getSettings } from "@/lib/settings";
 
 /**
  * 全站页脚（2026-10-23 新增）。
@@ -11,7 +11,7 @@ import { getSettingsCached } from "@/lib/cached";
  * 两项都为空时整块不渲染，不占位。
  */
 export async function SiteFooter() {
-  const s = await getSettingsCached();
+  const s = getSettings();
   const icp = (s.icp || "").trim();
   const text = (s.footerText || "").trim();
 

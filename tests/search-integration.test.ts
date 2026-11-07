@@ -57,8 +57,7 @@ test("FTS 语法字符不会造成注入或异常", () => {
   }
 });
 
-test("settings 默认值可用，写入后可读且缓存被失效", () => {
-  settingsMod.invalidateSettingsCache();
+test("settings 默认值可用，写入后立刻可读（不再有进程内缓存）", () => {
   const d = settingsMod.getSettings();
   assert.equal(d.siteTitle, "flechazo's blog");
   assert.equal(d.commentEnabled, true);

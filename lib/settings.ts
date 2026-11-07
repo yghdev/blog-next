@@ -54,16 +54,24 @@ const REVERSE: Record<keyof Settings, string> = Object.fromEntries(
   Object.entries(KEY_MAP).map(([k, v]) => [v, k])
 ) as Record<keyof Settings, string>;
 
-/** 进程内缓存：settings 读多写少，避免每请求一次查询 */
-let cache: { at: number; value: Settings } | null = null;
-const TTL_MS = 10_000;
-
-export function invalidateSettingsCache(): void {
-  cache = null;
-}
-
+/**
+ * 读站点设置：**每次直查库，不做进程内缓存**。
+ *
+ * 这里曾经有一个 10 秒 TTL 的进程内缓存（注释写的是"settings 读多写少"）。
+ * 2026-11-07 实测发现它是**跨 chunk 不可失效**的：
+ *
+ *   Next 把 route handler 与页面渲染打包成两个入口，各自持有独立的模块实例。
+ *   后台 PUT 里调 `invalidateSettingsCache()` 只清了 route 那一份，
+ *   页面渲染那一份仍是旧值 —— 于是"后台改站名 → 前台最长 10 秒不变"；
+ *   更糟的是这期间外层 `unstable_cache`（原 getSettingsCached，300s）
+ *   若重建，会把这份旧值再固化 5 分钟（tests/layout-regression.mjs
+ *   里曾把这个现象记为"既有问题"）。
+ *
+ * 现在每次直接查库：settings 表只有十几行，单次 <0.1ms，一页最多读 2~3 次。
+ * 代价可以忽略，换来的是"后台改完，下一个请求就生效"这个可预期的语义 ——
+ * 配套地，`getSettingsCached` 已删除（它只会把首帧变旧）。
+ */
 export function getSettings(): Settings {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.value;
   const db = getDb();
   const rows = db.prepare("SELECT key, value FROM settings").all() as { key: string; value: string }[];
   const value: Settings = { ...DEFAULT_SETTINGS };
@@ -76,7 +84,6 @@ export function getSettings(): Settings {
       (value[field] as string) = r.value;
     }
   }
-  cache = { at: Date.now(), value };
   return value;
 }
 
@@ -92,7 +99,6 @@ export function updateSettings(patch: Partial<Settings>): void {
       stmt.run(key, typeof v === "boolean" ? (v ? "1" : "0") : String(v));
     }
   })();
-  invalidateSettingsCache();
 }
 
 /** 供 Umami 定时任务写回，不经过后台（P4） */
@@ -101,7 +107,6 @@ export function setStatValue(key: string, value: string): void {
   db.prepare(
     "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
   ).run(key, value);
-  invalidateSettingsCache();
 }
 
 export function getRawSetting(key: string): string | null {

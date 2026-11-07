@@ -1861,11 +1861,11 @@ try {
    *
    * 现在由 SiteShell / layout 从 settings 取并传下去。
    *
-   * ⚠️ **本断言只验数据流，不验"改完立刻生效"** —— 因为实测发现
-   * `revalidateTag(TAGS.stats)` 在这个隔离环境里**不会让 getSettingsCached
-   * 失效**（连等 15s > 进程内 10s TTL 也不变，只有 300s 的 unstable_cache
-   * TTL 到期才会更新）。那是**既有问题**，与本任务无关；在这里断言"立刻生效"
-   * 会变成假失败。
+   * ⚠️ 曾经这里写着"本断言只验数据流，不验改完立刻生效"，因为
+   * `revalidateTag(TAGS.stats)` 不会让 `getSettingsCached` 失效（revalidateTag
+   * 是 SWR，页面渲染那份进程内缓存还清不掉）。2026-11-07 起 settings 直读库、
+   * `getSettingsCached` 已删除，"改完立刻生效"的断言搬到
+   * tests/next-integration.mjs（HTTP 层，更快）。这里只验数据流。
    *
    * 数据流的正确性由两条保证：
    *   ① 组件源码里不再有硬编码（tests/brand.test.ts 静态检查）

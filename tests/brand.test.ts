@@ -40,8 +40,9 @@ const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
 test("C-9 SiteShell 必须是 async 且取 settings", () => {
   const src = read("components/SiteShell.tsx");
-  assert.match(src, /export async function SiteShell/, "SiteShell 应改成 async（要 await getSettingsCached）");
-  assert.match(src, /getSettingsCached/, "SiteShell 应调用 getSettingsCached()");
+  assert.match(src, /export async function SiteShell/, "SiteShell 应保持 async（兄弟组件与调用方依赖）");
+  assert.match(src, /getSettings\(/, "SiteShell 应调用 getSettings() 取品牌信息");
+  assert.doesNotMatch(src, /getSettingsCached/, "settings 不再走数据缓存（P0-7 后续，改完要立刻生效）");
 });
 
 test("C-9 Sidebar 接收品牌 props，不再硬编码站名/简介", () => {

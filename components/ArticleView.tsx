@@ -6,7 +6,8 @@ import { formatDate, toIso } from "./PostCard";
 import {
   decodeSlug, prevNextPost, parseJsonArray, readingTime, makeExcerpt, postHref,
 } from "@/lib/posts";
-import { getPageViewsCached, getSettingsCached } from "@/lib/cached";
+import { getPageViewsCached } from "@/lib/cached";
+import { getSettings } from "@/lib/settings";
 import { renderMarkdown } from "@/lib/markdown";
 import { CommentSection } from "./CommentSection";
 import { Lightbox } from "./Lightbox";
@@ -92,7 +93,7 @@ export async function ArticleView({ doc }: { doc: Post }) {
   const cats = parseJsonArray(doc.categories);
   const nav = doc.type === "post" ? prevNextPost(doc.published_at || doc.created_at) : {};
   const pageViews = await getPageViewsCached(legacyPageKey(doc), doc.id);
-  const settings = await getSettingsCached();
+  const settings = getSettings();
 
   return (
     <>

@@ -49,7 +49,7 @@ const CALL_SITES: { file: string; variant: "three-col" | "wide"; toc: boolean; n
 
 test("B-1 组件存在且是服务端组件（无 use client）", () => {
   const src = read("components/SiteShell.tsx");
-  // C-9 起 SiteShell 是 async（要 await getSettingsCached 取品牌信息）
+  // C-9 起 SiteShell 是 async（要取 settings 品牌信息；2026-11-07 起直读、不经缓存）
   assert.match(src, /export (async )?function SiteShell/, "应导出 SiteShell（async 或同步均可）");
   assert.doesNotMatch(src, /^"use client"/m, "SiteShell 应是服务端组件，不加 use client");
   for (const prop of ["variant", "toc", "className", "children"]) {

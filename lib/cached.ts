@@ -2,8 +2,8 @@ import { unstable_cache } from "next/cache";
 import { TAGS } from "./posts";
 import * as posts from "./posts";
 import * as stats from "./site-stats";
-import { getSettings, type Settings } from "./settings";
 import { listVisibleFriendLinks } from "./friend-links";
+import type { Settings } from "./settings";
 
 /**
  * 数据层缓存（方案 P4）。
@@ -115,11 +115,14 @@ export const getPageViewsCached = unstable_cache(
 
 /* -------------------------------- 设置 -------------------------------- */
 
-export const getSettingsCached = unstable_cache(
-  async () => getSettings(),
-  ["settings:all"],
-  { revalidate: TTL, tags: [TAGS.stats] }
-);
+/**
+ * 曾经这里有 `getSettingsCached = unstable_cache(getSettings, …, 300s)`。
+ *
+ * 2026-11-07（P0-7 后续）删掉了：设置属于"后台改完就该立刻生效"的配置，
+ * 而 unstable_cache 的 revalidateTag 是 SWR 语义（失效后第一个请求仍返回旧值），
+ * 再叠加当时 getSettings 自己的进程内缓存（跨 chunk 清不掉），
+ * 就变成"改了站名前台几分钟不变"。现在所有调用方直接读 `getSettings()`。
+ */
 
 /* ------------------------------ 友链/外链 ------------------------------ */
 

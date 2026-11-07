@@ -315,6 +315,37 @@ try {
   assert.deepEqual(searchJson.terms, [q], "API 应回传高亮词表");
   console.log("PASS 搜索页：命中高亮 <mark> + 计数与 API total 一致");
 
+  /* ------------- 设置改动必须立刻生效（P0-7 后续修复） ------------- */
+  /**
+   * 曾经的坑（2026-11-07 实测）：settings 有 10s 进程内缓存 + 300s unstable_cache，
+   * 而 revalidateTag 是 SWR —— 后台改站名后，前台可能 10 秒甚至几分钟不变。
+   * 根因是 route handler 与页面渲染各自持有独立的模块实例，进程内缓存清不掉另一份。
+   *
+   * 现在 settings 直读库（lib/settings.ts），所以这里断言真正该成立的事：
+   * **改完下一个请求就生效**，不需要等任何 TTL。
+   */
+  const settingsNow = JSON.parse((await (await api("/api/admin/settings")).text())).settings;
+  const originalTitle = settingsNow.siteTitle;
+  const putSettings = await api("/api/admin/settings", {
+    method: "PUT",
+    body: { siteTitle: "SETTINGS_FRESH_TITLE" },
+  });
+  assert.equal(putSettings.status, 200, await putSettings.text());
+
+  assert.match(
+    (await fetchText(server.base, "/rss.xml")).text,
+    /SETTINGS_FRESH_TITLE/,
+    "rss.xml 直读 settings，改完应立刻反映"
+  );
+  assert.match(
+    (await fetchText(server.base, "/")).text,
+    /SETTINGS_FRESH_TITLE/,
+    "页面渲染也直读 settings：改完必须立刻生效（此前会滞后 10s~5min）"
+  );
+  // 还原，避免影响后续断言（侧栏站名出现在 sitemap 之外的多个断言里）
+  await api("/api/admin/settings", { method: "PUT", body: { siteTitle: originalTitle } });
+  console.log("PASS 设置改动立刻生效（页面 + RSS 都不再经过数据缓存）");
+
   /* ------------------------- sitemap 语义 ------------------------- */
   /**
    * sitemap 语义（P0-5 之后重写）。

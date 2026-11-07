@@ -1,4 +1,4 @@
-import { getSettingsCached } from "@/lib/cached";
+import { getSettings } from "@/lib/settings";
 import { Sidebar } from "./Sidebar";
 import { RightBar } from "./RightBar";
 
@@ -76,7 +76,12 @@ export async function SiteShell({
   className?: string;
   children: React.ReactNode;
 }) {
-  const settings = await getSettingsCached();
+  /*
+   * 直读（2026-11-07）：settings 不再走数据缓存。
+   * 站名/简介属于"后台改完就该立刻生效"的配置；缓存叠 SWR 会让它几十秒
+   * 甚至几分钟不变（详见 lib/settings.ts 的注释）。
+   */
+  const settings = getSettings();
   /*
    * 兜底：settings 可能为空（全新安装、库未初始化）。
    * 直接把空值传下去会让侧栏渲染成空白 —— 比硬编码更糟。

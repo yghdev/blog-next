@@ -48,13 +48,12 @@ const HERO_EN = "FRIENDS & CONNECTIONS";
 const HERO_DESC = "这里收藏着一些有趣的个人博客。每一个链接，都是一次跨越屏幕的相遇。";
 
 /**
- * 站点设置这里刻意用 getSettings() 而不是 getSettingsCached()。
+ * 站点设置直接读 getSettings()（2026-11-07 起全站都这样）。
  *
- * 原因：getSettings 自己带 10s 进程内缓存，而 getSettingsCached 外面又套了一层
- * unstable_cache(300s)。后台改设置 -> revalidateTag 只冲掉外层；外层重建时
- * 读到的可能仍是进程内那一份旧值，旧值于是被重新固化 300s（双层缓存的
- * 失效竞态）。评论开关属于「后台一改就应该看到」的配置，这一页直接读
- * 内层缓存，代价是每请求一次 SQLite（10s 才真正查一次），可以接受。
+ * 这一页历史上曾经"刻意绕开 getSettingsCached"来躲双层缓存的失效竞态 ——
+ * 现在那个竞态被根治了：settings 不再走任何数据缓存，每请求直查
+ * （settings 表十几行，<0.1ms）。所以这里和其它页面口径一致，
+ * 评论开关 / 站名都是"后台改完，下一个请求就生效"。
  */
 export async function generateMetadata(): Promise<Metadata> {
   const [doc, links, settings] = await Promise.all([
