@@ -67,12 +67,22 @@ nginx -t && systemctl reload nginx
 | 异地 | 坚果云 `jianguoyun:blog_backup/`，保留 14 份 |
 | 日志 | `/var/log/blog-backup.log` |
 
-**不停机备份**：用 `sqlite3 .backup` 做在线一致性快照，WAL 模式下也安全，不影响线上访问。
+**备份内容**（同一个 tar.gz）：
+- `blog.db` —— 文章 / 页面 / 说说 / 设置 / 访客埋点
+- `images/` —— 本机图片（配置七牛图床后新的图不落盘）
+- `artalk.db` —— 评论库（独立容器 Artalk 的 SQLite，**不在 blog.db 里**，P0-7 起纳入）
+- `MANIFEST.txt` —— 时间 / 文章数 / 评论数 / 图片数
+
+**不停机备份**：用 `sqlite3 .backup` 做在线一致性快照，WAL 与 delete 模式下都安全，不影响 blog 服务与 artalk 容器。
 
 **每一步都有校验**：
-1. `PRAGMA integrity_check` 必须返回 `ok`
+1. 两份库各自 `PRAGMA integrity_check` 必须返回 `ok`
 2. 已发布文章数必须 ≥ 1（防止备份到空库）
-3. 打包内含 `MANIFEST.txt` 记录时间、文章数、图片数
+3. 打包内含 `MANIFEST.txt` 记录时间、文章数、评论数、图片数
+
+> Artalk 库快照失败**不会**中止整个备份（博客数据是主线），但日志会打 `!!`、
+> `MANIFEST.txt` 的「评论」一行会写失败原因 —— 出现 `!!` 就要去看
+> `/var/log/blog-backup.log`，别只看"归档完成"。
 
 ### 3.2 手动备份
 
@@ -94,14 +104,27 @@ tar xzf "$LATEST"
 # 2. 检查
 cat MANIFEST.txt
 sqlite3 blog.db "PRAGMA integrity_check;"
+sqlite3 artalk.db "PRAGMA integrity_check; SELECT COUNT(*) FROM comments;"
 
-# 3. 停服务并替换
+# 3. 停服务并替换（博客）
 systemctl stop blog
 cp /var/lib/blog/blog.db /var/lib/blog/blog.db.bak-$(date +%s)
 cp blog.db /var/lib/blog/blog.db
 rm -f /var/lib/blog/blog.db-wal /var/lib/blog/blog.db-shm
 cp -a images/. /var/www/blog-images/
 chown -R www-data:www-data /var/www/blog-images
+
+# 3b. 恢复评论库（Artalk 容器）
+#     先停容器再覆盖，Artalk 是 journal_mode=delete（非 WAL），没有 -wal/-shm 要清。
+#     artalk.yml 里的 app_key / 管理员凭据**不在备份里**（含密钥，不进云端），
+#     换机恢复时用 deploy/artalk/ 里的模板重建，再用 Artalk 后台重设管理员密码。
+docker stop artalk
+cp /opt/artalk/data/artalk.db /opt/artalk/data/artalk.db.bak-$(date +%s)
+cp artalk.db /opt/artalk/data/artalk.db
+chown root:root /opt/artalk/data/artalk.db   # 与容器挂载属主保持一致（原来是 root:root 644）
+chmod 644 /opt/artalk/data/artalk.db
+docker start artalk
+docker logs --tail 20 artalk
 
 # 4. 启动并验证
 systemctl start blog
@@ -116,6 +139,11 @@ curl -sk -o /dev/null -w '%{http_code}\n' https://blog.yghsite.cn/
 **坚果云要求父目录必须已存在**，首次同步会报：
 `AncestorsNotFound: 409 Conflict`
 → 脚本里已加 `rclone mkdir "$REMOTE"` 前置。
+
+**评论库曾经完全不在备份里**（2026-11-06 发现，P0-7 修复）：Artalk 的数据在
+`/opt/artalk/data/artalk.db`，是独立容器自己的 SQLite，blog-backup 只备
+`blog.db` + 图片 —— 等于 6 条评论只有单副本。现在已并入同一个归档；
+新增 Artalk 时同理：**新起的容器只要带自己的数据卷，就必须显式加进备份**。
 
 ---
 
@@ -133,9 +161,14 @@ curl -sk -o /dev/null -w '%{http_code}\n' https://blog.yghsite.cn/
 
 ## 五、评论管理
 
-- 游客可直接评论，但**默认待审核**
-- 后台 → 评论：可「通过 / 垃圾 / 删除」
-- 防垃圾：蜜罐字段 + 同 IP 10 分钟限 3 条
+2026-11-07（P0-7）起**只有 Artalk 一套**：
+
+- 前台评论区接的是 Artalk（容器 `artalk`，https://artalk.yghsite.cn/sidebar/ 是管理面板）
+- 审核 / 删除 / 封禁都在 Artalk 面板里做；博客后台的「评论」页已改为**历史只读**
+  （展示本地 `comments` 表，该表不再写入任何新评论）
+- 博客自建的 `POST /api/comments` 已下线（前台没有调用方，留着只是多一个攻击面）
+- 数据在 `/opt/artalk/data/artalk.db`，**随每日备份一起走**（见 3.1）
+- `artalk.yml` 不在备份里（含 app_key 等密钥）
 
 ---
 

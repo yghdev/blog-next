@@ -48,6 +48,36 @@ if [ "${POSTS:-0}" -lt 1 ]; then
 fi
 log "数据库 OK（已发布文章 $POSTS 篇）"
 
+# 3.5 Artalk 评论库（P0-7，2026-11-07）
+#
+# 为什么单独一段：评论在独立容器 artalk 的 SQLite 里（/opt/artalk/data/artalk.db），
+# **不在** blog.db；此前完全没进备份 = 评论数据只有单副本，容器或磁盘一挂就没了。
+# Artalk 用 journal_mode=delete（非 WAL），.backup 仍然是在线一致性快照，不停容器。
+#
+# 失败**不中止**整个备份：博客数据是主线，评论是旁支。但必须在日志和 MANIFEST 里
+# 留下"缺了"的痕迹 —— 静默跳过会让"备份成功"掩盖评论缺失，那是更坏的结果。
+ARTALK_DB=/opt/artalk/data/artalk.db
+ARTALK_STATUS="跳过（未找到 $ARTALK_DB）"
+if [ -f "$ARTALK_DB" ]; then
+  if sqlite3 "$ARTALK_DB" ".backup '$TMP/artalk.db'" 2>>/var/log/blog-backup.log; then
+    ACHK=$(sqlite3 "$TMP/artalk.db" 'PRAGMA integrity_check;')
+    if [ "$ACHK" = "ok" ]; then
+      ACOUNT=$(sqlite3 "$TMP/artalk.db" "SELECT COUNT(*) FROM comments WHERE deleted_at IS NULL;")
+      ARTALK_STATUS="artalk.db（integrity_check=ok，评论 ${ACOUNT} 条）"
+      log "Artalk 评论库 OK（${ACOUNT} 条）"
+    else
+      rm -f "$TMP/artalk.db"
+      ARTALK_STATUS="失败（integrity_check=${ACHK}）"
+      log "!! Artalk 库 integrity_check 失败：${ACHK}"
+    fi
+  else
+    ARTALK_STATUS="失败（.backup 出错，详见 /var/log/blog-backup.log）"
+    log "!! Artalk 库快照失败"
+  fi
+else
+  log "!! 未找到 Artalk 库：${ARTALK_DB}（已跳过，本次备份不含评论）"
+fi
+
 # 4. 打包（数据库 + 图片 + 清单）
 mkdir -p "$TMP/images"
 if [ -d "$IMGDIR" ]; then
@@ -69,9 +99,10 @@ fi
 cat > "$TMP/MANIFEST.txt" <<EOF
 备份时间: $(date '+%F %T %Z')
 数据库: blog.db（integrity_check=ok，已发布文章 $POSTS 篇）
+评论: $ARTALK_STATUS
 图片: $(find "$TMP/images" -type f 2>/dev/null | wc -l) 个文件
 其中视频: ${VID_COUNT} 个，${VID_MB}MB（配置七牛图床后视频走 CDN，不计入此项）
-来源: $DB + $IMGDIR
+来源: $DB + $IMGDIR + $ARTALK_DB
 EOF
 
 tar czf "$ARCHIVE" -C "$TMP" .

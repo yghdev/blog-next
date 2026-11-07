@@ -58,6 +58,14 @@ function getArtalkDb(): Database.Database | null {
   }
 }
 
+/**
+ * Artalk 管理面板地址（P0-7）。
+ *
+ * 后台概览的「待审评论」与评论历史页都指向它 —— 审核动作已经不在博客里了，
+ * 指向一个不可用的本地页面比不显示更糟。
+ */
+export const ARTALK_ADMIN_URL = process.env.ARTALK_ADMIN_URL || "https://artalk.yghsite.cn/sidebar/";
+
 /** Artalk 已审核且未删除的评论数；null = 读不到 */
 export function getArtalkCommentCount(): number | null {
   const db = getArtalkDb();
@@ -71,6 +79,28 @@ export function getArtalkCommentCount(): number | null {
     return row ? row.c : null;
   } catch (e) {
     console.warn("[stats] Artalk 评论查询失败:", (e as Error).message);
+    return null;
+  }
+}
+
+/**
+ * Artalk 待审评论数；null = 读不到。
+ *
+ * 概览页的「待审评论」曾经数本地 comments 表 —— 那张表自 2026-10 起不再写入，
+ * 所以数字永远是 0，而 Artalk 里可能真有待审。这里改读 Artalk，
+ * 读不到返回 null（界面显示「—」），不假装"没有待审"。
+ */
+export function getArtalkPendingCount(): number | null {
+  const db = getArtalkDb();
+  if (!db) return null;
+  try {
+    const row = db.prepare(
+      "SELECT COUNT(*) AS c FROM comments " +
+      "WHERE deleted_at IS NULL AND is_pending = 1 AND site_name = ?"
+    ).get(ARTALK_SITE) as { c: number } | undefined;
+    return row ? row.c : null;
+  } catch (e) {
+    console.warn("[stats] Artalk 待审计数失败:", (e as Error).message);
     return null;
   }
 }

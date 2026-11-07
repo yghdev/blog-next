@@ -538,12 +538,18 @@ rclone cat jianguoyun:blog-migration-20261021/wordpress-files-20261021.tar.gz \
   `next.config.ts` 的 `allowedOrigins` 已加入 artalk 域名，
   `script-src` / `connect-src` 均已验证包含。
 
-### 13.4 旧评论系统
+### 13.4 旧评论系统（2026-11-07 P0-7 已清理）
 
-自研评论（`app/api/comments`、`comments` 表、后台评论审核页）**保留未删**，
-但前端已不再调用。观察一段时间确认 Artalk 稳定后可清理。
+自研评论在观察期后按计划下线：
 
-原 2 条历史评论按要求**未迁移**。
+- `GET/POST /api/comments`、`/api/admin/comments/[id]`、`CommentActions` **全部删除**
+  （前台早已无调用方，留着只是多一个可被滥用的写入口）；
+- 后台「评论」页保留为**只读历史**：本地 `comments` 表已停止写入，
+  但 `ip` / `ua` 只有这里有，刷评论/冒名时是唯一能取证的原始记录；
+- 概览页「待审评论」改为读 Artalk 的 `is_pending`（读不到显示「—」，不假装 0）；
+- 审核 / 删除 / 封禁都在 Artalk 面板：<https://artalk.yghsite.cn/sidebar/>。
+
+原 2 条历史评论按要求**未迁移**（仍能在本地表里查到）。
 
 ### 13.5 常用命令
 
@@ -556,15 +562,15 @@ docker stats --no-stream artalk   # 内存
 sudo cat /opt/artalk/ADMIN_PASSWORD.txt
 ```
 
-### 13.6 备份（待补）
+### 13.6 备份（2026-11-07 P0-7 已补）
 
-Artalk 数据在 `/opt/artalk/data/artalk.db`（单文件 SQLite）。
-**当前 blog-backup 脚本不包含它**。若要纳入备份，在 `/usr/local/bin/blog-backup`
-打包段加一行：
+Artalk 数据在 `/opt/artalk/data/artalk.db`（单文件 SQLite），**已并入每日
+`blog-backup`**：`.backup` 在线快照 + `integrity_check` + 在 `MANIFEST.txt`
+里记录评论条数；快照失败不中止博客备份，但日志与 MANIFEST 会留下 `!!` 痕迹。
 
-```bash
-sqlite3 /opt/artalk/data/artalk.db ".backup '$TMP/artalk.db'"
-```
+**`artalk.yml` 不备份**（含 `app_key` 等密钥，不进云端）；换机恢复时用
+`deploy/artalk/artalk.example.yml` 重建。恢复步骤见 `deploy/README.md` 3.3
+（含 3b「停容器恢复评论库」）。
 
 ### 13.7 后续又踩的三个坑（配置类，现象都很迷惑）
 

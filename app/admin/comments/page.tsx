@@ -3,12 +3,12 @@ import Link from "next/link";
 import { currentUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { AdminShell } from "@/components/admin/AdminShell";
-import { CommentActions } from "@/components/admin/CommentActions";
 import { PageHeader, Badge, Empty } from "@/components/admin/ui";
+import { ARTALK_ADMIN_URL } from "@/lib/site-stats";
 import { formatIn } from "@/lib/time";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "评论" };
+export const metadata = { title: "评论（历史）" };
 
 const PAGE = 50;
 
@@ -19,21 +19,23 @@ const STATUS_LABEL: Record<string, { text: string; tone: "ok" | "warn" | "danger
 };
 
 /**
- * 评论管理（阶段 02-3）。
+ * 评论历史（2026-11-07 起**只读**，P0-7）。
  *
- * 本轮改掉的：
- *  1) 空状态没有出口。原来 `actions` 只在"筛选后为空"时给链接；**一条评论
- *     都没有时 actions=undefined**，用户看到一段说明却无处可去 ——
- *     违反 B 端门禁 14（空状态必须给行动出口）。现在两种空态都给出口。
- *  2) 评论卡片全是行内样式（每行 ~10 个魔法数字）。收进 .comment-item 等类，
- *     并让回复引文、正文、操作区有稳定的垂直节奏。
- *  3) 分页链接用字符串拼接 `"?status=" + status + "&page="`，status 为空时
- *     会产生 `?status=&page=2` 这种脏 URL。改用 URLSearchParams 统一构造。
- *  4) 排序原来靠 SQL 的 CASE 把待审排前面，但界面上没说明。现在待审筛选是
- *     默认关注点，且在页头说明审核时效性。
+ * ## 为什么拿掉了「通过 / 垃圾 / 删除」
  *
- * 保留不动：CommentActions 的三按钮语义（通过与垃圾都是次级按钮，不替审核人
- * 做决定；只有删除是危险色并要求确认）—— 那是既有 B 端门禁的正确实现。
+ * 前台评论区从 2026-10 起接的是 Artalk（独立容器 + 独立 SQLite），
+ * 本地 `comments` 表**早就不再收到新评论**。但旧页面还在提供审核按钮：
+ * 点下去只改本地表，读者看到的评论区毫无变化 —— 等于给运营者一个
+ * "我审过了"的错觉（概览页的「待审评论」也数本地表，永远是 0）。
+ *
+ * 现在职责划清：
+ *   · 审核 / 删除 / 封禁 → Artalk 面板（ARTALK_ADMIN_URL）；
+ *   · 这一页 → **只读历史**，查看旧版本写入本地表的数据。
+ *     保留它是因为这里能看到 Artalk 不展示的 `ip` / `ua`，
+ *     真出事（刷评论、冒名）时是唯一能取证的原始记录。
+ *
+ * 状态筛选 / 分页 / 分段计数都保留：只读不等于什么都看不到。
+ * 空的 `comments` 表不代表出错，所以空态文案要把这一点说清楚，并给出出口。
  */
 export default async function CommentsPage({ searchParams }: { searchParams: Promise<{ status?: string; page?: string }> }) {
   const user = await currentUser();
@@ -59,13 +61,12 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
   })();
 
   const rows = db.prepare(
-    "SELECT c.*, p.title as post_title, p.slug as post_slug FROM comments c JOIN posts p ON c.post_id = p.id " +
+    "SELECT c.*, p.title as post_title FROM comments c JOIN posts p ON c.post_id = p.id " +
     where + " ORDER BY CASE c.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 ELSE 2 END, c.created_at DESC " +
     "LIMIT ? OFFSET ?"
   ).all(...args, PAGE, (page - 1) * PAGE) as {
     id: number; author: string; email: string; url: string; content: string; status: string;
-    created_at: string; ip: string; parent_id: number | null; post_id: number;
-    post_title: string; post_slug: string;
+    created_at: string; ip: string; parent_id: number | null; post_id: number; post_title: string;
   }[];
 
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -88,12 +89,28 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
     { key: "spam", label: "垃圾", count: counts.spam },
   ];
 
+  const artalkLink = (
+    <a className="btn btn-sm" href={ARTALK_ADMIN_URL} target="_blank" rel="noopener noreferrer">
+      去 Artalk 审核
+    </a>
+  );
+
   return (
     <AdminShell active="comments" username={user.username}>
       <PageHeader
         title="评论"
-        sub="游客评论默认进待审队列，通过之后才会出现在文章页。垃圾只会隐藏，删除才是真的移除。"
+        count={total}
+        sub="只读历史。评论现在由 Artalk 管理，本地表已停止写入；审核、删除、封禁都在 Artalk 后台做。"
+        actions={artalkLink}
       />
+
+      <div className="notice notice-info">
+        <strong>本页只读。</strong>
+        这里展示的是<strong>旧版本</strong>写入博客自有 <code>comments</code> 表的历史评论（<code>ip</code> / <code>ua</code> 只有这里有，
+        取证时用得上）。2026-11 起前台评论区接的是 Artalk，审核与删除都在
+        <a href={ARTALK_ADMIN_URL} target="_blank" rel="noopener noreferrer">Artalk 后台</a>
+        做 —— 本页不再提供任何写操作。
+      </div>
 
       <nav className="seg-tabs" aria-label="评论状态筛选">
         {tabs.map((t) => {
@@ -114,16 +131,14 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
 
       {rows.length === 0 ? (
         <Empty
-          title={status ? "这个状态下没有评论" : "还没有评论"}
+          title={status ? "这个状态下没有历史评论" : "还没有历史评论"}
           hint={status
-            ? "换个状态看看，或者切回「全部」。"
-            : "文章页底部的评论区接通的是 Artalk，读者留言后会先落到待审队列，通过后才显示。"}
+            ? "换个状态看看，或者切回「全部」。新评论不会出现在这里 —— 它们进的是 Artalk。"
+            : "本地 comments 表只在旧版本里写入过数据；空的表是正常状态。真实评论在 Artalk 后台。"}
           actions={
             status
-              ? <Link className="btn btn-sm" href="/admin/comments">看全部评论</Link>
-              // 一条评论都没有时也必须给出口：原来这里是 undefined，
-              // 用户看到说明却无处可去（B 端门禁 14）
-              : <Link className="btn btn-sm" href="/admin">去看文章</Link>
+              ? <Link className="btn btn-sm" href="/admin/comments">看全部</Link>
+              : artalkLink
           }
         />
       ) : (
@@ -149,8 +164,6 @@ export default async function CommentsPage({ searchParams }: { searchParams: Pro
                 ) : null}
 
                 <div className="comment-item-body">{c.content}</div>
-
-                <CommentActions id={c.id} currentStatus={c.status} />
               </div>
             );
           })}

@@ -7,6 +7,7 @@ import { PageHeader, Empty, StatCard, SectionHead, State } from "@/components/ad
 import { QuickCapture } from "@/components/admin/QuickCapture";
 import { formatIn } from "@/lib/time";
 import { labelFor, TYPE_LABEL, type ContentType } from "@/lib/admin-content";
+import { ARTALK_ADMIN_URL, getArtalkPendingCount } from "@/lib/site-stats";
 import {
   IconArchive, IconChat, IconComment, IconFolder, IconPen,
 } from "@/components/admin/editor-icons";
@@ -80,7 +81,11 @@ export default async function OverviewPage() {
   /** 概览与列表页共用同一套文案规则：说说取正文，文章取标题 */
   const shown = (r: { type: string; title: string; body: string }) => labelFor(asType(r.type), r.title, r.body);
 
-  const pending = (db.prepare("SELECT COUNT(*) c FROM comments WHERE status='pending'").get() as { c: number }).c;
+  /**
+   * 待审评论以 Artalk 为准（P0-7）：本地 comments 表已停止写入，
+   * 数它永远是 0，而真正的待审在 Artalk 里。读不到时显示「—」。
+   */
+  const artalkPending = getArtalkPendingCount();
   const trash = (db.prepare("SELECT COUNT(*) c FROM posts WHERE deleted_at IS NOT NULL").get() as { c: number }).c;
   /**
    * 分类型的计数。
@@ -150,8 +155,12 @@ export default async function OverviewPage() {
         <StatCard label="说说" value={typeCounts.shuoshuo} href="/admin/shuoshuo" icon={<IconChat size={16} />} hint="进入说说列表" />
         <StatCard label="页面" value={typeCounts.page} href="/admin/pages" icon={<IconFolder size={16} />} hint="进入页面列表" />
         <StatCard
-          label="待审评论" value={pending} href="/admin/comments?status=pending"
-          icon={<IconComment size={16} />} alert={pending > 0} hint="进入待审评论"
+          label="待审评论"
+          value={artalkPending === null ? "—" : artalkPending}
+          href={ARTALK_ADMIN_URL}
+          icon={<IconComment size={16} />}
+          alert={artalkPending !== null && artalkPending > 0}
+          hint="去 Artalk 后台审核"
         />
         <StatCard label="回收站" value={trash} href="/admin/trash" icon={<IconArchive size={16} />} hint="进入回收站" />
       </div>

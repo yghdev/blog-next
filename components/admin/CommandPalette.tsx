@@ -33,7 +33,7 @@ const STATIC_ACTIONS: StaticAction[] = [
   { key: "shuoshuo", label: "说说", hint: "短句与碎片想法", href: "/admin/shuoshuo", keywords: "说说 短句 碎片 shuoshuo" },
   { key: "pages", label: "页面", hint: "关于 / 归档等独立内容", href: "/admin/pages", keywords: "页面 关于 独立 page" },
   { key: "overview", label: "概览", hint: "继续工作", href: "/admin/overview", keywords: "概览 首页 待办 overview home" },
-  { key: "comments", label: "评论", hint: "审核与回复", href: "/admin/comments", keywords: "评论 审核 comments" },
+  { key: "comments", label: "评论", hint: "历史（只读）", href: "/admin/comments", keywords: "评论 审核 comments artalk 历史 只读" },
   { key: "media", label: "媒体", hint: "图片与文件", href: "/admin/media", keywords: "媒体 图片 文件 media" },
   { key: "links", label: "外链", hint: "友链与聚合", href: "/admin/links", keywords: "外链 友链 links" },
   { key: "audit", label: "日志", hint: "操作记录", href: "/admin/audit", keywords: "日志 审计 操作 audit log" },
