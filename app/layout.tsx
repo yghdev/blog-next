@@ -85,6 +85,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* 侧栏开合状态提到 provider：顶栏（手机）与左栏（平板）各有一个入口，
             内容在服务端渲染好作为 panel 传入 */}
         <SidebarSheetProvider panel={<MobileSidebarContent />}>
+          {/* 键盘用户跳过左栏导航（P0-4）：聚焦才出现，目标见 SiteShell 的 #main-content */}
+          <FrontOnly>
+            <a className="skip-link" href="#main-content">跳到正文</a>
+          </FrontOnly>
           <FrontOnly><MobileNav links={drawerLinks} siteName={siteName} /></FrontOnly>
           {children}
           {/* 全站页脚：备案号与页脚文字此前只有后台能填、前台没渲染 */}

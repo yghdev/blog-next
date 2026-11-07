@@ -87,7 +87,13 @@ export async function SiteShell({
   return (
     <div className={"site-shell site-shell--" + variant}>
       <Sidebar siteName={siteName} siteDesc={siteDesc} />
-      <main className={"content" + (className ? " " + className : "")}>{children}</main>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className={"content" + (className ? " " + className : "")}
+      >
+        {children}
+      </main>
       {variant === "three-col" ? (
         <div className="toc-col">
           <RightBar toc={toc} tocOnly={tocOnly} />

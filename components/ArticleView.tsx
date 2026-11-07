@@ -10,6 +10,7 @@ import { getPageViewsCached, getSettingsCached } from "@/lib/cached";
 import { renderMarkdown } from "@/lib/markdown";
 import { CommentSection } from "./CommentSection";
 import { Lightbox } from "./Lightbox";
+import { ArticleToc } from "./ArticleToc";
 import { categoryColor } from "@/lib/category-color";
 import type { Post } from "@/lib/db";
 
@@ -67,6 +68,8 @@ export async function ArticleView({ doc }: { doc: Post }) {
       <Animations />
       <Lightbox />
       <SiteShell variant="three-col" toc={toc} tocOnly className="content--article">
+          {/* 移动/平板目录（P0-3）：≥1392 由右栏承担，这里在 CSS 里隐藏 */}
+          <ArticleToc toc={toc} />
           <article>
             <header className="article-header">
               {cats.length > 0 ? (
