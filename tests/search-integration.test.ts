@@ -101,6 +101,86 @@ test("浏览量来自 hits 表 + 历史基线，渲染路径不请求外部服�
   assert.equal(map.get(postId), 78, "首页批量取一次查询即可，key 是 post_id");
 });
 
+/* ---------- P0-6（2026-11-07）：2 字词 / 相关性排序 / 计数 / 摘要 ---------- */
+
+/** 插一篇已发布文章（走 posts 表的 FTS 触发器，索引自动更新） */
+function insertPost(opts: { slug: string; title: string; content: string; at?: string }) {
+  const db = dbMod.getDb();
+  const at = opts.at ?? timeMod.nowIso();
+  db.prepare(
+    "INSERT INTO posts (type, slug, title, content, status, published_at, created_at, updated_at) " +
+    "VALUES ('post', ?, ?, ?, 'published', ?, ?, ?)"
+  ).run(opts.slug, opts.title, opts.content, at, at, at);
+}
+
+test("P0-6：2 字查询（LIKE 兜底）也按相关性排序，标题命中在前", () => {
+  insertPost({ slug: "p06-video-title", title: "视频剪辑入门", content: "从零开始学剪辑。", at: "2026-10-01 00:00:00" });
+  // 正文里出现 5 次但没有标题命中：按时间它更新，但相关性更低，必须排在后面
+  insertPost({ slug: "p06-video-body", title: "随便聊聊", content: "视频 视频 视频 视频 视频", at: "2026-10-30 00:00:00" });
+
+  const r = searchMod.searchPosts("视频", { limit: 10 });
+  assert.equal(r.mode, "like", "2 字查询走关键词匹配");
+  const slugs = r.hits.map((h) => h.slug);
+  assert.equal(slugs[0], "p06-video-title", "标题命中必须排第一，实际顺序: " + slugs.join(","));
+  assert.equal(r.total, 2, "total 应等于命中总数");
+  assert.equal(r.capped, false);
+});
+
+test("P0-6：total 是命中总数，不随 limit 截断（此前把 hits.length 当总数）", () => {
+  const r = searchMod.searchPosts("视频", { limit: 1 });
+  assert.equal(r.hits.length, 1, "limit=1 只回一条");
+  assert.ok(r.total >= 2, "但 total 仍是真实命中数，实际 " + r.total);
+});
+
+test("P0-6：ASCII 词有边界 —— AI 不命中 email / main", () => {
+  insertPost({ slug: "p06-ai", title: "AI 写作工具", content: "用 AI 辅助写作。" });
+  insertPost({ slug: "p06-email", title: "邮件备忘", content: "email 通知与 main 函数都会出现 a i 字样。" });
+
+  const r = searchMod.searchPosts("AI", { limit: 10 });
+  const slugs = r.hits.map((h) => h.slug);
+  assert.ok(slugs.includes("p06-ai"), "AI 应命中标题里的 AI，实际: " + slugs.join(","));
+  assert.equal(slugs.includes("p06-email"), false, "AI 不得命中 email/main");
+  assert.equal(r.total, slugs.length > 0 ? slugs.length : 0);
+});
+
+test("P0-6：多词是 AND —— 两个词都出现才进结果", () => {
+  insertPost({ slug: "p06-both", title: "deepseek 生成视频", content: "两条都在。" });
+  insertPost({ slug: "p06-only-ds", title: "deepseek 笔记", content: "只有前一个词。" });
+  insertPost({ slug: "p06-only-video", title: "视频杂谈", content: "只有后一个词。" });
+
+  const r = searchMod.searchPosts("deepseek 视频", { limit: 10 });
+  const slugs = r.hits.map((h) => h.slug);
+  assert.ok(slugs.includes("p06-both"));
+  assert.equal(slugs.includes("p06-only-ds"), false, "只有一个词的不能进 AND 结果");
+  assert.equal(slugs.includes("p06-only-video"), false);
+});
+
+test("P0-6：摘要以命中位置为中心截取（此前永远取正文开头）", () => {
+  insertPost({
+    slug: "p06-deep",
+    title: "长文一篇",
+    content: "铺垫".repeat(300) + "这里才是霍夫变换的详解" + "收尾".repeat(100),
+  });
+
+  const r = searchMod.searchPosts("霍夫变换", { limit: 5 });
+  const hit = r.hits.find((h) => h.slug === "p06-deep");
+  assert.ok(hit, "应命中长文（全文索引）");
+  assert.ok(hit.excerpt.includes("霍夫变换"), "摘要里必须能看到命中词，实际: " + hit.excerpt);
+  assert.ok(hit.excerpt.startsWith("…"), "命中不在开头时应带前导省略号");
+  assert.equal(r.mode, "fts", "4 字中文走全文索引");
+});
+
+test("P0-6：候选被上限截断时 capped=true，total 只是下限", () => {
+  const N = searchMod.CANDIDATE_CAP + 3;
+  for (let i = 0; i < N; i++) {
+    insertPost({ slug: "p06-cap-" + i, title: "容量测试 " + i, content: "CAPMARK 内容" });
+  }
+  const r = searchMod.searchPosts("CAPMARK", { limit: 1 });
+  assert.equal(r.hits.length, 1);
+  assert.equal(r.capped, true, "超过候选上限时应标记 capped，界面才能写 N+");
+  assert.equal(r.total, searchMod.CANDIDATE_CAP, "被截断时 total 是下限而不是谎报精确值");
+});
+
 test("cleanup", () => {
   dbMod.closeDb();
   fs.rmSync(TMP, { recursive: true, force: true });

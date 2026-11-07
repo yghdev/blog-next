@@ -236,7 +236,15 @@ export function uniqueSlug(base: string, taken: (s: string) => boolean): string 
 /**
  * 生成摘要。关键：链接/图片只保留可读文字，绝不能把 URL 混进摘要。
  */
-export function makeExcerpt(md: string, len = 120): string {
+/**
+ * 把 Markdown 正文变成"可读的一行纯文本"（去代码块、链接语法、标题井号、表格线…）。
+ *
+ * 单独抽出来的原因（P0-6，2026-11-07）：搜索摘要需要在**命中位置附近**截取，
+ * 而不再只是取开头 120 字（见 lib/highlight.ts 的 snippetAround）。两处清洗
+ * 规则必须一致 —— 摘要里残留 `**` 或 `](http…` 这种碎片，是"看着像 bug"的
+ * 那一类瑕疵。makeExcerpt 现在复用它，行为不变。
+ */
+export function plainText(md: string): string {
   let t = md;
   t = t.replace(/```[\s\S]*?```/g, " ");
   t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
@@ -245,9 +253,20 @@ export function makeExcerpt(md: string, len = 120): string {
   t = t.replace(/^\s*\|.*\|\s*$/gm, " ");
   t = t.replace(/^\s*\|?[\s:|-]{3,}\|?\s*$/gm, " ");
   t = t.replace(/^\s{0,3}#{1,6}\s+/gm, "");
-  t = t.replace(/[*_~`>\-]/g, "");
+  // 列表/有序列表的符号在行首才删：`- ` 是项目符号，而 `2026-11-07`、`coc-tool`
+  // 里的连字符是正文。旧的 `[*_~`>\-]` 见字符就删，把日期摘成了 `20261107`，
+  // 也让搜索词 `CACHE_DB_ONLY` 永远匹配不到（下划线被吃掉了）—— 见 P0-6。
+  t = t.replace(/^\s{0,3}(?:[-*+]|\d+[.)])\s+/gm, "");
+  t = t.replace(/^\s*>\s?/gm, "");
+  // 只删真正无信息量的修饰符；`_` 保留（下划线在标识符里是内容，不是格式）
+  t = t.replace(/[*~`]/g, "");
   t = t.replace(/\(?\s*https?:\/\/[^\s)]+\s*\)?/g, " ");
   t = t.replace(/\s+/g, " ").trim();
+  return t;
+}
+
+export function makeExcerpt(md: string, len = 120): string {
+  const t = plainText(md);
   return t.length > len ? t.slice(0, len) + "…" : t;
 }
 

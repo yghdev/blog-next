@@ -82,3 +82,53 @@ test("B-6 首页仍保留 content-search（它的隐藏规则是给首页用的�
   const css = read("app/globals.css");
   assert.match(css, /@media \(max-width: 820px\) \{\s*\.content-search \{ display: none; \}/, "820px 下仍应隐藏首页的 content-search");
 });
+
+/* ------------------- P0-6（2026-11-07）：计数 / 高亮 / 2 字词 ------------------- */
+
+test("P0-6 计数用 total（不是 hits.length），被截断时写 N+", () => {
+  const src = read("app/search/page.tsx");
+  // 结果被 limit 截断时，hits.length 只是"这一页几条"，不能当总数
+  assert.match(src, /searchPosts\(/, "应调用 searchPosts");
+  assert.match(src, /total/, "计数必须用 total");
+  assert.match(src, /capped/, "候选被截断时要能写 N+");
+  assert.match(src, /显示前/, "total 大于本页条数时要说明只显示了前 N 条");
+  assert.doesNotMatch(src, /"找到 " \+ hits\.length \+ " 篇"/, "不得再把本页条数说成总数");
+});
+
+test("P0-6 高亮：页面把命中词传给卡片，卡片用 <mark> 渲染", () => {
+  const page = read("app/search/page.tsx");
+  assert.match(page, /highlightTerms/, "页面必须从 lib/highlight 取词（与排序/摘要同源）");
+  assert.match(page, /highlight=\{terms\}/, "PostCard 应收到 highlight={terms}");
+
+  const card = read("components/PostCard.tsx");
+  assert.match(card, /highlight\?:/, "PostCard 应声明可选 highlight 属性");
+  assert.match(card, /<Highlight\b/, "PostCard 应复用 Highlight 组件");
+
+  const comp = read("components/Highlight.tsx");
+  assert.match(comp, /<mark className="search-hit">/, "命中片段必须渲染成 <mark class=search-hit>");
+  // 只看代码用法（注释里提到这个词是用来解释"为什么不用"的）
+  assert.doesNotMatch(comp, /dangerouslySetInnerHTML\s*=\s*\{\{/, "高亮不得拼 HTML 字符串（XSS 面）");
+});
+
+test("P0-6 高亮样式：不用浏览器默认亮黄，且不改变文字颜色", () => {
+  const css = read("app/globals.css");
+  assert.match(css, /\.search-hit\s*\{/, "globals.css 应定义 .search-hit");
+  const block = css.slice(css.indexOf(".search-hit {"));
+  const body = block.slice(0, block.indexOf("\n}") + 2);
+  assert.match(body, /background:\s*color-mix\(/, "背景走 color-mix（跟随主题主色）");
+  assert.match(body, /color:\s*inherit/, "文字颜色必须继承，否则会破坏层级/对比度");
+});
+
+test("P0-6 文案与 TRIGRAM_MIN 对齐：全文索引是 3 个字，不是 2 个", () => {
+  const page = read("app/search/page.tsx");
+  assert.doesNotMatch(page, /两字以上/, "界面不得再声称「两字以上走全文索引」");
+  assert.match(page, /三个字以上/, "应改成 3 个字以上");
+});
+
+test("P0-6 API：返回 total/capped/terms，且仍带 no-store", () => {
+  const src = read("app/api/search/route.ts");
+  assert.match(src, /total/, "公开搜索接口应返回 total");
+  assert.match(src, /capped/, "公开搜索接口应返回 capped");
+  assert.match(src, /terms/, "公开搜索接口应返回 terms（前端高亮用）");
+  assert.match(src, /no-store/, "公开搜索必须 no-store（草稿泄露主探针依赖它）");
+});

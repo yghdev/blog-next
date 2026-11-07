@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { formatIn, toUtcIso } from "@/lib/time";
 import { categoryColor } from "@/lib/category-color";
+import { Highlight } from "./Highlight";
 
 type Props = {
   href: string;
@@ -10,13 +11,23 @@ type Props = {
   categories?: string[];
   readingTime?: number;
   views?: number;
+  /**
+   * 命中的搜索词（P0-6）。只有搜索结果页会传：卡片本身不知道自己为什么被选中，
+   * 传进来才把标题/摘要里的命中词标成 <mark>。不传时渲染与原来完全一致。
+   */
+  highlight?: string[];
 };
 
-export function PostCard({ href, title, excerpt, date, categories = [], readingTime, views }: Props) {
+export function PostCard({
+  href, title, excerpt, date, categories = [], readingTime, views, highlight,
+}: Props) {
+  const mark = highlight && highlight.length > 0 ? highlight : null;
   return (
     <Link href={href} className="post-card slide-up">
-      <h2>{title}</h2>
-      {excerpt ? <div className="excerpt">{excerpt}</div> : null}
+      <h2>{mark ? <Highlight text={title} terms={mark} /> : title}</h2>
+      {excerpt ? (
+        <div className="excerpt">{mark ? <Highlight text={excerpt} terms={mark} /> : excerpt}</div>
+      ) : null}
       <div className="meta">
         <time dateTime={toIso(date)}>{formatDate(date)}</time>
         {readingTime ? <><span className="dot">·</span><span>{readingTime} 分钟</span></> : null}

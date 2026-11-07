@@ -291,6 +291,30 @@ try {
   const oldSearch = await searchProbe(server.base, "CACHE_BEFORE_TITLE");
   assert.deepEqual(oldSearch.hits, [], "no-store search must not return the old title");
 
+  /* ------------- P0-6：搜索结果页的高亮与计数（真渲染） ------------- */
+  /**
+   * 为什么要在这一层测：高亮是 `<mark>` 元素、计数是一句话，两者都由 React
+   * 在服务端渲染出来。源码断言（tests/search-page.test.ts）只能证明"写了"，
+   * 证明不了"渲染出来是 <mark> 而不是被转义的 &lt;mark&gt;"。
+   */
+  const q = "CACHE_AFTER_TITLE";
+  const searchPage = await fetchText(server.base, "/search?q=" + encodeURIComponent(q));
+  assert.equal(searchPage.status, 200, "搜索页应 200");
+  assert.match(
+    searchPage.text,
+    /<mark class="search-hit">CACHE_AFTER_TITLE<\/mark>/,
+    "搜索结果必须把命中词标成 <mark class=search-hit>"
+  );
+  assert.match(searchPage.text, /找到 1 篇/, "搜索页必须显示命中总数");
+
+  const searchJson = await (await fetch(
+    server.base + "/api/search?q=" + encodeURIComponent(q)
+  )).json();
+  assert.equal(searchJson.total, 1, "API 的 total 必须是命中总数");
+  assert.equal(searchJson.capped, false, "少量结果不该标记 capped");
+  assert.deepEqual(searchJson.terms, [q], "API 应回传高亮词表");
+  console.log("PASS 搜索页：命中高亮 <mark> + 计数与 API total 一致");
+
   /* ------------------------- sitemap 语义 ------------------------- */
   /**
    * sitemap 语义（P0-5 之后重写）。

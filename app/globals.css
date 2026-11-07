@@ -656,6 +656,23 @@ a:hover { color: var(--link-hover); }
   margin: 0 0 16px;
 }
 
+/*
+ * 搜索命中高亮（P0-6，2026-11-07）。
+ *
+ * 背景用主色低透明度混合，而不是 <mark> 的浏览器默认亮黄：
+ * 那个黄在暗色模式里是整页最刺眼的色块，且和全站低饱和青绿不搭。
+ * 文字颜色保持 inherit —— 命中不该改变文字颜色（会破坏层级与对比度）。
+ */
+.search-hit {
+  background: color-mix(in oklab, var(--link) 20%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+  /* 标题里的命中会跨行，避免背景在行间断开得太难看 */
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
 /* `.tag-count` 已删除（C-8）：标签页改用 <PageHeader sub="…">，
    它的排版语义并入 `.page-sub`。 */
 

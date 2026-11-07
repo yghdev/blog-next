@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { SearchBox } from "@/components/SearchBox";
 import { PostCard } from "@/components/PostCard";
 import { searchPosts } from "@/lib/search";
+import { highlightTerms } from "@/lib/highlight";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +20,26 @@ export const metadata = { title: "搜索", robots: { index: false, follow: true 
  *     没有 .excerpt 类，导致摘要占满行宽、行高错乱，和首页卡片不是一套排版。
  *     现在统一复用 PostCard。
  *  2) 没结果时只有一句「没有找到相关文章」，没有出口。补上可执行建议。
+ *
+ * P0-6（2026-11-07）三件事：
+ *  · 计数：此前把 `hits.length`（最多 30，被 limit 截断）当成"共 N 篇"。
+ *    现在用 searchPosts 的 total，被候选上限截断时写 "N+"；
+ *  · 高亮：标题与摘要里的命中词用 <mark> 标出，规则与排序/摘要同源；
+ *  · 2 字词：不再"降级后只按时间倒序"，排序、摘要、计数都跟 3 字以上一致。
  */
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
-  const { hits, mode } = q ? searchPosts(q, { limit: 30 }) : { hits: [], mode: "like" as const };
+  const { hits, mode, total, capped } = q
+    ? searchPosts(q, { limit: 30 })
+    : { hits: [], mode: "like" as const, total: 0, capped: false };
+  // 高亮词与搜索用的是同一套拆分规则（lib/highlight.ts）
+  const terms = q ? highlightTerms(q) : [];
+  const modeLabel = mode === "fts" ? "全文索引" : "关键词匹配";
+  const countText = total > 0
+    ? "找到 " + total + (capped ? "+" : "") + " 篇" +
+      (total > hits.length ? " · 显示前 " + hits.length + " 条" : "") + " · " + modeLabel
+    : "没有匹配结果 · " + modeLabel;
 
   return (
     <>
@@ -40,18 +56,12 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           <SearchBox initial={q} variant="dashed" />
         </div>
 
-        {q ? (
-          <p className="search-meta">
-            {hits.length > 0
-              ? "找到 " + hits.length + " 篇 · " + (mode === "fts" ? "全文索引" : "关键词匹配")
-              : "没有匹配结果 · " + (mode === "fts" ? "全文索引" : "关键词匹配")}
-          </p>
-        ) : null}
+        {q ? <p className="search-meta">{countText}</p> : null}
 
         {q && hits.length === 0 ? (
           <EmptyState
             title={"没有找到「" + q + "」"}
-            hint="两字以上的词能走全文索引，单个字只能逐条匹配，容易搜不到。也可以换个更短的关键词，或者直接从归档里翻。"
+            hint="三个字以上走全文索引；一两个字按关键词匹配，标题命中会排在前面。换个关键词，或者直接从归档里翻也行。"
             actions={
               <>
                 <Link className="btn btn-sm" href="/archives">看归档</Link>
@@ -68,6 +78,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                 title={h.title}
                 excerpt={h.excerpt}
                 date={h.date}
+                highlight={terms}
               />
             ))}
           </div>
@@ -76,7 +87,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         {!q ? (
           <EmptyState
             title="想找点什么？"
-            hint="输入标题或正文里的关键词，回车即可。两字以上会走全文索引，更快更准。"
+            hint="输入标题或正文里的关键词，回车即可。三个字以上走全文索引，一两个字按关键词匹配。"
           />
         ) : null}
       </SiteShell>
