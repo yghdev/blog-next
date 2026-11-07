@@ -14,6 +14,7 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { SidebarSheetProvider } from "@/components/SidebarSheet";
 import { FrontOnly } from "@/components/FrontOnly";
 import { LIGHT_BG } from "@/lib/theme-colors";
+import { absoluteUrl, DEFAULT_OG_IMAGE, ogImageFor, SITE_URL, siteAlternates } from "@/lib/seo";
 
 /**
  * C4：站名/描述此前硬编码在这里，改一个字要重新构建。
@@ -24,7 +25,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: { default: s.siteTitle, template: "%s · " + s.author },
     description: s.siteDescription,
-    metadataBase: new URL(process.env.SITE_URL || "https://blog.yghsite.cn"),
+    // metadataBase 与 canonical/og:url 共用同一个来源（lib/seo 的 SITE_URL），
+    // 否则相对路径会被补成另一个域名，canonical 与 og:url 互相矛盾
+    metadataBase: new URL(SITE_URL),
+    // RSS autodiscovery（P0-5）：浏览器地址栏 / 阅读器据此自动发现 /rss.xml
+    alternates: siteAlternates(),
     manifest: "/manifest.webmanifest",
     applicationName: s.siteTitle,
     openGraph: {
@@ -33,11 +38,17 @@ export async function generateMetadata(): Promise<Metadata> {
       title: s.siteTitle,
       description: s.siteDescription,
       locale: "zh_CN",
+      // 全站兜底分享图：没有单独指定 og:image 的页面分享出去也有画面。
+      // 刻意**不**在这里写 og:url —— layout 的 openGraph 会被没自带 openGraph 的
+      // 页面继承，写死 "/" 会让 /archives、/about 等页面也对外声称自己是首页。
+      // og:url 只在"知道自己是谁"的地方写（文章页、友链页）。
+      images: [ogImageFor(null)],
     },
     twitter: {
       card: "summary_large_image",
       title: s.siteTitle,
       description: s.siteDescription,
+      images: [absoluteUrl(DEFAULT_OG_IMAGE)],
     },
     appleWebApp: { capable: true, title: s.author, statusBarStyle: "default" },
     icons: {

@@ -175,6 +175,33 @@ try {
   assert.match(canonical.text, /NEXT_PUBLIC_NEW_BODY/, "published post must be publicly visible at its canonical URL");
   console.log("PASS publication visibility: old slug 308 -> /p/" + published.id + ", canonical renders body");
 
+  /* ---------------------- SEO 元信息（P0-5，2026-11-07） ---------------------- */
+  /**
+   * 这一段只能在真实服务上测：canonical / og:image / JSON-LD 是 Next metadata
+   * API 的**渲染结果**，单元测试（tests/seo.test.ts）只能证明取值函数对，
+   * 证明不了它真的进了 `<head>`。尤其是「页面自己的 alternates 会把 layout 的
+   * RSS autodiscovery 整块替换掉」这类坑，只有读渲染后的 HTML 才看得见。
+   */
+  const siteOrigin = (process.env.SITE_URL || "https://blog.yghsite.cn").replace(/\/+$/, "");
+  const postPath = "/p/" + published.id;
+  assert.match(
+    canonical.text,
+    new RegExp('<link rel="canonical" href="' + siteOrigin + postPath + '"/>'),
+    "文章页缺少 canonical（或地址不是绝对 URL）"
+  );
+  assert.match(canonical.text, /property="og:url" content="[^"]*\/p\/\d+"/, "缺少 og:url");
+  assert.match(
+    canonical.text,
+    /property="og:image" content="[^"]*\/og-default\.png"/,
+    "没有封面的文章应回落到默认分享图"
+  );
+  assert.match(canonical.text, /name="twitter:card" content="summary_large_image"/, "twitter 卡应固定用大卡");
+  assert.match(canonical.text, /application\/ld\+json/, "缺少 JSON-LD");
+  assert.match(canonical.text, /"@type":"BlogPosting"/, "JSON-LD 类型应为 BlogPosting");
+  assert.match(canonical.text, /"datePublished":"[0-9T:.\-]+Z"/, "JSON-LD 缺 datePublished 或不是 ISO 时间");
+  assert.match(canonical.text, /rel="alternate" type="application\/rss\+xml"/, "缺少 RSS autodiscovery");
+  console.log("PASS SEO: canonical / og:url / og:image / JSON-LD / RSS autodiscovery 都在文章页 HTML 里");
+
   const redirectPost = await create({ type: "post", slug: "redirect-old", title: "REDIRECT_TITLE", content: "REDIRECT_BODY", status: "published" });
   // 先把它抓进 unstable_cache，再改 slug —— 这样 308 不会被"根本没缓存过"掩盖
   await fetchText(server.base, "/redirect-old");
@@ -266,19 +293,27 @@ try {
 
   /* ------------------------- sitemap 语义 ------------------------- */
   /**
-   * sitemap 的正确断言方式（实测结论，别再改回"断言新文章出现"）：
-   * app/sitemap.ts 有 `export const revalidate = 3600`，Next 会在 **next build 时
-   * 预渲染** 它（构建输出里就是 `○ /sitemap.xml 1h`）。所以：
-   *   - 运行期新建的文章不会立刻出现在 sitemap 里，要等 ISR 到期
-   *   - 上一版这里写 `assert.match(text, /publication-new/)` 必然失败
-   * 这正是验收矩阵 §11.2 说的「sitemap revalidate 3600 单独测，不作为正文泄露主探针」。
-   * 这里测两件真实成立的事：形状正确，且**不泄露草稿**。
+   * sitemap 语义（P0-5 之后重写）。
+   *
+   * 改之前：`app/sitemap.ts` 带 `export const revalidate = 3600`，Next 在
+   * **next build 时**预渲染（`○ /sitemap.xml 1h`），构建机读的是空/旧库，
+   * 于是运行期新建的文章要等 ISR 到期才出现 —— 上一版这里只能退而断言
+   * "形状正确 + 不泄露草稿"，并为"新文章不出现"在注释里留了借口。
+   *
+   * 现在改成 `dynamic = "force-dynamic"`，请求期直读线上库。所以这里可以
+   * 断言真正该成立的事：**刚发布的文章立刻出现在 sitemap 里**，同时
+   * 草稿仍然不泄露（两个方向都测，而不是只测一边）。
    */
   const sitemap = await fetchText(server.base, "/sitemap.xml");
   assert.equal(sitemap.status, 200);
   assert.match(sitemap.text, /<urlset/, "sitemap must be a urlset document");
+  assert.match(
+    sitemap.text,
+    new RegExp("<loc>" + siteOrigin.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + postPath + "</loc>"),
+    "sitemap 必须请求期渲染：刚发布的文章 /p/" + published.id + " 要立刻出现"
+  );
   assert.doesNotMatch(sitemap.text, /next-draft/, "sitemap must never list draft slugs");
-  console.log("PASS sitemap: urlset shape, prerendered ISR semantics, no draft leakage");
+  console.log("PASS sitemap: urlset shape, 运行期新文章立刻出现, no draft leakage");
 
   /* --------------------------- 健康检查 --------------------------- */
   const health = await fetch(server.base + "/api/healthz");

@@ -1,10 +1,20 @@
 import type { MetadataRoute } from "next";
 import { listPosts, postHref } from "@/lib/posts";
 import { toUtcIso } from "@/lib/time";
+import { SITE_URL as SITE } from "@/lib/seo";
 
-const SITE = process.env.SITE_URL || "https://blog.yghsite.cn";
-
-export const revalidate = 3600;
+/**
+ * P0-5（2026-11-07）：**必须请求期渲染**。
+ *
+ * 此前这里是 `export const revalidate = 3600`，Next 于是在 `next build` 时
+ * 预渲染 sitemap（构建输出 `○ /sitemap.xml 1h`）。而构建机读的是**本地库**
+ * （data/blog.db，0~31 篇的旧数据），产物里就冻住一份与线上不一致的 sitemap，
+ * 且要等 ISR 到期才会自愈 —— 期间搜索引擎抓到的是一份错误清单。
+ *
+ * 改成动态后每次请求直读线上库；代价是一次 SQLite 查询（<1ms），
+ * 换来的是"发布即出现在 sitemap"，与 rss.xml（也是 force-dynamic）口径一致。
+ */
+export const dynamic = "force-dynamic";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const posts = listPosts({ limit: 1000 });

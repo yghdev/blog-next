@@ -2,6 +2,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { postHref } from "@/lib/posts";
 import { resolveSlugCached, getPageBySlugCached } from "@/lib/cached";
+import { getSettings } from "@/lib/settings";
 import { ArticleView, articleMetadata } from "@/components/ArticleView";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const resolved = await resolveSlugCached(slug);
   const doc = resolved.post ?? (await getPageBySlugCached(slug));
   if (!doc || resolved.redirectTo) return {};
-  return articleMetadata(doc);
+  return articleMetadata(doc, getSettings());
 }
 
 export default async function LegacySlugPage({ params }: { params: Promise<{ slug: string }> }) {

@@ -8,7 +8,8 @@ import { searchPosts } from "@/lib/search";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "搜索" };
+// 搜索结果页没有独立内容，进索引只会稀释权重（Baidu/Google 的站内搜索页常见问题）
+export const metadata = { title: "搜索", robots: { index: false, follow: true } };
 
 /**
  * 搜索结果页。

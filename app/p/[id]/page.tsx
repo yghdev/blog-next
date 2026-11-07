@@ -1,6 +1,7 @@
 import { notFound, permanentRedirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getPostByIdCached } from "@/lib/cached";
+import { getSettings } from "@/lib/settings";
 import { ArticleView, articleMetadata } from "@/components/ArticleView";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const doc = await getPostByIdCached(id);
   if (!doc) return {};
-  return articleMetadata(doc);
+  return articleMetadata(doc, getSettings());
 }
 
 export default async function PostByIdPage({ params }: { params: Promise<{ id: string }> }) {

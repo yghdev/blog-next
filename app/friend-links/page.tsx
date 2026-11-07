@@ -19,6 +19,7 @@ import { FriendCard } from "@/components/friends/FriendCard";
 import { SiteAvatar } from "@/components/friends/SiteAvatar";
 import { CopyFriendConfig } from "@/components/friends/CopyFriendConfig";
 import { JumpToComments } from "@/components/friends/JumpToComments";
+import { ogImageFor, siteAlternates } from "@/lib/seo";
 import "./friends.css";
 
 /**
@@ -68,16 +69,19 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "友链",
     description: HERO_DESC,
     keywords: ["友链", "个人博客", "独立博客", "朋友们"],
-    alternates: { canonical: "/friend-links" },
+    // 用 siteAlternates 而不是只写 canonical：Next 的 metadata 是浅合并，
+    // 页面一旦自带 alternates，layout 的 RSS autodiscovery 就整块被替换掉了
+    alternates: siteAlternates("/friend-links"),
     openGraph: {
       type: "website",
       title: HERO_TITLE_1 + HERO_TITLE_2 + " · " + settings.siteTitle,
       description: HERO_DESC,
       url: "/friend-links",
       siteName: settings.siteTitle,
+      images: [ogImageFor(null)],
     },
     twitter: {
-      card: "summary",
+      card: "summary_large_image",
       title: "友链 · " + settings.siteTitle,
       description: HERO_DESC,
     },
