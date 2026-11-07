@@ -657,6 +657,29 @@ a:hover { color: var(--link-hover); }
 }
 
 /*
+ * 单字查询提示（2026-11-07）。
+ *
+ * 与 .search-meta 的分工：meta 是"结果统计"（找到 N 篇），hint 是"规则解释"
+ * （为什么只搜标题）。后者必须比前者显眼 —— 否则用户看到结果变少会以为
+ * 是搜索坏了，而不是"单字被限定在标题里"。
+ */
+.search-hint {
+  font-size: var(--fs-base);
+  color: var(--text-p2);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin: 0 0 16px;
+  line-height: 1.7;
+}
+
+.search-hint strong {
+  color: var(--text-p0);
+  font-weight: 600;
+}
+
+/*
  * 搜索命中高亮（P0-6，2026-11-07）。
  *
  * 背景用主色低透明度混合，而不是 <mark> 的浏览器默认亮黄：

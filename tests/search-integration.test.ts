@@ -180,6 +180,27 @@ test("P0-6：候选被上限截断时 capped=true，total 只是下限", () => {
   assert.equal(r.total, searchMod.CANDIDATE_CAP, "被截断时 total 是下限而不是谎报精确值");
 });
 
+test("单字查询只在标题里匹配（正文命中不算，避免全站噪音）", () => {
+  // 标题含「的」：应命中
+  insertPost({ slug: "p1c-title", title: "我的第一篇", content: "正文里没有那个字。" });
+  // 只有正文含「的」：不应命中 —— 否则「的」会命中全站每一篇
+  insertPost({ slug: "p1c-body", title: "随便聊聊", content: "的 的 的 的 的" });
+
+  const r = searchMod.searchPosts("的", { limit: 10 });
+  assert.equal(r.titleOnly, true, "单字查询应标记 titleOnly，界面据此显示提示");
+  const slugs = r.hits.map((h) => h.slug);
+  assert.ok(slugs.includes("p1c-title"), "标题含该字应命中，实际: " + slugs.join(","));
+  assert.equal(slugs.includes("p1c-body"), false, "只有正文含该字不得命中");
+  assert.equal(r.total, 1, "total 只算标题命中");
+});
+
+test("两字及以上查询不受 titleOnly 影响（正文命中仍算）", () => {
+  insertPost({ slug: "p2c-body", title: "随便聊聊", content: "这里提到视频两个字。" });
+  const r = searchMod.searchPosts("视频", { limit: 10 });
+  assert.equal(r.titleOnly, false, "两字查询不是 titleOnly");
+  assert.ok(r.hits.some((h) => h.slug === "p2c-body"), "两字查询仍应命中正文");
+});
+
 test("cleanup", () => {
   dbMod.closeDb();
   fs.rmSync(TMP, { recursive: true, force: true });

@@ -30,9 +30,9 @@ export const metadata = { title: "搜索", robots: { index: false, follow: true 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const sp = await searchParams;
   const q = (sp.q ?? "").trim();
-  const { hits, mode, total, capped } = q
+  const { hits, mode, total, capped, titleOnly } = q
     ? searchPosts(q, { limit: 30 })
-    : { hits: [], mode: "like" as const, total: 0, capped: false };
+    : { hits: [], mode: "like" as const, total: 0, capped: false, titleOnly: false };
   // 高亮词与搜索用的是同一套拆分规则（lib/highlight.ts）
   const terms = q ? highlightTerms(q) : [];
   const modeLabel = mode === "fts" ? "全文索引" : "关键词匹配";
@@ -58,10 +58,27 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
         {q ? <p className="search-meta">{countText}</p> : null}
 
+        {/*
+          单字查询提示（2026-11-07）。
+          单字在正文里几乎每篇都有（`的` 命中全部 25 篇、高亮几十处），
+          所以 searchPosts 对单字只匹配标题。这里必须说明，否则用户会以为
+          "明明正文里有，怎么搜不到"。
+        */}
+        {titleOnly ? (
+          <p className="search-hint">
+            「{q}」是单字，只在<strong>标题</strong>里匹配 —— 单字在正文里几乎每篇都有，
+            全量命中反而找不到东西。试试加一个字，或换个更具体的词。
+          </p>
+        ) : null}
+
         {q && hits.length === 0 ? (
           <EmptyState
             title={"没有找到「" + q + "」"}
-            hint="三个字以上走全文索引；一两个字按关键词匹配，标题命中会排在前面。换个关键词，或者直接从归档里翻也行。"
+            hint={
+              titleOnly
+                ? "单字只在标题里匹配，没有标题含这个字。加一个字组成更具体的词，命中会准很多。"
+                : "三个字以上走全文索引；一两个字按关键词匹配，标题命中会排在前面。换个关键词，或者直接从归档里翻也行。"
+            }
             actions={
               <>
                 <Link className="btn btn-sm" href="/archives">看归档</Link>

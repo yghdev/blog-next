@@ -34,7 +34,6 @@
 
   --fx-line: #e7e1d7;        /* 分隔线（设计规范给定值） */
   --fx-line-strong: #d8d1c4; /* 需要被界定的边界 */
-  --fx-line-ink: rgba(32, 35, 31, 0.14);
 
   /* ── 品牌与强调 ── */
   --fx-brand: #36796b;       /* 主强调：选中、链接、主交互 4.6:1 */
@@ -136,7 +135,6 @@
 
   --fx-line: #2c2921;
   --fx-line-strong: #3a362c;
-  --fx-line-ink: rgba(237, 234, 226, 0.16);
 
   --fx-brand: #6fb3a1;       /* 7.1:1 */
   --fx-brand-ink: #8ec9b9;
@@ -181,7 +179,6 @@
     --fx-faint: #8b8779;
     --fx-line: #2c2921;
     --fx-line-strong: #3a362c;
-    --fx-line-ink: rgba(237, 234, 226, 0.16);
     --fx-brand: #6fb3a1;
     --fx-brand-ink: #8ec9b9;
     --fx-brand-fill: #4e9e8b;

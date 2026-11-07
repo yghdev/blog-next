@@ -21,6 +21,15 @@ export type SearchResult = {
   total: number;
   /** 候选被 CANDIDATE_CAP 截断过 -> total 只是下限，界面要写 "N+" */
   capped: boolean;
+  /**
+   * 单字查询：只在标题里匹配（2026-11-07）。
+   *
+   * 原因：`的`、`了` 这类单字在正文里几乎每篇都有，全量命中 + 几十处高亮
+   * 只会把真正想找的东西淹掉。单字本身信息量太低，限定在标题里既保留了
+   * "找标题带某个字"的用途，又不会让结果页变成全站列表。
+   * 界面据此显示提示，告诉用户为什么结果变少了。
+   */
+  titleOnly: boolean;
 };
 
 /** trigram 分词的最短查询长度：少于 3 个字符无法匹配（实测结论） */
@@ -121,9 +130,11 @@ function safeCats(s: string): string[] {
 export function searchPosts(raw: string, opts: { limit?: number } = {}): SearchResult {
   const q = raw.trim().replace(/\s+/g, " ");
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 50);
-  if (!q) return { hits: [], mode: "like", total: 0, capped: false };
+  if (!q) return { hits: [], mode: "like", total: 0, capped: false, titleOnly: false };
 
   const terms = highlightTerms(q);
+  // 单字查询只在标题里匹配（见 SearchResult.titleOnly 的说明）
+  const titleOnly = [...q].length === 1;
   const useFts = ftsAvailable() && [...q].length >= TRIGRAM_MIN;
 
   let mode: SearchMode = useFts ? "fts" : "like";
@@ -148,7 +159,9 @@ export function searchPosts(raw: string, opts: { limit?: number } = {}): SearchR
   const scored = rows
     .map((r) => {
       const body = plainText(r.content);
-      return { row: r, body, score: scoreHit(r.title, body, terms) };
+      // 单字查询把正文置空：scoreHit 只剩标题权重，正文命中一律不计分，
+      // 于是"每篇都含这个字"的文章不会挤进结果。
+      return { row: r, body, score: scoreHit(r.title, titleOnly ? "" : body, terms) };
     })
     // 边界规则在这里落地：`AI` 的候选里有 email，但 score 为 0 时被丢掉
     .filter((x) => x.score > 0);
@@ -172,6 +185,7 @@ export function searchPosts(raw: string, opts: { limit?: number } = {}): SearchR
     mode,
     total: scored.length,
     capped,
+    titleOnly,
   };
 }
 

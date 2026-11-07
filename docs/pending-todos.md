@@ -11,138 +11,52 @@
 ## 1. `revalidateTag(TAGS.stats)` 不刷新 `getSettingsCached`
 
 **记录时间**：2026-11-01（阶段 C-9 实施时发现）
-**状态**：🔴 未修复，**暂不处理**（用户决定：等所有改版工作完成后再单独处理）
-**优先级**：🟠 中高（影响后台改设置后的生效延迟）
+**状态**：✅ **已修复（2026-11-07，`a990a78`）**
+**优先级**：—（不是问题了）
 
-### 现象
+### 结论
 
-在后台保存站点设置（`PUT /api/admin/settings`）后：
+根因不是 `revalidateTag` 坏了，而是**缓存分了两层、且跨模块实例**：
 
-- `/rss.xml`（走 `getSettings()` **直读**，不经 `unstable_cache`）→ **立即**显示新站名 ✅
-- 首页 `<title>`（`generateMetadata` 里的 `getSettings()`）→ **仍然是旧站名** ❌
-- 首页侧栏 `.brand-title`（`SiteShell` 里的 `getSettingsCached()`）→ **仍然是旧站名** ❌
+1. `lib/settings.ts` 有一层 10s 进程内缓存；
+2. `getSettingsCached` 外面又套了一层 `unstable_cache`（TTL 300s）；
+3. Next 把 route handler 与页面渲染打成**两个入口**，各自持有独立的模块实例 ——
+   后台 PUT 时清掉的是 route handler 那份，页面渲染那份清不掉。
 
-### 复现步骤
+于是出现"`/rss.xml` 立即变、首页 10 秒到 5 分钟不变"。
 
-```bash
-# 1) 启隔离实例
-# 2) 先访问一次首页（让 unstable_cache 建立条目）
-curl -s http://127.0.0.1:PORT/ > /dev/null
+### 修法
 
-# 3) 改设置
-curl -X PUT http://127.0.0.1:PORT/api/admin/settings \
-  -H 'content-type: application/json' -b "$COOKIE" \
-  -d '{"siteTitle":"新站名","siteDescription":"新简介"}'
+删掉两层缓存：`getSettings()` **每次直查库**，`getSettingsCached` 与
+`invalidateSettingsCache()` 一并删除。settings 表十几行、单次 <0.1ms，
+一页最多读 2~3 次，代价可忽略。
 
-# 4) 连续请求首页
-for i in 1 2 3 4 5 6; do curl -s http://127.0.0.1:PORT/ | grep -o 'class="brand-title">[^<]*'; done
-# 实测：6 次全是旧值
+### 回归测试
 
-# 5) 等 15 秒（超过 lib/settings.ts 的 10s 进程内 TTL）再请求
-# 实测：仍是旧值
+`tests/next-integration.mjs` 的「设置改动立刻生效」：PUT 站名后**不等待**，
+直接断言首页 `<title>` / `.brand-title` / `/rss.xml` 都是新值。
 
-# 6) 同一时刻对比 RSS
-curl -s http://127.0.0.1:PORT/rss.xml | grep -o '<title>[^<]*'
-# 实测：立即是新值
-```
-
-### 已排除的可能
-
-| 假设 | 验证 | 结论 |
-|---|---|---|
-| `updateSettings` 忘了失效进程内缓存 | 读 `lib/settings.ts:102`，确实调了 `invalidateSettingsCache()` | ❌ 不是这个 |
-| 后台没调 `revalidateTag` | `app/api/admin/settings/route.ts:48` 有 `invalidate([TAGS.posts, TAGS.stats])` | ❌ 不是这个 |
-| tag 名字写错 | `TAGS.stats = "site-stats"`，`getSettingsCached` 用的也是它 | ❌ 不是这个 |
-| 只是 SWR 的一次延迟 | 连请求 6 次（间隔 500ms）+ 等 15s，全不变 | ❌ 不是这个 |
-| 整页被缓存 | `app/page.tsx` 有 `export const dynamic = "force-dynamic"` | ❌ 不是这个 |
-
-### 反向对照：`TAGS.posts` 是好的
-
-同一套 `invalidate` 机制对文章生效：
-
-```bash
-# 建一篇已发布文章（走 API，会 invalidate TAGS.posts）
-# 第 1 次请求首页：不含新文章
-# 第 2 次请求首页：包含新文章 ✅   ← SWR 语义，符合预期
-```
-
-所以问题不是"revalidateTag 完全坏了"，而是**它对 `getSettingsCached` 这个
-条目不起作用**。
-
-### 可能的方向（未验证）
-
-1. `unstable_cache` 的 key 是 `["settings:all"]`（一个**不带参数的** cache key）。
-   Next 可能会把"无参数"的缓存条目归到特殊路径，导致 tag 传播异常
-2. Next 16 的 `revalidateTag(tag, profile)` 第二参数 `"max"` 的语义变化 ——
-   文章那边能生效，所以不像
-3. `getSettingsCached` 被 `SiteShell`（深层嵌套的服务端组件）调用，
-   与直接在页面里调用可能有差异
-4. `lib/settings.ts` 的**进程内缓存**（`TTL_MS = 10_000`）与 `unstable_cache`
-   的 300s 叠加：可能是"进程内缓存失效了，但 unstable_cache 层没失效"，
-   而 300s 到期后才会更新 —— **需要等 5 分钟验证一次**（本次没等那么久）
-
-### 建议的排查顺序
-
-1. **先等 5 分钟**再请求一次。如果变了 → 说明只是 `unstable_cache` 的
-   `revalidate: 300` 在起作用，`revalidateTag` 没穿透进去
-2. 给 `getSettingsCached` 的 cache key 加上参数（比如 `["settings:all", "v1"]`），
-   看是否影响 tag 传播
-3. 试 `revalidateTag(TAGS.stats)` **不带** `"max"` 参数（或换 `"default"`）
-4. 若都不行，最粗暴但可靠的做法：把 `getSettingsCached` 改成**不用
-   `unstable_cache`**，只靠 `lib/settings.ts` 的 10s 进程内缓存 ——
-   设置是低频读、低频写的配置，10s 延迟完全可以接受
-
-### 影响范围
-
-- 后台改站名/简介/备案号后，前端最长要等 **5 分钟**（`unstable_cache` 的 TTL）
-  才更新
-- 用户不会看到错误内容，只是"改了没立刻生效"，容易误以为保存失败
-- **不影响数据正确性**，不影响任何写操作
-
-### 为什么现在不修
-
-- 属于**缓存层**的机制问题，牵涉 `unstable_cache` / `revalidateTag` 的
-  Next 内部行为，排查成本不低
-- 当前所有改版工作（A/B/C/D 阶段）都优先，这个问题的实际影响是"延迟生效"，
-  不阻塞任何功能
-- 用户决定：等所有工作完成后再单独处理
-
-### 修好后要补的测试
-
-- 改 settings → 请求首页 → 断言新站名出现（**不轮询、不等待**，直接断言）
-- 该测试现在**不能写**，因为会红 —— 这正是把它记成待办而不是"假装通过"的原因
+> 教训：**配置类数据（站名/开关/备案号）不要走数据缓存**；"内容/统计"类才用
+> `unstable_cache` + `revalidateTag`。详见项目记忆「关键决策」。
 
 ---
 
 ## 2. `--fx-line-ink` 零引用（后台样式）
 
 **记录时间**：2026-11-01（阶段 C-1 时发现）
-**状态**：🟢 未修复，暂不处理
-**优先级**：🟢 低（死代码，无功能影响）
+**状态**：✅ **已修复（2026-11-07）**
+**优先级**：—（不是问题了）
 
-### 现象
+### 结论
 
-`app/admin/admin.css` 里 `--fx-line-ink` 定义了 **3 次**（`:root`、暗色块、
-系统偏好暗色块），但全项目 `var(--fx-line-ink)` 引用 **0 处**。
-
-```bash
-grep -rn "fx-line-ink" app/ components/ lib/
-# app/admin/admin.css:37   --fx-line-ink: rgba(32, 35, 31, 0.14);
-# app/admin/admin.css:139  --fx-line-ink: rgba(237, 234, 226, 0.16);
-# app/admin/admin.css:184  --fx-line-ink: rgba(237, 234, 226, 0.16);
-```
-
-### 为什么现在不修
-
-C-1 只负责 `globals.css` 里的 58 个死 token；后台 `admin.css` 的样式治理
-不在阶段 C 范围（路线图 C-1 的「涉及文件」只写了 `app/globals.css`）。
-
-已在 `tests/design-tokens.test.ts` 的 `ALLOWED_UNREFERENCED` 白名单里
-登记这一条（附注释说明），避免测试长期红着。
+`app/admin/admin.css` 里 `--fx-line-ink` 定义了 3 次（`:root`、暗色块、
+系统偏好暗色块），全项目 `var(--fx-line-ink)` 引用 0 处 —— 纯死代码。
 
 ### 修法
 
-确认无引用后删掉这 3 行。约 1 分钟。
+删掉 3 行定义，同时删掉 `tests/design-tokens.test.ts` 的
+`ALLOWED_UNREFERENCED` 白名单条目。**白名单现在为空**：后台若再出现零引用
+token，测试应当直接红，而不是靠登记绕过。
 
 ---
 

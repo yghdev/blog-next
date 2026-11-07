@@ -132,3 +132,24 @@ test("P0-6 API：返回 total/capped/terms，且仍带 no-store", () => {
   assert.match(src, /terms/, "公开搜索接口应返回 terms（前端高亮用）");
   assert.match(src, /no-store/, "公开搜索必须 no-store（草稿泄露主探针依赖它）");
 });
+
+test("单字查询：页面显示「只在标题里匹配」的提示，且空态文案不同", () => {
+  /**
+   * 单字在正文里几乎每篇都有（`的` 命中全部 25 篇、高亮几十处），
+   * 所以 lib/search.ts 对单字只匹配标题。页面必须解释这条规则，
+   * 否则用户会以为"正文里明明有，怎么搜不到"。
+   */
+  const page = read("app/search/page.tsx");
+  assert.match(page, /titleOnly/, "搜索页应读取 titleOnly");
+  assert.match(page, /search-hint/, "应渲染 .search-hint 提示块");
+  assert.match(page, /只在/, "提示里要说明「只在标题里匹配」");
+  assert.match(page, /标题/, "提示里要出现「标题」二字");
+
+  const css = read("app/globals.css");
+  assert.match(css, /\.search-hint\s*\{/, "globals.css 应定义 .search-hint");
+});
+
+test("单字查询：公开搜索接口也回 titleOnly", () => {
+  const src = read("app/api/search/route.ts");
+  assert.match(src, /titleOnly/, "API 应回 titleOnly，调用方才能提示");
+});
