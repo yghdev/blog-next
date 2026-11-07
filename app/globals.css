@@ -21,6 +21,14 @@
   --text-p2: rgba(0,0,0,.70);
   --text-p3: rgba(0,0,0,.50);
   --text-p4: rgba(0,0,0,.38);
+  /*
+   * 元信息文字（P0-2，2026-11-07）：日期 / 阅读时长 / 浏览量 / 计数 / 目录链接。
+   *
+   * 为什么不直接用 --text-p3/p4：p3 = 黑 50%（≈3.9:1）、p4 = 黑 38%（≈2.7:1），
+   * 都达不到 WCAG AA 的 4.5:1 —— 这些字看上去"高级"，但在户外或低亮度屏上
+   * 读不出来。p3/p4 之后只保留给**纯装饰**（分隔点、图标、占位符、边框）。
+   */
+  --text-meta: rgba(0,0,0,.62);
   --border: rgba(0,0,0,.07);
   --border-strong: rgba(0,0,0,.10);
   /* 主色：低饱和青绿，克制的点缀 */
@@ -131,6 +139,19 @@
    */
   --w-read: 960px;
   /*
+   * 正文行宽（P0-1，2026-11-07）。
+   *
+   * 原来正文宽度 = 中栏宽度，随视口在 640–800px 之间漂：1440 下 688、
+   * 1440→1600 一路涨到 800。16px 字号时 800px 约 50 个汉字/行，超出中文
+   * 阅读的舒适区（30–40 字），大屏上回扫成本明显。
+   *
+   * 这里只收敛**文章页**的正文，不动 --w-main：左栏是 fixed 定位，横向位置
+   * 由 --w-shell 的公式决定，改 --w-main 会连带把左栏在所有页面上的位置
+   * 改掉（见 .sidebar 的注释）。
+   */
+  --measure-prose: 672px;
+  --fs-prose: 1.0625rem;   /* 17px：672px 下约 39 个汉字/行 */
+  /*
    * 站点骨架宽度：**唯一事实来源**（B-2）。
    *
    * 这三个值以前是手抄在 5 处的同一串加法。改一个参数要记得改 5 个地方，
@@ -214,6 +235,8 @@
   --dark-text-p2: rgba(255,255,255,.72);
   --dark-text-p3: rgba(255,255,255,.50);
   --dark-text-p4: rgba(255,255,255,.38);
+  /* 暗色下的元信息色：白 62% ≈ 7.6:1（#141414 底），同样过 AA */
+  --dark-text-meta: rgba(255,255,255,.62);
   --dark-border: rgba(255,255,255,.09);
   --dark-border-strong: rgba(255,255,255,.14);
   --dark-code-bg: rgba(255,255,255,.06);
@@ -275,6 +298,7 @@
     --text-p2: var(--dark-text-p2);
     --text-p3: var(--dark-text-p3);
     --text-p4: var(--dark-text-p4);
+    --text-meta: var(--dark-text-meta);
     --border: var(--dark-border);
     --border-strong: var(--dark-border-strong);
     --code-bg: var(--dark-code-bg);
@@ -334,6 +358,7 @@
     --text-p2: var(--dark-text-p2);
     --text-p3: var(--dark-text-p3);
     --text-p4: var(--dark-text-p4);
+    --text-meta: var(--dark-text-meta);
     --border: var(--dark-border);
     --border-strong: var(--dark-border-strong);
     --code-bg: var(--dark-code-bg);
@@ -492,6 +517,30 @@ a:hover { color: var(--link-hover); }
   min-width: 0;
 }
 
+/*
+ * 文章页（P0-1，2026-11-07）：正文收敛到 --measure-prose。
+ *
+ * 为什么加在 .content 上而不是改 --w-main：
+ *   · .content 是栅格的第 2 列，宽度 ≤800；限宽后 margin-inline:auto 让它在
+ *     这一列里居中 —— 左栏位置不变，其它页面也不受影响；
+ *   · 若直接改 --w-main，--w-shell 跟着变，左栏（fixed，用 --w-shell 算 left）
+ *     在所有页面都会横向移动，等于重演友链页"左栏横跳"的老问题。
+ *
+ * 1440 下中栏 688 → 正文 672（几乎贴齐）；1600+ 中栏 800 → 正文 672（两侧各 64）。
+ * 移动端（≤820）单栏，max-width 不构成约束，字号由断点里的 .prose 覆盖。
+ */
+.content--article {
+  /*
+   * width:100% 不能省：栅格项一旦有 auto 外边距就不再 stretch，宽度会变成
+   * fit-content —— 实测在 1600 视口下正文只有 619px（被文章里最宽的那行
+   * 内容决定），而不是 672。显式给 100% 再让 max-width 收敛，最后用
+   * justify-self 居中，才是"恒定 672"。
+   */
+  width: 100%;
+  max-width: var(--measure-prose);
+  justify-self: center;
+}
+
 .toc-col {
   grid-column: 3;
 }
@@ -554,7 +603,7 @@ a:hover { color: var(--link-hover); }
  */
 .page-sub {
   font-size: var(--fs-md);
-  color: var(--text-p4);
+  color: var(--text-meta);
   margin: -16px 0 24px;
 }
 
@@ -598,12 +647,12 @@ a:hover { color: var(--link-hover); }
   color: var(--text-p0);
   margin: 0 0 12px;
 }
-.notfound-text { color: var(--text-p3); margin-bottom: 24px; }
+.notfound-text { color: var(--text-meta); margin-bottom: 24px; }
 
 /* ── 搜索结果计数（C-5：原内联 .82rem + text-p4）── */
 .search-meta {
   font-size: var(--fs-base);
-  color: var(--text-p4);
+  color: var(--text-meta);
   margin: 0 0 16px;
 }
 
@@ -697,7 +746,7 @@ a:hover { color: var(--link-hover); }
 /* ── 元信息（五级透明度分层） ── */
 .meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
-  font-size: .8rem; color: var(--text-p3);
+  font-size: .8rem; color: var(--text-meta);
 }
 .meta .dot { color: var(--text-p4); }
 .meta .cat {
@@ -719,7 +768,13 @@ a:hover { color: var(--link-hover); }
  * 别再往这里加：`globals.css` 里只应有一份 .article-title 基础定义。
  */
 
-.prose { color: var(--text-p1); font-size: 1rem; line-height: 1.85; }
+.prose {
+  color: var(--text-p1);
+  /* P0-1（2026-11-07）：17px / 1.8。行高从 1.85 收到 1.8 —— 字号变大后
+     行距再放大，长文会显得"散"；1.8 在 17px 下仍是中文舒适区。 */
+  font-size: var(--fs-prose);
+  line-height: 1.8;
+}
 .prose > * { margin: 0 0 1.15em; }
 .prose h1, .prose h2, .prose h3, .prose h4 {
   font-family: var(--font-serif);
@@ -908,7 +963,7 @@ a:hover { color: var(--link-hover); }
 /* ── 标签 ── */
 .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 40px; }
 .tag {
-  font-size: .78rem; color: var(--text-p3);
+  font-size: .78rem; color: var(--text-meta);
   padding: 3px 11px; border-radius: 999px;
   border: 1px solid var(--border);
   background: var(--bg-subtle);
@@ -958,7 +1013,7 @@ a:hover { color: var(--link-hover); }
   gap: 4px;
   font-size: .74rem;
   line-height: 1;
-  color: var(--text-p4);
+  color: var(--text-meta);
   transition: color .2s var(--ease);
 }
 .article-nav-item:hover .article-nav-label { color: var(--link); }
@@ -1025,7 +1080,7 @@ a:hover { color: var(--link-hover); }
 /* `.toc-title` 已删除（C-6）：目录标题现在用 .rb-title（RightBar 的区块头） */
 .toc-list li a {
   display: block; padding: 4px 0 4px 12px;
-  color: var(--text-p3); line-height: 1.5;
+  color: var(--text-meta); line-height: 1.5;
   border-left: 2px solid transparent; margin-left: -1px;
   transition: color .15s, border-color .15s;
   /* 长标题不撑破右栏 */
@@ -1088,7 +1143,7 @@ a:hover { color: var(--link-hover); }
 .shuo-ym {
   font-size: .68rem;
   line-height: 1.5;
-  color: var(--text-p4);
+  color: var(--text-meta);
   letter-spacing: .01em;
   font-variant-numeric: tabular-nums;
   /* 不许折行：「2026年11月」在窄栏里会被断成「2026年11」+「月」，
@@ -1144,7 +1199,7 @@ a:hover { color: var(--link-hover); }
   display: inline-block;
   margin-top: 8px;
   font-size: .72rem;
-  color: var(--text-p4);
+  color: var(--text-meta);
   letter-spacing: .02em;
   font-variant-numeric: tabular-nums;
 }
@@ -1209,7 +1264,7 @@ a:hover { color: var(--link-hover); }
 /* 年份后面的「N 篇」计数（C-5：原为内联 fontSize/.72rem + fontWeight 400） */
 .archive-year-count {
   font-size: var(--fs-xs);
-  color: var(--text-p4);
+  color: var(--text-meta);
   margin-left: 8px;
   font-weight: 400;
 }
@@ -1229,7 +1284,7 @@ a:hover { color: var(--link-hover); }
  */
 .archive-month {
   font-size: var(--fs-sm);
-  color: var(--text-p4);
+  color: var(--text-meta);
   margin: 12px 0 2px;
   font-weight: 400;   /* h3 默认加粗，这里保留原来的弱化处理 */
 }
@@ -1249,7 +1304,7 @@ a:hover { color: var(--link-hover); }
   transition: background .15s;
 }
 .archive-item .date {
-  color: var(--text-p4);
+  color: var(--text-meta);
   font-size: .8rem;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
@@ -1310,12 +1365,12 @@ a:hover { color: var(--link-hover); }
 .comment-body { flex: 1; min-width: 0; }
 .comment-head { display: flex; gap: 10px; align-items: baseline; margin-bottom: 5px; }
 .comment-author { font-size: .9rem; font-weight: 580; color: var(--text-p0); }
-.comment-date { font-size: .75rem; color: var(--text-p4); }
+.comment-date { font-size: .75rem; color: var(--text-meta); }
 .comment-text { font-size: .92rem; color: var(--text-p2); line-height: 1.75; }
 
 /* ── 表单 ── */
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.field label { font-size: .82rem; color: var(--text-p3); font-weight: 550; }
+.field label { font-size: .82rem; color: var(--text-meta); font-weight: 550; }
 .input, .textarea {
   width: 100%;
   padding: 10px 13px;
@@ -1368,7 +1423,7 @@ a:hover { color: var(--link-hover); }
   background: var(--danger-bg);
 }
 .btn-danger:hover { background: var(--danger-bg); border-color: var(--danger); opacity: .92; }
-.btn-ghost { border-color: transparent; background: transparent; color: var(--text-p3); }
+.btn-ghost { border-color: transparent; background: transparent; color: var(--text-meta); }
 .btn-ghost:hover { background: var(--bg-subtle); color: var(--text-p0); }
 
 /* ── 业务徽标（B 端门禁 08：80% 浅底深字，带业务文案，绝不彩虹配色） ── */
@@ -1377,7 +1432,7 @@ a:hover { color: var(--link-hover); }
   padding: 1px 8px; border-radius: 999px;
   font-size: .72rem; font-weight: 550; line-height: 1.7;
   border: 1px solid var(--border-strong);
-  background: var(--bg-subtle); color: var(--text-p3);
+  background: var(--bg-subtle); color: var(--text-meta);
   white-space: nowrap;
 }
 .badge-ok     { border-color: var(--ok-border);     background: var(--ok-bg);     color: var(--ok); }
@@ -1399,7 +1454,7 @@ a:hover { color: var(--link-hover); }
   text-align: center;
 }
 .empty-block .empty-title { font-size: .92rem; color: var(--text-p2); font-weight: 550; }
-.empty-block .empty-hint { font-size: .8rem; color: var(--text-p4); max-width: 34em; line-height: 1.7; text-wrap: pretty; }
+.empty-block .empty-hint { font-size: .8rem; color: var(--text-meta); max-width: 34em; line-height: 1.7; text-wrap: pretty; }
 .empty-block .empty-actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; justify-content: center; }
 
 /* 铁律 10：复制按钮反馈自熄。2.5s 后由 JS 摘掉 data-done，
@@ -1428,7 +1483,7 @@ a:hover { color: var(--link-hover); }
 .notice-info  { border-color: var(--info-border);   background: var(--info-bg);   color: var(--info); }
 
 /* ── 空状态 ── */
-.empty { color: var(--text-p4); font-size: .9rem; padding: 40px 0; text-align: center; }
+.empty { color: var(--text-meta); font-size: .9rem; padding: 40px 0; text-align: center; }
 
 /* ── 进场动画 ── */
 .slide-up { opacity: 0; transform: translateY(8px); }
@@ -1754,7 +1809,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   justify-content: space-between;
   padding: calc(16px + env(safe-area-inset-top, 0px)) 10px 12px 14px;
   font-size: .78rem;
-  color: var(--text-p4);
+  color: var(--text-meta);
   letter-spacing: .06em;
 }
 .mobile-drawer-head button {
@@ -1807,7 +1862,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   padding: 0 14px 8px;
   font-size: .68rem;
   letter-spacing: .12em;
-  color: var(--text-p4);
+  color: var(--text-meta);
   font-weight: 600;
 }
 .mobile-drawer-link {
@@ -1856,7 +1911,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   font-family: inherit;
   transition: border-color .15s, background .15s;
 }
-.search-box input::placeholder { color: var(--text-p4); }
+.search-box input::placeholder { color: var(--text-meta); }
 .search-box input:focus {
   outline: none;
   border-color: var(--border-strong);
@@ -1876,7 +1931,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   padding: 11px 12px 11px 34px;
   font-size: .88rem;
 }
-.search-box--dashed input::placeholder { color: var(--text-p3); }
+.search-box--dashed input::placeholder { color: var(--text-meta); }
 .search-box--dashed input:focus {
   border-style: solid;
   border-color: var(--text-p3);
@@ -1914,7 +1969,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 .brand-desc {
   margin-top: 6px;
   font-size: .8rem;
-  color: var(--text-p3);
+  color: var(--text-meta);
   line-height: 1.5;
 }
 
@@ -2104,7 +2159,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   align-items: center;
   gap: 14px;
   font-size: .82rem;
-  color: var(--text-p3);
+  color: var(--text-meta);
 }
 .article-meta-bar .dot { color: var(--text-p4); }
 
@@ -2154,7 +2209,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   justify-content: space-between;
   padding: calc(16px + env(safe-area-inset-top, 0px)) 14px 12px 18px;
   font-size: .78rem;
-  color: var(--text-p4);
+  color: var(--text-meta);
   letter-spacing: .06em;
   position: sticky;
   top: 0;
@@ -2272,13 +2327,13 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 .rb-title {
   font-size: .7rem;
   letter-spacing: .12em;
-  color: var(--text-p3);
+  color: var(--text-meta);
   font-weight: 600;
 }
 .rb-badge {
   margin-left: auto;
   font-size: .66rem;
-  color: var(--text-p4);
+  color: var(--text-meta);
   background: var(--bg-subtle);
   padding: 1px 7px;
   border-radius: 5px;
@@ -2346,7 +2401,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 }
 .stat-name {
   font-size: .7rem;
-  color: var(--text-p4);
+  color: var(--text-meta);
   letter-spacing: .04em;
   line-height: 1.3;
 }
@@ -2378,7 +2433,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 }
 .tag-pill .tag-num {
   font-size: .64rem;
-  color: var(--text-p4);
+  color: var(--text-meta);
   margin-left: 3px;
   padding-left: 5px;
   border-left: 1px solid var(--border-strong);
@@ -2456,7 +2511,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 .fl-desc {
   display: block;
   font-size: .68rem;
-  color: var(--text-p4);
+  color: var(--text-meta);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2496,7 +2551,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: var(--text-p4);
+  color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .views-badge svg { opacity: .6; }
@@ -2560,17 +2615,17 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 }
 .site-footer-text {
   font-size: .78rem;
-  color: var(--text-p4);
+  color: var(--text-meta);
   line-height: 1.7;
 }
 .site-footer-icp {
   font-size: .78rem;
-  color: var(--text-p4);
+  color: var(--text-meta);
   line-height: 1.7;
   letter-spacing: .01em;
 }
 .site-footer-icp a {
-  color: var(--text-p3);
+  color: var(--text-meta);
   transition: color .16s;
 }
 .site-footer-icp a:hover { color: var(--link); }
