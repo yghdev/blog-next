@@ -3,6 +3,7 @@ import { TAGS } from "./posts";
 import * as posts from "./posts";
 import * as stats from "./site-stats";
 import { listVisibleFriendLinks } from "./friend-links";
+import { mediaSizeByPath } from "./media-size";
 import type { Settings } from "./settings";
 
 /**
@@ -80,6 +81,21 @@ export const getPostByIdCached = unstable_cache(
   { revalidate: TTL, tags: [TAGS.posts] }
 );
 
+/**
+ * 相关文章（F11，2026-11-07）。
+ *
+ * 入参是 postId 而不是整个 Post：unstable_cache 的 key 由参数决定，
+ * 传对象会让 key 变成 [object Object]（所有文章共用一份缓存）。
+ */
+export const relatedPostsCached = unstable_cache(
+  async (postId: number, limit: number) => {
+    const post = posts.getPostById(postId);
+    return post ? posts.relatedPosts(post, limit) : [];
+  },
+  ["posts:related"],
+  { revalidate: TTL, tags: [TAGS.posts] }
+);
+
 /* -------------------------------- 统计 -------------------------------- */
 
 export const getSiteStatsCached = unstable_cache(
@@ -124,8 +140,24 @@ export const getPageViewsCached = unstable_cache(
  * 就变成"改了站名前台几分钟不变"。现在所有调用方直接读 `getSettings()`。
  */
 
-/* ------------------------------ 友链/外链 ------------------------------ */
+/* -------------------------------- 媒体 -------------------------------- */
 
+/**
+ * 封面尺寸（F9，2026-11-07）。
+ *
+ * 给文章封面的 `<img>` 补 width/height，让浏览器在图片下载前就按正确比例
+ * 预留空间（否则封面加载完会把正文整体往下推 = CLS）。查不到返回 null，
+ * 调用方不要编默认比例。
+ *
+ * 挂在 TAGS.posts 下：换封面必然伴随文章保存，跟着一起失效就够了。
+ */
+export const getMediaSizeCached = unstable_cache(
+  async (mediaPath: string) => mediaSizeByPath(mediaPath),
+  ["media:size"],
+  { revalidate: TTL, tags: [TAGS.posts] }
+);
+
+/* ------------------------------ 友链/外链 ------------------------------ */
 /**
  * 前台侧栏的友链 + 聚合外链。
  * 挂在 TAGS.stats 下：它和站点统计同属"侧栏展示数据"，后台一保存就整块失效。

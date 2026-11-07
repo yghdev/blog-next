@@ -30,20 +30,6 @@ export function PostCard({
       ) : null}
       <div className="meta">
         <time dateTime={toIso(date)}>{formatDate(date)}</time>
-        {readingTime ? <><span className="dot">·</span><span>{readingTime} 分钟</span></> : null}
-        {typeof views === "number" && views > 0 ? (
-          <>
-            <span className="dot">·</span>
-            <span className="views-badge">
-              <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden>
-                <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"
-                      fill="none" stroke="currentColor" strokeWidth="1.8" />
-                <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              </svg>
-              {views}
-            </span>
-          </>
-        ) : null}
         {categories.map((c) => {
           const col = categoryColor(c);
           return (
@@ -52,6 +38,27 @@ export function PostCard({
             </span>
           );
         })}
+        {/*
+          F7（2026-11-07）：元信息分两级。
+          主级 = 日期 + 分类（决定"这是什么、什么时候"），次级 = 阅读时长 + 浏览量
+          （辅助判断"要不要点进去"）。此前五项平铺在同一行、同一字号，一屏扫过去
+          全是同等重量的碎片；收进 .meta-sub 后字号更小、靠右，层级一眼可辨。
+        */}
+        {readingTime || (typeof views === "number" && views > 0) ? (
+          <span className="meta-sub">
+            {readingTime ? <span>{readingTime} 分钟</span> : null}
+            {typeof views === "number" && views > 0 ? (
+              <span className="views-badge">
+                <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden>
+                  <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"
+                        fill="none" stroke="currentColor" strokeWidth="1.8" />
+                  <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                </svg>
+                {views}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
       </div>
     </Link>
   );

@@ -43,8 +43,27 @@ export function renderMarkdown(md: string): { html: string; toc: { level: number
     return `<h${depth} id="${id}">${text}</h${depth}>`;
   };
 
-  const html = marked.parse(md, { renderer, async: false }) as string;
+  const html = decorateImages(marked.parse(md, { renderer, async: false }) as string);
   return { html, toc };
+}
+
+/**
+ * 给正文图片补 `loading="lazy"` / `decoding="async"`（F9，2026-11-07）。
+ *
+ * 为什么在 HTML 输出层做，而不是改 marked 的 renderer：历史正文里的图片
+ * 有三种来源 —— Markdown 图片语法、直接贴的 `<img>`、WordPress 迁移留下的
+ * HTML。renderer 只能覆盖第一种，统一在输出上补属性三种都能吃到。
+ *
+ * 只补**缺失**的属性：作者显式写了 `loading="eager"` 的图（比如首屏大图）
+ * 不会被覆盖。自闭合写法 `<img … />` 要保留那个斜杠，否则会产出非法标签。
+ */
+function decorateImages(html: string): string {
+  return html.replace(/<img\b([^>]*?)(\/?)>/gi, (_whole, attrs: string, selfClose: string) => {
+    let out = attrs;
+    if (!/\bloading\s*=/i.test(out)) out += ' loading="lazy"';
+    if (!/\bdecoding\s*=/i.test(out)) out += ' decoding="async"';
+    return `<img${out}${selfClose}>`;
+  });
 }
 
 function slugifyHeading(s: string): string {

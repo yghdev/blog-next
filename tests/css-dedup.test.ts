@@ -93,21 +93,20 @@ test("C-6 .article-title 的基础定义只能有一份", () => {
   );
 });
 
-test("C-6 移动端的 1.5rem 覆盖必须排在基础定义之后", () => {
+test("C-6/F8 移动端字号由 clamp 承担，不再依赖覆盖顺序", () => {
   /**
-   * 这是那个 bug 的直接判据：`@media(max-width:820px)` 里的
-   * `.article-title { font-size: 1.5rem }` 必须**出现在**基础定义之后，
-   * 否则同特异性下会被基础定义覆盖，移动端标题就不会变小。
+   * C-6 修的是"媒体查询里的 1.5rem 覆盖写在基础定义之前，被后者压掉"。
+   *
+   * F8（2026-11-07）把基础定义改成 `clamp(1.75rem, 1.5rem + 1vw, 2.35rem)`
+   * 之后，移动端字号由同一条规则算出（375px → 28px），那条覆盖被删除了 ——
+   * 顺序陷阱从根上消失。
+   *
+   * 所以判据变成两条：
+   *   1. 基础定义必须用 clamp（否则又回到"两档固定值"）；
+   *   2. 不得再出现媒体查询里的 `.article-title { font-size }` 覆盖
+   *      （出现了就说明有人又加回两档写法，顺序陷阱会跟着回来）。
    */
   const lines = CSS.split("\n");
-
-  /**
-   * "基础定义"指**最终生效的那一份** —— 即最后出现的、带 font-size 的
-   * `.article-title { … }`。原来有两份（481 与 1421），后者生效；
-   * 移动端覆盖在 1070，夹在两份之间，于是被 1421 压掉。
-   *
-   * 所以判据是：1.5rem 那一行必须晚于**最后一份**基础定义。
-   */
   const baseDefs: number[] = [];
   for (let i = 0; i < lines.length; i++) {
     if (/^\.article-title\s*\{/.test(lines[i])) {
@@ -122,14 +121,43 @@ test("C-6 移动端的 1.5rem 覆盖必须排在基础定义之后", () => {
     }
   }
   assert.ok(baseDefs.length >= 1, "应有 .article-title 基础定义");
-  const lastBase = baseDefs[baseDefs.length - 1];
 
-  const overrideIdx = lines.findIndex((l) => /\.article-title\s*\{\s*font-size:\s*1\.5rem/.test(l)) + 1;
-  assert.ok(overrideIdx > 0, "应有移动端 1.5rem 覆盖");
-  assert.ok(
-    overrideIdx > lastBase,
-    "移动端覆盖必须晚于最后一份基础定义（基础在第 " + lastBase +
-      " 行，覆盖在第 " + overrideIdx + " 行）—— 否则同特异性下会被覆盖，移动端标题不会变小"
+  const baseLine = baseDefs[baseDefs.length - 1];
+  let baseBlock = "";
+  let depth = 0;
+  for (let j = baseLine - 1; j < lines.length; j++) {
+    baseBlock += lines[j] + "\n";
+    depth += (lines[j].match(/{/g) || []).length - (lines[j].match(/}/g) || []).length;
+    if (depth === 0) break;
+  }
+  assert.match(
+    baseBlock,
+    /font-size:\s*clamp\(/,
+    "基础定义应使用 clamp(...)，实际：" + baseBlock.replace(/\s+/g, " ").slice(0, 120)
+  );
+
+  // 媒体查询块里不得再有 .article-title 的字号覆盖
+  const mediaRanges: [number, number][] = [];
+  const re = /@media\b[^{]*\{/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(CSS))) {
+    const start = m.index + m[0].length;
+    let d = 1;
+    let i = start;
+    while (i < CSS.length && d > 0) {
+      if (CSS[i] === "{") d++;
+      else if (CSS[i] === "}") d--;
+      i++;
+    }
+    mediaRanges.push([start, i]);
+  }
+  const offenders = mediaRanges
+    .map(([a, b]) => CSS.slice(a, b))
+    .filter((block) => /\.article-title\s*\{[^}]*font-size/.test(block));
+  assert.deepEqual(
+    offenders,
+    [],
+    "媒体查询里不应再有 .article-title 字号覆盖（clamp 已覆盖移动端），实际 " + offenders.length + " 处"
   );
 });
 

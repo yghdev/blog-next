@@ -1597,34 +1597,42 @@ try {
   await page.evaluate(() => document.documentElement.removeAttribute("data-theme"));
   await page.waitForTimeout(150);
 
-  /* ── 断言 31（C-6）：移动端文章标题必须真的变小 ── */
+  /* ── 断言 31（C-6 → F8）：文章标题随视口连续变化，且有上下限 ── */
   /**
-   * 这是 C-6 修的核心 bug：
+   * C-6 修的是"媒体查询里的 1.5rem 覆盖写在基础定义之前，被后者压掉"。
    *
-   *   1070 行  @media (max-width:820px) { .article-title { font-size: 1.5rem } }
-   *   1420 行  .article-title { font-size: 2.05rem }        ← 基础定义在后面
+   * F8（2026-11-07）把基础定义改成
+   *     clamp(1.75rem, 1.5rem + 1vw, 2.35rem)
+   * 之后，移动端字号由同一条规则算出，那条覆盖被删除了 —— 顺序陷阱从根上
+   * 消失，而且 820–1392 之间不再是"一直是 32.8px"，而是连续变化。
    *
-   * 两者特异性都是 0,1,0，后者胜出 —— **移动端标题从来没变小过**，
-   * 实测一直是 32.8px 而不是声明的 24px。
-   *
-   * 这类 bug 靠读代码极难发现（媒体查询里明明写着 1.5rem，"看起来已经
-   * 适配了"），只有把窗口拉到手机宽度量一次才会露馅。
+   * 断言改成 clamp 语义（实测值，容差 0.05px）：
+   *   375px  → 28px    （下限 1.75rem）
+   *   820px  → 32.2px
+   *   821px  → 32.21px （跨断点连续，差 0.01px）
+   *   1200px → 36px
+   *   1440px → 37.6px  （上限 2.35rem）
    */
   const TITLE_CASES = [
-    [375, "24px"],
-    [820, "24px"],   // 断点内含
-    [821, "32.8px"], // 断点外 1px，应恢复桌面字号
-    [1440, "32.8px"],
+    [375, 28],
+    [820, 32.2],
+    [821, 32.21],
+    [1200, 36],
+    [1440, 37.6],
   ];
   for (const [vw, want] of TITLE_CASES) {
     await page.setViewportSize({ width: vw, height: vw === 375 ? 812 : 900 });
     await page.goto(server.base + "/p/" + tocPostId, { waitUntil: "networkidle" });
     const fs = await page.evaluate(() => {
       const el = document.querySelector(".article-title");
-      return el ? getComputedStyle(el).fontSize : null;
+      return el ? parseFloat(getComputedStyle(el).fontSize) : null;
     });
-    assert.equal(fs, want, vw + "px 下 .article-title 字号应为 " + want + "，实际 " + fs);
-    console.log("PASS C-6 " + String(vw).padStart(4) + "px 文章标题字号 = " + fs);
+    assert.ok(fs !== null, vw + "px 下应能取到 .article-title");
+    assert.ok(
+      Math.abs(fs - want) <= 0.05,
+      vw + "px 下 .article-title 字号应为 " + want + "px，实际 " + fs
+    );
+    console.log("PASS F8 " + String(vw).padStart(4) + "px 文章标题字号 = " + fs + "px");
   }
 
   /* ── 断言 32（C-6）：删死类后页面仍正常渲染 ── */
@@ -2068,21 +2076,25 @@ try {
   );
   console.log("PASS D-1 卡片高度每张减 " + SAVED + "px（" + baseline + " → " + cardMetrics.height + "px，压缩 " + pct + "%，需求 10–15%）");
 
-  /* ── 断言 42（D-1）：元信息四项齐，且无标签时不占位 ── */
+  /* ── 断言 42（D-1 / F7）：元信息四项齐，且分两级 ── */
   /**
    * 需求 4.2「元信息」：发布时间 / 预计阅读时间 / 浏览量 / 文章标签，
    * 排列紧凑、避免过多装饰图标；没有标签时不显示空白占位。
    *
    * 注：这里的"标签"实指 categories（分类），PostCard 的 props 契约
    * 只有 categories 没有 tags（D.4 红线：不改 props 契约）。
+   *
+   * F7（2026-11-07）：五项平铺改成两级 —— 主级（日期 + 分类）留在 .meta，
+   * 次级（阅读时长 + 浏览量）收进 .meta-sub。断言随之改为"次级块存在"，
+   * 而不是"某个裸 span 存在"。
    */
   assert.ok(
     cardMetrics.metaChildren.includes("time"),
     "元信息应含发布时间，实际 " + JSON.stringify(cardMetrics.metaChildren)
   );
   assert.ok(
-    cardMetrics.metaChildren.filter((c) => c === "" || c === "span").length >= 1,
-    "元信息应含阅读时间（span），实际 " + JSON.stringify(cardMetrics.metaChildren)
+    cardMetrics.metaChildren.includes("meta-sub"),
+    "元信息应含次级块 .meta-sub（阅读时长 / 浏览量），实际 " + JSON.stringify(cardMetrics.metaChildren)
   );
   assert.ok(
     !cardMetrics.metaChildren.includes("dot") ||

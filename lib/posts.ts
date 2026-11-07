@@ -208,6 +208,43 @@ export function parseJsonArray(s: string): string[] {
   }
 }
 
+/**
+ * 相关文章（F11，2026-11-07）。
+ *
+ * 规则：同分类 +2 分、同标签 +1 分，取分数最高的 N 篇；并列按发布时间倒序。
+ *
+ * 为什么不用"正文相似度"（TF-IDF / 向量）：本站只有几十篇，词频相似度算出来
+ * 噪声比信号大 —— 中文短文本里"的/是/我"这类高频字会把不相干的文章拉到一起。
+ * 分类和标签是作者亲手打的，语义最准，而且零额外依赖。
+ *
+ * 没有分类也没有标签时返回空数组：宁可不显示这一块，也不要拿"最新文章"
+ * 冒充"相关文章"（那是在骗点击）。
+ */
+export function relatedPosts(post: Post, limit = 3): Post[] {
+  const db = getDb();
+  const cats = new Set(parseJsonArray(post.categories));
+  const tags = new Set(parseJsonArray(post.tags));
+  if (cats.size === 0 && tags.size === 0) return [];
+
+  // 先按时间捞一批候选（几十篇的站，60 条足够覆盖全部已发布文章）
+  const rows = db.prepare(
+    "SELECT * FROM posts WHERE type = 'post' AND status = 'published' AND " + ALIVE +
+    " AND id != ? ORDER BY published_at DESC LIMIT 60"
+  ).all(post.id) as Post[];
+
+  const scored = rows
+    .map((r) => {
+      let score = 0;
+      for (const c of parseJsonArray(r.categories)) if (cats.has(c)) score += 2;
+      for (const t of parseJsonArray(r.tags)) if (tags.has(t)) score += 1;
+      return { r, score };
+    })
+    .filter((x) => x.score > 0);
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((x) => x.r);
+}
+
 export function readingTime(md: string): number {
   const chars = md.replace(/\s/g, "").length;
   return Math.max(1, Math.round(chars / 400));

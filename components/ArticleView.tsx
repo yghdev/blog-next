@@ -6,12 +6,13 @@ import { formatDate, toIso } from "./PostCard";
 import {
   decodeSlug, prevNextPost, parseJsonArray, readingTime, makeExcerpt, postHref,
 } from "@/lib/posts";
-import { getPageViewsCached } from "@/lib/cached";
+import { getPageViewsCached, getMediaSizeCached, relatedPostsCached } from "@/lib/cached";
 import { getSettings } from "@/lib/settings";
 import { renderMarkdown } from "@/lib/markdown";
 import { CommentSection } from "./CommentSection";
 import { Lightbox } from "./Lightbox";
 import { ArticleToc } from "./ArticleToc";
+import { ArticleEnd } from "./ArticleEnd";
 import { categoryColor } from "@/lib/category-color";
 import {
   articleJsonLd, docPath, ogImageFor, siteAlternates, type SiteIdentity,
@@ -94,6 +95,11 @@ export async function ArticleView({ doc }: { doc: Post }) {
   const nav = doc.type === "post" ? prevNextPost(doc.published_at || doc.created_at) : {};
   const pageViews = await getPageViewsCached(legacyPageKey(doc), doc.id);
   const settings = getSettings();
+  const isPost = doc.type === "post";
+  // F9：封面尺寸用于 <img width/height> 预留空间（查不到就是 null，不猜比例）
+  const coverSize = doc.cover ? await getMediaSizeCached(doc.cover) : null;
+  // F11：相关文章只在文章页取（页面没有"相关"语义）
+  const related = isPost ? await relatedPostsCached(doc.id, 3) : [];
 
   return (
     <>
@@ -139,11 +145,34 @@ export async function ArticleView({ doc }: { doc: Post }) {
 
           {doc.cover ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={doc.cover} alt={doc.title} className="article-cover" />
+            <img
+              src={doc.cover}
+              alt={doc.title}
+              className="article-cover"
+              /*
+               * F9（2026-11-07）：封面是首屏 LCP 元素，不能 lazy —— 它必须
+               * 尽早开始下载。width/height 来自 media 表（上传时记录的），
+               * 让浏览器在图片到达前就按正确比例占位，避免正文被推下去（CLS）。
+               * 查不到尺寸时只省略这两个属性，不编默认比例。
+               */
+              loading="eager"
+              decoding="async"
+              fetchPriority="high"
+              {...(coverSize ? { width: coverSize.width, height: coverSize.height } : {})}
+            />
           ) : null}
 
           <div className="prose" dangerouslySetInnerHTML={{ __html: html }} />
         </article>
+
+        {/* F11：作者卡 + 相关文章 + 订阅入口（只对文章渲染） */}
+        {isPost ? (
+          <ArticleEnd
+            author={settings.author}
+            bio={settings.siteDescription}
+            related={related}
+          />
+        ) : null}
 
         {nav.prev || nav.next ? (
           <nav className="article-nav" aria-label="上下篇">
