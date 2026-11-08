@@ -4,6 +4,7 @@ import { ScrollReset } from "@/components/ScrollReset";
 import { MobileNav } from "@/components/MobileNav";
 import { VisitorBeacon } from "@/components/VisitorBeacon";
 import { PwaRegister } from "@/components/PwaRegister";
+import { GridOverlay } from "@/components/GridOverlay";
 import { MobileKeyboardGuard } from "@/components/MobileKeyboardGuard";
 import { getSettings } from "@/lib/settings";
 import { listFriendLinksCached } from "@/lib/cached";
@@ -109,6 +110,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             管理员自己的前台浏览由接口层按 session 排除（见 app/api/hit） */}
         <FrontOnly><VisitorBeacon /></FrontOnly>
         <PwaRegister />
+        {/* 栅格叠加层（?grid=1）：无 query 时渲染 null，前后台共用同一开关。
+            不包在 FrontOnly 里 —— CSS 只作用于 .content / .admin-main，登录页没有这些容器 */}
+        <GridOverlay />
         {/* 软键盘弹起时把聚焦的输入框滚到视口中部，防止手机上打字看不见 */}
         <MobileKeyboardGuard />
       </body>

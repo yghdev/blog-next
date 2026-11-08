@@ -45,7 +45,7 @@ npm run dev
 ### 跑浏览器测试的前置条件
 
 `npm run test:ui` / `test:dark` / `test:admin` / `test:content` / `test:comments` /
-`test:media` / `test:settings` / `test:browser` 需要真实 Chromium，因此有两个
+`test:media` / `test:settings` / `test:browser` / `test:grid` 需要真实 Chromium，因此有两个
 **与代码无关**的环境要求。缺了不会报"缺依赖"，而是报一个看起来像代码 bug 的错：
 
 | 前置条件           | 缺失时的表现                                                    | 安装                                        |
@@ -78,9 +78,14 @@ fc-match "sans-serif:lang=zh-cn"   # 应返回中文黑体，而不是 DejaVu
 
 ## 设计与交互约束
 
-见 `docs/design-system.md`。前台按移动端规范（安全区 / 44·48dp 热区 / 底部抽屉 /
-软键盘），后台按 B 端规范（主操作唯一 / 浅底深字徽标 / 确认弹窗 / 五态）。
-改布局前先读，改完跑文末的 lint。
+见 `docs/grid-system.md`（栅格与间距契约：骨架 / 12 列内容栅格 / 4px 刻度，
+前台与后台共用一套）与 `docs/frontend-refactor-roadmap.md`（布局演进史与已锁定的
+设计参数）。前台按移动端规范（安全区 / 44·48dp 热区 / 底部抽屉 / 软键盘），
+后台按 B 端规范（主操作唯一 / 浅底深字徽标 / 确认弹窗 / 五态）。
+
+栅格对了没有不靠肉眼：`?grid=1` 直接在现场画出 12 列与 8px 刻度
+（前台 `/?grid=1`、后台 `/admin/overview?grid=1`），改完跑 `npm test`（静态契约）
+与 `npm run test:grid`（浏览器对齐体检）。
 
 ## 安全
 

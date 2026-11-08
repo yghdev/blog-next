@@ -79,7 +79,7 @@
    * 也就是反馈里的"抖动了一下"。把基线对齐到 48 之后，第 0px 就已经在
    * 钉住的位置上，位移量为零。
    */
-  --sticky-top: 48px;
+  --sticky-top: var(--space-12);
 
   /*
    * ── 组件刻度（C-7）──
@@ -129,6 +129,50 @@
   --z-topbar: 50;
   --z-drawer: 100;
   --z-dialog: 200;
+
+  /*
+   * ── 间距刻度（2026-11-08，栅格化）──
+   *
+   * 4px 基准：--space-N 的值恒等于 N×4px。**前台与后台共用这一套**
+   * （后台的 --fx-s1…s9 在 admin.css 里改成了这里的别名，447 处引用
+   * 一行没动）。命名沿用「索引」而不是「数值」：--space-7 是 28px、
+   * --space-14 是 56px，所以别拿名字当尺寸猜。
+   *
+   * 只登记**真的有消费者**的档位：加一档之前先让它有人用，
+   * 否则就是 C-1 清理过的那种死 token。后台的 28/56/72 三档由
+   * --fx-s6/s8/s9 消费，前台用 1–6、7、8、10、12、24。
+   *
+   * 用法约定（见 docs/grid-system.md）：
+   *   · 新增/改动的规则一律走令牌，不再写字面 px；
+   *   · 老规则里被设计决策锁死的值（18/22/14/10/62/72/26/30/34/36）
+   *     登记在文档的「例外」里，不强行拉回刻度 —— 那是改设计，不是栅格化。
+   */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-14: 56px;
+  --space-18: 72px;
+  --space-24: 96px;
+
+  /*
+   * ── 内容栅格（2026-11-08，栅格化）──
+   *
+   * 骨架栅距是 --gap-col(40px)，属于「三块家具之间」的距离；
+   * 这里这条是**内容区内部**的列间距（12 列），两件事不要混用。
+   *
+   * 列数固定 12，但**不提供 --grid-cols 令牌**：CSS Grid 的
+   * repeat() 不接受 var()（浏览器实测无效），所以列数在样式里写字面量，
+   * 由 tests/grid-system.test.ts 盯着，防漂移。
+   */
+  --grid-gutter: 24px;
+  --grid-ruler: 8px;
   --w-main: 800px;
   --gap-col: 40px;
   --w-side: 288px;
@@ -434,7 +478,7 @@ a:hover { color: var(--link-hover); }
   gap: var(--gap-col);
   max-width: var(--w-shell);
   margin: 0 auto;
-  padding: 48px 32px 96px;
+  padding: var(--space-12) var(--space-8) var(--space-24);
   align-items: start;
 }
 
@@ -498,7 +542,7 @@ a:hover { color: var(--link-hover); }
   left: max(32px, calc((100% - var(--w-shell)) / 2 + 32px));
   width: var(--w-side);
   height: calc(100dvh - var(--sticky-top));
-  padding: 8px 0 32px;
+  padding: var(--space-2) 0 var(--space-8);
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -699,7 +743,7 @@ a:hover { color: var(--link-hover); }
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .search-filter-label {
   font-size: .78rem;
@@ -763,7 +807,7 @@ a:hover { color: var(--link-hover); }
      少了这一行，height 属性会变成固定像素高，图片被压扁。 */
   height: auto;
   border-radius: var(--radius-lg);
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
   border: 1px solid var(--border);
 }
 
@@ -1049,7 +1093,7 @@ a:hover { color: var(--link-hover); }
   background: var(--code-bg);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 16px 18px;
+  padding: var(--space-4) 18px;
   overflow-x: auto;
   font-size: .85rem;
   line-height: 1.65;
@@ -1073,7 +1117,7 @@ a:hover { color: var(--link-hover); }
 .prose th { background: var(--bg-subtle); font-weight: 600; color: var(--text-p0); }
 
 /* ── 标签 ── */
-.tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 40px; }
+.tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-10); }
 .tag {
   font-size: .78rem; color: var(--text-meta);
   padding: 3px 11px; border-radius: 999px;
@@ -1091,8 +1135,8 @@ a:hover { color: var(--link-hover); }
   gap: 14px;
   /* stretch：让两个卡片等高，标题行数不同时也不会高低错落 */
   align-items: stretch;
-  margin: 48px 0 0;
-  padding-top: 28px;
+  margin: var(--space-12) 0 0;
+  padding-top: var(--space-7);
   border-top: 1px solid var(--border);
 }
 
@@ -1102,7 +1146,7 @@ a:hover { color: var(--link-hover); }
   gap: 6px;
   min-width: 0;                     /* 允许标题 ellipsis，否则会撑破网格 */
   height: 100%;                     /* 等高后内部对齐才一致 */
-  padding: 16px 18px;
+  padding: var(--space-4) 18px;
   border-radius: 14px;
   background: var(--card-bg);
   box-shadow: var(--lift-1);
@@ -1153,10 +1197,10 @@ a:hover { color: var(--link-hover); }
    两块都放在 .article-nav 之前，视觉上属于"正文的收尾"而不是"下一页的入口"。 */
 .author-card {
   display: flex;
-  gap: 16px;
+  gap: var(--space-4);
   align-items: flex-start;
-  margin: 40px 0 0;
-  padding: 20px 22px;
+  margin: var(--space-10) 0 0;
+  padding: var(--space-5) 22px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card-bg);
@@ -1171,7 +1215,7 @@ a:hover { color: var(--link-hover); }
 }
 .author-body { min-width: 0; }
 .author-name {
-  margin: 0 0 4px;
+  margin: 0 0 var(--space-1);
   font-size: .95rem;
   font-weight: 650;
   color: var(--text-p0);
@@ -1185,7 +1229,7 @@ a:hover { color: var(--link-hover); }
 .author-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: var(--space-4);
   font-size: .84rem;
 }
 
@@ -1274,7 +1318,7 @@ a:hover { color: var(--link-hover); }
   .article-toc-summary {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-2);
     min-height: var(--tap);
     padding: 10px 14px;
     cursor: pointer;
@@ -1341,8 +1385,8 @@ a:hover { color: var(--link-hover); }
   display: grid;
   /* 左栏定宽 —— 正文起始线在所有条目上对齐，不随日期位数变化 */
   grid-template-columns: 72px minmax(0, 1fr);
-  column-gap: 20px;
-  padding: 20px 0;
+  column-gap: var(--space-5);
+  padding: var(--space-5) 0;
   border-bottom: 1px solid var(--border);
 }
 .shuo-item:first-child { padding-top: 0; }
@@ -1423,7 +1467,7 @@ a:hover { color: var(--link-hover); }
 /* 时分：比日期更弱，挂在正文末尾作为"这条是什么时候发的" */
 .shuo-time {
   display: inline-block;
-  margin-top: 8px;
+  margin-top: var(--space-2);
   font-size: .72rem;
   color: var(--text-meta);
   letter-spacing: .02em;
@@ -1440,7 +1484,7 @@ a:hover { color: var(--link-hover); }
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 14px;
+  gap: var(--space-1) 14px;
 }
 .page-title-en {
   font-size: .72rem;
@@ -1449,7 +1493,7 @@ a:hover { color: var(--link-hover); }
   color: var(--text-p4);
   font-family: var(--font-sans);
   /* 与中文标题同排时稍微下移，避免贴着基线显得拥挤 */
-  padding-bottom: 4px;
+  padding-bottom: var(--space-1);
 }
 
 @media (max-width: 820px) {
@@ -1491,7 +1535,7 @@ a:hover { color: var(--link-hover); }
 .archive-year-count {
   font-size: var(--fs-xs);
   color: var(--text-meta);
-  margin-left: 8px;
+  margin-left: var(--space-2);
   font-weight: 400;
 }
 /* 每个月一组（原内联 marginBottom:10） */
@@ -1696,11 +1740,11 @@ a:hover { color: var(--link-hover); }
 
 /* 提示条：一律「浅底 + 深字 + 0.5px 微边框」，不铺满高饱和底色 */
 .notice {
-  padding: 12px 16px; border-radius: 10px;
+  padding: var(--space-3) var(--space-4); border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg-subtle);
   font-size: .88rem; color: var(--text-p2);
-  margin-bottom: 20px;
+  margin-bottom: var(--space-5);
   text-wrap: pretty;
 }
 .notice-error { border-color: var(--danger-border); background: var(--danger-bg); color: var(--danger); }
@@ -1724,7 +1768,7 @@ dialog.lightbox::backdrop { background: rgba(0,0,0,.8); }
 dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 
 /* ── 分页 ── */
-.pager { display: flex; justify-content: center; gap: 10px; margin-top: 40px; }
+.pager { display: flex; justify-content: center; gap: 10px; margin-top: var(--space-10); }
 /*
  * 分页的当前页（C-5）。
  *
@@ -1819,13 +1863,13 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   .site-shell:not(.site-shell--wide),
   .site-shell--wide {
     grid-template-columns: minmax(0, 1fr);
-    gap: 20px;
+    gap: var(--space-5);
     padding: 14px 20px calc(72px + env(safe-area-inset-bottom, 0px));
     max-width: 100%;
     width: 100%;
   }
   /* 首页不再有页面标题，列表从顶部开始，收紧首卡间距 */
-  .post-list { gap: 12px; }
+  .post-list { gap: var(--space-3); }
   /* 这里原本是 `display: none !important`。`!important` 是旧特异性冲突的
      权宜之计（`.nav a` 压过 `.nav-item` 那类问题），B-7 删掉冲突规则后
      已无必要；保留它反而会让以后想在小屏露出右栏时改不动。 */
@@ -1864,7 +1908,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
 .mobile-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   font-family: var(--font-serif);
   font-size: 1.05rem;
   font-weight: 650;
@@ -2051,7 +2095,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 .mobile-drawer-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   min-height: var(--tap-lg);
   padding: 12px 14px;
   border-radius: var(--radius-lg);
@@ -2076,7 +2120,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   grid-template-columns: repeat(3, 1fr);
   justify-items: center;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   padding: 16px 14px calc(18px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--border);
 }
@@ -2084,7 +2128,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 /* ── 手机抽屉里的聚合/友链 ── */
 .mobile-drawer-links {
   margin-top: 14px;
-  padding-top: 12px;
+  padding-top: var(--space-3);
   border-top: 1px solid var(--border);
 }
 .mobile-drawer-links-title {
@@ -2419,7 +2463,7 @@ summary:focus-visible,
 .article-eyebrow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   margin-bottom: 14px;
   font-size: .78rem;
   color: var(--text-p4);
@@ -2519,7 +2563,7 @@ summary:focus-visible,
 .mobile-search-form {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   width: 100%;
   position: relative;
 }
@@ -2542,7 +2586,7 @@ summary:focus-visible,
 
 /* ── 文章列表顶部搜索框（PC） ── */
 .content-search {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 .content-search .search-box--dashed {
   margin-bottom: 0;
@@ -2564,7 +2608,7 @@ summary:focus-visible,
  * 与首页的 `.content-search` 分开命名：首页那个在手机端要隐藏（顶栏有搜索），
  * 搜索页这个是页面主功能，任何视口都必须显示。 */
 .search-page-form {
-  margin-bottom: 24px;
+  margin-bottom: var(--space-6);
 }
 .search-page-form .search-box--dashed {
   margin-bottom: 0;
@@ -2588,7 +2632,7 @@ summary:focus-visible,
 .rb-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
   position: relative;
   padding-bottom: 10px;
 }
@@ -2619,14 +2663,22 @@ summary:focus-visible,
   line-height: 1.6;
 }
 
-/* ── 站点统计：2 列卡片网格 ── */
+/* ── 站点统计：12 列栅格里的 6+6（2026-11-08，栅格化）──
+ *
+ * 视觉与原来的 2 列**逐像素相同**（span 6 + span 6 + 一个栅距 ≡ 1fr 1fr），
+ * 换的是表达方式：所有等宽并列块统一走 12 列模型，将来要 8+4 或 4+4+4
+ * 只需改 span，不用再引入一套新的 grid-template-columns。
+ * 栅距保持 8px：局部覆盖 --grid-gutter，而不是把全局栅距改成 8。
+ */
 .stat-grid {
+  --grid-gutter: var(--space-2);
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--grid-gutter);
 }
 /* 最后一项单独占一格（共 5 项，2+2+1） */
 .stat-cell {
+  grid-column: span 6;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -2694,7 +2746,7 @@ summary:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 4px 10px 4px 8px;
+  padding: var(--space-1) 10px var(--space-1) var(--space-8);
   border-radius: 8px;
   font-size: .8rem;
   color: var(--text-p2);
@@ -2828,7 +2880,7 @@ summary:focus-visible,
 .views-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   color: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
@@ -2967,7 +3019,7 @@ summary:focus-visible,
   font-size: .875rem;
   color: var(--text-p2);
   line-height: 1.75;
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
   text-wrap: pretty;
 }
 .dialog-desc strong { color: var(--text-p0); font-weight: 600; }
@@ -2978,7 +3030,7 @@ summary:focus-visible,
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px solid var(--border);
@@ -3002,7 +3054,7 @@ summary:focus-visible,
   }
   .dialog-actions {
     flex-direction: column-reverse;
-    gap: 8px;
+    gap: var(--space-2);
   }
   .dialog-actions .btn {
     width: 100%;
@@ -3053,7 +3105,7 @@ summary:focus-visible,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 8px 10px 6px 20px;
   flex-shrink: 0;
 }
@@ -3075,7 +3127,7 @@ summary:focus-visible,
 .sheet-close:active { background: var(--bg-subtle); }
 
 .sheet-body {
-  padding: 4px 20px calc(20px + var(--safe-bottom));
+  padding: var(--space-1) var(--space-5) calc(var(--space-5) + var(--safe-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
@@ -3086,6 +3138,48 @@ summary:focus-visible,
 /* 桌面端不出现底部抽屉，一律走居中弹窗 */
 @media (min-width: 821px) {
   .sheet-mask, .sheet-panel { display: none; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   栅格叠加层（?grid=1，2026-11-08 栅格化）
+   ──────────────────────────────────────────────────────────────
+   只在 <html data-grid="1"> 时生效，属性由 components/GridOverlay.tsx
+   在客户端按 URL 的 grid=1 打上 —— 因此**服务端 HTML 没有任何差异**，
+   也不影响 nginx 的 30s 微缓存与 SEO。
+
+   画两层：
+     1. 12 列内容栅格（栅距 --grid-gutter）。列宽用 background-size 反推：
+        tile = (100% + gutter) / 12，每格里画出 tile − gutter 宽的列，
+        12 格合计正好等于内容宽（推导见 docs/grid-system.md）；
+     2. 纵向刻度（--grid-ruler，8px），用来量块与块之间的节奏。
+
+   ≤820px 切 4 列：手机内容宽约 335px，12 列每列只有 5.9px，
+   除了糊成一片没有信息量。
+
+   position: relative 只在 debug 态加 —— 平常态绝不能改变 .content
+   作为绝对定位包含块的身份（那会让某些装饰元素换参照物）。
+   ══════════════════════════════════════════════════════════════ */
+html[data-grid="1"] .content { position: relative; }
+html[data-grid="1"] .content::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-base);
+  pointer-events: none;
+  background-image:
+    linear-gradient(90deg,
+      color-mix(in oklab, var(--link) 14%, transparent) 0 calc(100% - var(--grid-gutter)),
+      transparent calc(100% - var(--grid-gutter))),
+    repeating-linear-gradient(180deg,
+      color-mix(in oklab, var(--text-p2) 10%, transparent) 0 1px,
+      transparent 1px var(--grid-ruler));
+  background-size: calc((100% + var(--grid-gutter)) / 12) 100%, 100% 100%;
+  background-repeat: repeat, no-repeat;
+}
+@media (max-width: 820px) {
+  html[data-grid="1"] .content::before {
+    background-size: calc((100% + var(--grid-gutter)) / 4) 100%, 100% 100%;
+  }
 }
 
 /* ── 全局减弱动效 ────────────────────────────────────────

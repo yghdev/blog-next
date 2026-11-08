@@ -237,21 +237,31 @@
   container-type: inline-size;
 }
 
+/* 12 列模型（2026-11-08 栅格化）。
+ *
+ * 视觉与原来的 1 列 / 容器内 2 列**逐像素相同**（12 = 12×1 或 6+6），
+ * 换的是表达方式：等宽并列块统一走 12 列，将来要 3 列只需把 span 6 改 4。
+ * 栅距 10px 是友链密度定的，只覆盖 --grid-gutter，不动全局值。 */
 .fr-grid {
+  --grid-gutter: 10px;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   grid-auto-rows: 1fr;
-  gap: 10px;
+  gap: var(--grid-gutter);
 }
 
 /* 容器 ≥620px 时两列：620 这个值是"每列至少 300px"的反推结果 */
 @container (min-width: 620px) {
-  .fr-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* 必须写成 .fr-grid .fr-card（0,2,0）：容器查询在文件里位于 .fr-card 的
+     基础规则之前，同特异性会按顺序被后面的 grid-column: 1 / -1 压掉。 */
+  .fr-grid .fr-card {
+    grid-column: span 6;
   }
 }
 
 .fr-card {
+  /* 基底占满 12 列（= 单列布局）；容器够宽时由上面的 @container 改成 span 6 */
+  grid-column: 1 / -1;
   display: flex;
   align-items: flex-start;
   gap: 14px;

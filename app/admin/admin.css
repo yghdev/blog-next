@@ -64,16 +64,38 @@
   --fx-danger: #b23a3e;  --fx-danger-bg: rgba(178, 58, 62, 0.08); --fx-danger-line: rgba(178, 58, 62, 0.30);
   --fx-info: #3a5f8c;    --fx-info-bg: rgba(58, 95, 140, 0.08);   --fx-info-line: rgba(58, 95, 140, 0.26);
 
-  /* ── 间距（后台密度：比前台紧一档，4 的倍数）── */
-  --fx-s1: 4px;
-  --fx-s2: 8px;
-  --fx-s3: 12px;
-  --fx-s4: 16px;
-  --fx-s5: 20px;
-  --fx-s6: 28px;
-  --fx-s7: 40px;
-  --fx-s8: 56px;
-  --fx-s9: 72px;
+  /* ── 间距（2026-11-08：改为前台 --space-* 的别名，前后台共用一套刻度）──
+   *
+   * 原来这 9 个值在后台上各写一遍、前台则散落成字面量 —— 同一个 4px 节奏
+   * 有两份事实来源，改一处不会影响另一处。现在值只在前台 :root 定义，
+   * 后台这层名字保留（447 处引用一行没动），但语义变成"后台的第几档"。
+   *
+   * ⚠️ 编号不对应：--fx-sN 是「第 N 档」，--space-N 是「N×4px」。
+   *   --fx-s1  4px = --space-1      --fx-s6 28px = --space-7
+   *   --fx-s2  8px = --space-2      --fx-s7 40px = --space-10
+   *   --fx-s3 12px = --space-3      --fx-s8 56px = --space-14
+   *   --fx-s4 16px = --space-4      --fx-s9 72px = --space-18
+   *   --fx-s5 20px = --space-5
+   * 映射由 tests/grid-system.test.ts 逐条断言，改错一档测试就红。
+   */
+  --fx-s1: var(--space-1);
+  --fx-s2: var(--space-2);
+  --fx-s3: var(--space-3);
+  --fx-s4: var(--space-4);
+  --fx-s5: var(--space-5);
+  --fx-s6: var(--space-7);
+  --fx-s7: var(--space-10);
+  --fx-s8: var(--space-14);
+  --fx-s9: var(--space-18);
+
+  /* ── 骨架（2026-11-08 栅格化）──
+   * 232 / 1320 / 1440 原来手写在 .admin-shell 与 .admin-main 里。
+   * 与前台 --w-shell 系列同等对待：改骨架只改这里。
+   * 断点仍是字面量（820 / 1080 / 1100 / 1200 / 1600）—— 媒体查询里
+   * var() 不可用，写成令牌只会让人误以为能改。 */
+  --fx-sidebar-w: 232px;
+  --fx-content-max: 1320px;
+  --fx-content-max-wide: 1440px;
 
   /* ── 圆角（后台比前台收紧：纸张感来自留白，不来自大圆角）── */
   --fx-r-xs: 4px;
@@ -288,7 +310,7 @@
    ══════════════════════════════════════════════════════════════════════ */
 .admin-shell {
   display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-columns: var(--fx-sidebar-w) minmax(0, 1fr);
   min-height: 100dvh;
   background: var(--fx-canvas);
 }
@@ -539,11 +561,11 @@
    左右内边距给足，让「留白」成为布局的一部分而不是剩下的空隙。 */
 .admin-main {
   width: 100%;
-  max-width: 1320px;
+  max-width: var(--fx-content-max);
   margin: 0;
   padding: var(--fx-s7) var(--fx-s7) var(--fx-s9);
 }
-@media (min-width: 1600px) { .admin-main { max-width: 1440px; } }
+@media (min-width: 1600px) { .admin-main { max-width: var(--fx-content-max-wide); } }
 
 /* ── 手机顶栏（桌面隐藏）── */
 .admin-topbar {
@@ -3432,13 +3454,19 @@ body.editor-focus-mode .editor-headline { padding-top: var(--fx-s6); }
 .conflict-dialog::backdrop { background: rgba(20, 19, 15, 0.46); }
 .conflict-head h2 { margin-bottom: var(--fx-s1); font-family: var(--font-serif); font-size: var(--fx-fs-lg); color: var(--fx-ink); }
 .conflict-head p { font-size: var(--fx-fs-sm); line-height: var(--fx-lh-base); color: var(--fx-muted); }
+/* 12 列模型（2026-11-08 栅格化）：三等分 = 12 里的 4+4+4。
+ * 视觉与 repeat(3, minmax(0,1fr)) **逐像素相同**（4+4+4 加两个栅距 ≡ 三等分），
+ * 换的是表达方式：等宽并列块统一走 12 列，将来要 2+1 或 3+3+3+3 只改 span。
+ * 栅距沿用后台 12px（--fx-s3），不把全局栅距改成 12。 */
 .conflict-grid {
+  --grid-gutter: var(--fx-s3);
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--fx-s3);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--grid-gutter);
   margin: var(--fx-s4) 0;
 }
 .conflict-col {
+  grid-column: span 4;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -3468,7 +3496,8 @@ body.editor-focus-mode .editor-headline { padding-top: var(--fx-s6); }
 .conflict-actions { display: flex; justify-content: flex-end; gap: var(--fx-s2); flex-wrap: wrap; }
 
 @media (max-width: 820px) {
-  .conflict-grid { grid-template-columns: 1fr; }
+  /* 单栏时不是把网格改成 1fr（12 列的轨道还在），而是让每列占满 12 列 */
+  .conflict-grid .conflict-col { grid-column: 1 / -1; }
   .conflict-body { max-height: 26vh; }
   .conflict-actions { flex-direction: column-reverse; }
   .conflict-actions .btn { width: 100%; min-height: var(--tap); }
@@ -5264,6 +5293,44 @@ body.editor-focus-mode .editor-headline { padding-top: var(--fx-s6); }
   font-size: var(--fx-fs-sm);
   line-height: 1.75;
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   栅格叠加层（?grid=1，2026-11-08 栅格化）
+   ──────────────────────────────────────────────────────────────────────
+   与前台 globals.css 里那块是同一套约定、同一个开关：components/GridOverlay.tsx
+   按 URL 的 grid=1 在 <html> 上打 data-grid="1"，服务端 HTML 没有任何差异。
+
+   后台只差两点：
+     1. 画在 .admin-main 的**内容盒**里 —— 它有 40px 内边距，若像前台那样
+        inset:0 直接铺，列会画进 padding 里，看起来「左边多出一列」。
+        所以用 background-origin/clip: content-box 把定位基准与裁切都收到内容盒。
+     2. 列色用后台品牌色 --fx-brand（前台是 --link）。
+   ══════════════════════════════════════════════════════════════════════ */
+html[data-grid="1"] .admin-main { position: relative; }
+html[data-grid="1"] .admin-main::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-base);
+  pointer-events: none;
+  background-image:
+    linear-gradient(90deg,
+      color-mix(in oklab, var(--fx-brand) 16%, transparent) 0 calc(100% - var(--grid-gutter)),
+      transparent calc(100% - var(--grid-gutter))),
+    repeating-linear-gradient(180deg,
+      color-mix(in oklab, var(--fx-ink) 8%, transparent) 0 1px,
+      transparent 1px var(--grid-ruler));
+  background-size: calc((100% + var(--grid-gutter)) / 12) 100%, 100% 100%;
+  background-origin: content-box;
+  background-clip: content-box;
+  background-repeat: repeat, no-repeat;
+}
+@media (max-width: 820px) {
+  html[data-grid="1"] .admin-main::before {
+    background-size: calc((100% + var(--grid-gutter)) / 4) 100%, 100% 100%;
+  }
+}
+
 .fx-scope .visit-notes p { margin: 0 0 var(--fx-s3); }
 .fx-scope .visit-notes b { color: var(--fx-ink); font-weight: var(--fx-fw-semi); }
 

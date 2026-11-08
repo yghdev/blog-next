@@ -38,7 +38,8 @@
     "test:media-editor": "node tests/editor-media-browser.mjs",
     "test:cmdk": "node tests/command-palette-browser.mjs",
     "test:layout": "node tests/layout-regression.mjs",
-    "test:motion": "node tests/reduced-motion.mjs"
+    "test:motion": "node tests/reduced-motion.mjs",
+    "test:grid": "node tests/grid-alignment.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
