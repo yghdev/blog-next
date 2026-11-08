@@ -24,6 +24,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { forceRemove } from "./materialize-native-deps.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ARGS = process.argv.slice(2);
@@ -135,6 +136,25 @@ const sum = cap("node", ["-e",
   ARCHIVE]);
 console.log("归档 " + size + " MB · sha256 " + sum.slice(0, 16) + "…  → " + ARCHIVE);
 
+/*
+ * 把产物展开到本地 dist/。
+ *
+ * 为什么必须做这一步（2026-11-08 首次实跑部署时踩到）：verify-assets.mjs 拿
+ * dist/.next/static/chunks 里的本地文件去和线上逐字节比哈希，而容器构建的 dist
+ * 在容器里、跑完就没了 —— 于是部署明明成功，最后一步却以
+ * 「本地没有 dist/.next/static/chunks」exit 2 收场。
+ *
+ * 注意必须用 forceRemove 而不是 fs.rmSync：Windows 上 rmSync 会**跟进** junction
+ * 把链接目标里的真实文件删掉（详见 materialize-native-deps.mjs 的说明）。
+ */
+if (DO_DEPLOY) {
+  const distDir = path.join(ROOT, "dist");
+  forceRemove(distDir);
+  fs.mkdirSync(distDir, { recursive: true });
+  cap("tar", ["-xzf", ARCHIVE, "-C", distDir]);
+  console.log("已展开到 dist/（供 verify-assets 做逐字节比对）");
+}
+
 if (!DO_DEPLOY) {
   step("4/4 停在构建完成");
   console.log("确认无误后：node scripts/release-linux.mjs --deploy");
@@ -149,9 +169,29 @@ const remoteSum = cap("ssh", ["-o", "BatchMode=yes", HOST, "sha256sum " + REMOTE
 if (remoteSum !== sum) die("上传后哈希不一致（" + remoteSum + " ≠ " + sum + "）：传输被截断，别继续");
 console.log("哈希一致");
 run("ssh", ["-o", "BatchMode=yes", HOST, "/opt/blog/deploy.sh " + REMOTE]);
-run("node", [path.join(ROOT, "scripts", "verify-deploy.mjs"), BASE + "/api/healthz"], { cwd: ROOT });
-run("node", [path.join(ROOT, "scripts", "verify-assets.mjs"), BASE], { cwd: ROOT });
+/*
+ * 两个核对各跑一次，失败**不中断**后续步骤 —— 但要在最后如实报错。
+ * 原因：走到这里线上已经切换完成，此时提前 throw 会掩盖"部署成功、核对失败"
+ * 这个真实状态，还会跳过服务器 /tmp 的清理（曾有 107MB 包留在 /tmp 里）。
+ */
+let verifyFailed = false;
+const verify = (label, file, arg) => {
+  try {
+    run("node", [path.join(ROOT, "scripts", file), arg], { cwd: ROOT });
+    return true;
+  } catch {
+    console.error("!! " + label + " 未通过（见上面输出）");
+    verifyFailed = true;
+    return false;
+  }
+};
+verify("版本一致性核对", "verify-deploy.mjs", BASE + "/api/healthz");
+verify("静态资产逐字节核对", "verify-assets.mjs", BASE);
 try { cap("ssh", ["-o", "BatchMode=yes", HOST, "rm -f /tmp/blog-dist-*.tar.gz"]); console.log("已清理服务器 /tmp/blog-dist-*.tar.gz"); }
 catch { console.warn("!! 远程清理失败（不影响线上）"); }
+
+if (verifyFailed) {
+  die("部署已经切到 " + info.shortCommit + "，但核对没通过 —— 不要当成发布成功。\n   回滚：ssh " + HOST + " '/opt/blog/deploy.sh --rollback'");
+}
 console.log("\n发布完成：" + info.shortCommit + " -> " + BASE);
 console.log("回滚：ssh " + HOST + " '/opt/blog/deploy.sh --rollback'");
