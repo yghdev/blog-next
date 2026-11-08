@@ -21,19 +21,26 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── 表面与文字（浅色：暖纸底，不是冷灰 SaaS）── */
-  --fx-canvas: #f5f2eb;      /* 页面底：暖纸 */
-  --fx-surface: #fbfaf6;     /* 内容表面：暖白，只给真正的块 */
-  --fx-raised: #fffdf9;      /* 浮层表面：弹窗 / 下拉 / 抽屉 */
-  --fx-sunken: #efece3;      /* 凹槽：代码、工具条、内嵌区 */
+  /* ── 表面与文字（浅色：中性白，2026-11-08 第三轮改「大厂白」）──
+   *
+   * 上一版是暖纸（#f5f2eb / #fbfaf6 / #fffdf9），偏编辑部/刊物感。用户要求
+   * 「主色调改成大厂常用的白色」：B 端工作台需要更高的信息对比、更中性的
+   * 灰阶，以及**纯白表面**（卡片 / 侧栏 / 浮层），品牌绿只做强调，不染画布。
+   *
+   * 对比度仍守 AA：主文字 17:1、次级 9.6:1、辅助 5.9:1、最弱 5.1:1（对白底）。
+   */
+  --fx-canvas: #f7f8fa;      /* 页面底：极浅中性灰（白卡片浮在上面才有层次） */
+  --fx-surface: #ffffff;     /* 内容表面：纯白（卡片 / 侧栏 / 浮层） */
+  --fx-raised: #ffffff;      /* 浮层表面：弹窗 / 下拉 / 抽屉（靠阴影分层） */
+  --fx-sunken: #f1f3f6;      /* 凹槽：代码、工具条、内嵌区 */
 
-  --fx-ink: #20231f;         /* 主文字 14.2:1 */
-  --fx-ink-2: #45483f;       /* 次级正文 8.3:1 */
-  --fx-muted: #63625a;       /* 辅助文字 5.5:1（规范给的 #77776F 在纸底仅 4.04:1，已校深到达标） */
-  --fx-faint: #6e6d65;       /* 最弱一级文字 4.9:1 —— 仍守 AA */
+  --fx-ink: #0f172a;         /* 主文字 17.4:1 */
+  --fx-ink-2: #334155;       /* 次级正文 9.6:1 */
+  --fx-muted: #5b6675;       /* 辅助文字 5.9:1 */
+  --fx-faint: #66707f;       /* 最弱一级文字 5.1:1 —— 仍守 AA */
 
-  --fx-line: #e7e1d7;        /* 分隔线（设计规范给定值） */
-  --fx-line-strong: #d8d1c4; /* 需要被界定的边界 */
+  --fx-line: #e4e7ec;        /* 分隔线（中性灰，不带纸黄） */
+  --fx-line-strong: #cfd5de; /* 需要被界定的边界 */
 
   /* ── 品牌与强调 ── */
   --fx-brand: #36796b;       /* 主强调：选中、链接、主交互 4.6:1 */
@@ -49,14 +56,14 @@
   /* ── 侧栏专属令牌 ──
      侧栏是全站唯一「常驻导航面」，它的层级靠这组色阶而不是靠线条：
      分组名最淡、菜单项稍深、选中项回到品牌色。集中在这里，组件不写死色值。 */
-  --fx-nav-group-ink: #6b6a61;   /* 分组名 4.9:1，比菜单项更弱 */
-  --fx-nav-ink: #5c5b52;         /* 普通菜单项 6.1:1 */
-  --fx-nav-icon: #7c7a70;        /* 图标比文字再弱一档，仍 >= 3:1 */
-  --fx-nav-active-bg: #e5ece5;   /* 选中底：浅绿，不是品牌实色 */
+  --fx-nav-group-ink: #6b7280;   /* 分组名 4.8:1，比菜单项更弱 */
+  --fx-nav-ink: #475569;         /* 普通菜单项 7.5:1 */
+  --fx-nav-icon: #7b8494;        /* 图标比文字再弱一档，仍 >= 3:1 */
+  --fx-nav-active-bg: #eef4f1;   /* 选中底：品牌极浅绿（白底上几乎无染色） */
   --fx-nav-active-ink: #2b6459;  /* 选中字：深墨绿 5.7:1 */
-  --fx-nav-hover-bg: #efece4;    /* hover 用暖灰，和选中绿区分开 */
-  --fx-nav-press-bg: #e9e5db;
-  --fx-side-divider: rgba(32, 35, 31, 0.07);
+  --fx-nav-hover-bg: #f1f3f6;    /* hover 用中性灰，和选中绿区分开 */
+  --fx-nav-press-bg: #e8ecf1;
+  --fx-side-divider: rgba(15, 23, 42, 0.07);
 
   /* ── 语义状态（浅底深字，按语义分配，不复用品牌色冒充状态）── */
   --fx-ok: #1f7a52;      --fx-ok-bg: rgba(31, 122, 82, 0.09);     --fx-ok-line: rgba(31, 122, 82, 0.30);
@@ -88,14 +95,16 @@
   --fx-s8: var(--space-14);
   --fx-s9: var(--space-18);
 
-  /* ── 骨架（2026-11-08 栅格化）──
-   * 232 / 1320 / 1440 原来手写在 .admin-shell 与 .admin-main 里。
-   * 与前台 --w-shell 系列同等对待：改骨架只改这里。
+  /* ── 骨架（2026-11-08 第二轮：改用整页 12 列，与前台同一套列线）──
+   *
+   * 原来这里是 232 / 1320 / 1440 三个手写常量（侧栏轨道、内容上限）。
+   * 现在后台和前台共用 globals.css 的 --page-max / --page-gutter / --page-col：
+   *   第 1 列留白 · 第 2–3 列侧栏（2 列）· 第 4–11 列主体（8 列）· 第 12 列留白
+   * 所以「侧栏多宽」「内容多宽」不再由后台自己决定，而是列宽的推论 ——
+   * 这也顺手消掉了旧版「侧栏 232 + 内容上限 1320」在大屏上左右留白不等的问题。
+   *
    * 断点仍是字面量（820 / 1080 / 1100 / 1200 / 1600）—— 媒体查询里
    * var() 不可用，写成令牌只会让人误以为能改。 */
-  --fx-sidebar-w: 232px;
-  --fx-content-max: 1320px;
-  --fx-content-max-wide: 1440px;
 
   /* ── 圆角（后台比前台收紧：纸张感来自留白，不来自大圆角）── */
   --fx-r-xs: 4px;
@@ -130,9 +139,9 @@
   --fx-row-h: 58px;
 
   /* ── 阴影：只有浮层配拥有（列表与卡片一律不用阴影）── */
-  --fx-shadow-1: 0 1px 2px rgba(32, 35, 31, 0.06);
-  --fx-shadow-2: 0 1px 3px rgba(32, 35, 31, 0.07), 0 8px 24px -12px rgba(32, 35, 31, 0.18);
-  --fx-shadow-3: 0 2px 6px rgba(32, 35, 31, 0.08), 0 24px 56px -16px rgba(32, 35, 31, 0.28);
+  --fx-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --fx-shadow-2: 0 1px 3px rgba(15, 23, 42, 0.08), 0 8px 24px -12px rgba(15, 23, 42, 0.16);
+  --fx-shadow-3: 0 2px 6px rgba(15, 23, 42, 0.09), 0 24px 56px -16px rgba(15, 23, 42, 0.26);
   --fx-ring: 0 0 0 3px rgba(54, 121, 107, 0.22);
 
   /* ── 动效（安静：只在状态变化处出现，不为「有动效」而动）── */
@@ -142,40 +151,40 @@
   --fx-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-/* 深色不是浅色的反转：底色带暖（近墨的棕黑），强调色整体提亮，
-   状态色提高亮度并压低底色比例，避免「黑底黑字」。 */
+/* 深色跟着白版一起换成中性石墨（原来带暖棕，和白版并排像两套主题）；
+   强调色整体提亮、状态色压低底比，避免「黑底黑字」。 */
 :root[data-theme="dark"] {
-  --fx-canvas: #15140f;
-  --fx-surface: #1c1b16;
-  --fx-raised: #22201a;
-  --fx-sunken: #100f0b;
+  --fx-canvas: #0b0f14;
+  --fx-surface: #121821;
+  --fx-raised: #18202a;
+  --fx-sunken: #080b0f;
 
-  --fx-ink: #edeae2;         /* 15.3:1 */
-  --fx-ink-2: #d9d5ca;       /* 12.6:1 */
-  --fx-muted: #a8a396;       /* 6.9:1 */
-  --fx-faint: #8b8779;       /* 4.8:1 */
+  --fx-ink: #e6eaf1;         /* 15.0:1 */
+  --fx-ink-2: #c2c9d5;       /* 11.3:1 */
+  --fx-muted: #96a1b0;       /* 6.9:1 */
+  --fx-faint: #8590a0;       /* 5.8:1 */
 
-  --fx-line: #2c2921;
-  --fx-line-strong: #3a362c;
+  --fx-line: #212837;
+  --fx-line-strong: #2e3745;
 
   --fx-brand: #6fb3a1;       /* 7.1:1 */
   --fx-brand-ink: #8ec9b9;
   --fx-brand-fill: #4e9e8b;  /* 暗色用亮底配深字：5.9:1 */
-  --fx-brand-on: #101210;
+  --fx-brand-on: #08110e;
   --fx-brand-tint: rgba(111, 179, 161, 0.13);
   --fx-brand-line: rgba(111, 179, 161, 0.34);
   --fx-accent: #d99372;      /* 暗色下 6.9:1，可直接做文字 */
   --fx-accent-text: #d99372;
   --fx-accent-tint: rgba(217, 147, 114, 0.13);
 
-  --fx-nav-group-ink: #a8a396;
-  --fx-nav-ink: #c9c5b9;
-  --fx-nav-icon: #9a968a;
+  --fx-nav-group-ink: #96a1b0;
+  --fx-nav-ink: #c7cedb;
+  --fx-nav-icon: #98a3b2;
   --fx-nav-active-bg: rgba(111, 179, 161, 0.14);
   --fx-nav-active-ink: #9ed2c3;
-  --fx-nav-hover-bg: rgba(237, 234, 226, 0.06);
-  --fx-nav-press-bg: rgba(237, 234, 226, 0.10);
-  --fx-side-divider: rgba(237, 234, 226, 0.08);
+  --fx-nav-hover-bg: rgba(230, 234, 241, 0.06);
+  --fx-nav-press-bg: rgba(230, 234, 241, 0.10);
+  --fx-side-divider: rgba(230, 234, 241, 0.08);
 
   --fx-ok: #74c79e;      --fx-ok-bg: rgba(116, 199, 158, 0.12);     --fx-ok-line: rgba(116, 199, 158, 0.32);
   --fx-warn: #e0b063;    --fx-warn-bg: rgba(224, 176, 99, 0.12);    --fx-warn-line: rgba(224, 176, 99, 0.32);
@@ -191,33 +200,33 @@
 /* 跟随系统且用户没手动选过主题时，与上面同一套暗色令牌 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    --fx-canvas: #15140f;
-    --fx-surface: #1c1b16;
-    --fx-raised: #22201a;
-    --fx-sunken: #100f0b;
-    --fx-ink: #edeae2;
-    --fx-ink-2: #d9d5ca;
-    --fx-muted: #a8a396;
-    --fx-faint: #8b8779;
-    --fx-line: #2c2921;
-    --fx-line-strong: #3a362c;
+    --fx-canvas: #0b0f14;
+    --fx-surface: #121821;
+    --fx-raised: #18202a;
+    --fx-sunken: #080b0f;
+    --fx-ink: #e6eaf1;
+    --fx-ink-2: #c2c9d5;
+    --fx-muted: #96a1b0;
+    --fx-faint: #8590a0;
+    --fx-line: #212837;
+    --fx-line-strong: #2e3745;
     --fx-brand: #6fb3a1;
     --fx-brand-ink: #8ec9b9;
     --fx-brand-fill: #4e9e8b;
-    --fx-brand-on: #101210;
+    --fx-brand-on: #08110e;
     --fx-brand-tint: rgba(111, 179, 161, 0.13);
     --fx-brand-line: rgba(111, 179, 161, 0.34);
     --fx-accent: #d99372;
     --fx-accent-text: #d99372;
     --fx-accent-tint: rgba(217, 147, 114, 0.13);
-    --fx-nav-group-ink: #a8a396;
-    --fx-nav-ink: #c9c5b9;
-    --fx-nav-icon: #9a968a;
+    --fx-nav-group-ink: #96a1b0;
+    --fx-nav-ink: #c7cedb;
+    --fx-nav-icon: #98a3b2;
     --fx-nav-active-bg: rgba(111, 179, 161, 0.14);
     --fx-nav-active-ink: #9ed2c3;
-    --fx-nav-hover-bg: rgba(237, 234, 226, 0.06);
-    --fx-nav-press-bg: rgba(237, 234, 226, 0.10);
-    --fx-side-divider: rgba(237, 234, 226, 0.08);
+    --fx-nav-hover-bg: rgba(230, 234, 241, 0.06);
+    --fx-nav-press-bg: rgba(230, 234, 241, 0.10);
+    --fx-side-divider: rgba(230, 234, 241, 0.08);
     --fx-ok: #74c79e;      --fx-ok-bg: rgba(116, 199, 158, 0.12);     --fx-ok-line: rgba(116, 199, 158, 0.32);
     --fx-warn: #e0b063;    --fx-warn-bg: rgba(224, 176, 99, 0.12);    --fx-warn-line: rgba(224, 176, 99, 0.32);
     --fx-danger: #ff8b85;  --fx-danger-bg: rgba(255, 139, 133, 0.12); --fx-danger-line: rgba(255, 139, 133, 0.32);
@@ -302,25 +311,34 @@
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   骨架：侧栏 + 主体
+   骨架：整页 12 列（1 / 2 / 8 / 1）
    ──────────────────────────────────────────────────────────────────────
-   桌面：固定 232px 侧栏（规范 220–232 区间），与主体仅用一条 1px 线分隔，
-        不做「白侧栏浮在灰底上」——侧栏与画布同为纸色，边界靠线而非色差。
+   2026-11-08 第二轮起，后台与前台**共用一套列线**：
+     第 1 列留白 · 2–3 列侧栏（2 列）· 4–11 列主体（8 列）· 12 列留白。
+   容器上限、栅距、单列宽都来自 globals.css 的 --page-max / --page-gutter /
+   --page-col（与前台同源），所以后台的左右留白天然对称 —— 旧版是
+   「侧栏贴左边 0、主体按 1320 封顶」，大屏上右侧空出一大块。
+   侧栏白底 + 1px 边界（大厂工作台常见做法）：画布浅灰、家具纯白。
    手机：侧栏消失，顶栏 + 底部抽屉。这不是把侧栏压窄，而是另一套布局。
    ══════════════════════════════════════════════════════════════════════ */
 .admin-shell {
   display: grid;
-  grid-template-columns: var(--fx-sidebar-w) minmax(0, 1fr);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--page-gutter);
+  max-width: var(--page-max);
+  margin: 0 auto;
   min-height: 100dvh;
   background: var(--fx-canvas);
 }
 
 /* ── 侧栏 ───────────────────────────────────────────────────────────────
-   232px：比上一版宽 8px，换取「图标 + 两字菜单 + 快捷键」不挤在一起。
+   占整页栅格的第 2–3 列（桌面 220px @1440、239px @1552）：图标 + 两字菜单
+   仍放得下，且左缘正好落在第 2 列起点（与前台左导航同一条竖线）。
    侧栏自己不滚动，只有中间的 .admin-side-nav 滚 —— 品牌/主按钮与底部
    账号区因此永远可见，用户滚到任何位置都不会把「写文章」滚丢，
    底栏也不会盖住最后一项菜单。 */
 .admin-sidebar {
+  grid-column: 2 / span 2;
   position: sticky;
   top: 0;
   align-self: start;
@@ -329,7 +347,7 @@
   flex-direction: column;
   padding: 0;
   border-right: 1px solid var(--fx-line);
-  background: var(--fx-canvas);
+  background: var(--fx-surface);
   overflow: hidden;
 }
 
@@ -554,18 +572,21 @@
 .admin-foot-link svg { color: var(--fx-nav-icon); }
 
 /* ── 主体 ── */
-.admin-body { min-width: 0; display: flex; flex-direction: column; }
+.admin-body {
+  grid-column: 4 / span 8;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
 .admin-topbar-fill { flex: 1; }
 
-/* 内容区：常规页面参考最大宽 1440（此处取 1320 的可读上限，大屏放宽），
-   左右内边距给足，让「留白」成为布局的一部分而不是剩下的空隙。 */
+/* 内容区：宽度由「主体 8 列」决定（1440 下 952、1552 下 1027），不再自己封顶。
+   左右内边距给足，让留白成为布局的一部分，而不是列宽剩下来的空隙。 */
 .admin-main {
   width: 100%;
-  max-width: var(--fx-content-max);
   margin: 0;
   padding: var(--fx-s7) var(--fx-s7) var(--fx-s9);
 }
-@media (min-width: 1600px) { .admin-main { max-width: var(--fx-content-max-wide); } }
 
 /* ── 手机顶栏（桌面隐藏）── */
 .admin-topbar {
@@ -601,7 +622,8 @@
   .admin-topbar { display: none; }
 }
 @media (max-width: 820px) {
-  .admin-shell { display: block; }
+  /* 手机没有页边留白：侧栏变抽屉，主体自己给 16 / 20 内边距 */
+  .admin-shell { display: block; max-width: 100%; }
   .admin-sidebar { display: none; }
   .admin-topbar { display: block; }
   .admin-menu-btn { display: grid; }
@@ -3268,8 +3290,8 @@ a.fx-figure:hover .fx-figure-label { color: var(--fx-ink-2); }
    只改「壳」：隐藏左导航与右栏，正文列放宽。编辑器状态完全不动 ——
    同一个 textarea 节点、同一个滚动容器，光标与选区因此不会丢。 */
 body.editor-focus-mode .admin-sidebar { display: none; }
-body.editor-focus-mode .admin-shell { grid-template-columns: minmax(0, 1fr); }
-body.editor-focus-mode .admin-main { max-width: none; }
+/* 专注模式没有侧栏：主体直接铺满 12 列，不再为侧栏留出 2 列 */
+body.editor-focus-mode .admin-body { grid-column: 1 / -1; }
 body.editor-focus-mode .editor-workbench { --editor-column: 900px; }
 body.editor-focus-mode .editor-rail { display: none; }
 body.editor-focus-mode .editor-body { grid-template-columns: minmax(0, 1fr); padding-top: var(--fx-s3); }
@@ -5300,14 +5322,16 @@ body.editor-focus-mode .editor-headline { padding-top: var(--fx-s6); }
    与前台 globals.css 里那块是同一套约定、同一个开关：components/GridOverlay.tsx
    按 URL 的 grid=1 在 <html> 上打 data-grid="1"，服务端 HTML 没有任何差异。
 
-   后台只差两点：
-     1. 画在 .admin-main 的**内容盒**里 —— 它有 40px 内边距，若像前台那样
-        inset:0 直接铺，列会画进 padding 里，看起来「左边多出一列」。
-        所以用 background-origin/clip: content-box 把定位基准与裁切都收到内容盒。
-     2. 列色用后台品牌色 --fx-brand（前台是 --link）。
+   后台与前台画的是**同一套整页 12 列**（.admin-shell 的内容盒），列距 --page-gutter，
+   列色用后台品牌色 --fx-brand（前台是 --link）。
+
+   上一版画在 .admin-main 的内容盒里，用 background-origin: content-box 收边 ——
+   但 background-size 的百分比基准仍是 padding box，实测只画出 ~11 列，
+   与卡片左边线差 20–30px（用户看到的「没生效」有一部分就是它）。
+   现在骨架本身就是 12 列，inset: 0 即内容盒，列线 = 留白 / 侧栏 / 主体的边界。
    ══════════════════════════════════════════════════════════════════════ */
-html[data-grid="1"] .admin-main { position: relative; }
-html[data-grid="1"] .admin-main::before {
+html[data-grid="1"] .admin-shell { position: relative; }
+html[data-grid="1"] .admin-shell::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -5315,19 +5339,18 @@ html[data-grid="1"] .admin-main::before {
   pointer-events: none;
   background-image:
     linear-gradient(90deg,
-      color-mix(in oklab, var(--fx-brand) 16%, transparent) 0 calc(100% - var(--grid-gutter)),
-      transparent calc(100% - var(--grid-gutter))),
+      color-mix(in oklab, var(--fx-brand) 16%, transparent) 0 calc(100% - var(--page-gutter)),
+      transparent calc(100% - var(--page-gutter))),
     repeating-linear-gradient(180deg,
       color-mix(in oklab, var(--fx-ink) 8%, transparent) 0 1px,
       transparent 1px var(--grid-ruler));
-  background-size: calc((100% + var(--grid-gutter)) / 12) 100%, 100% 100%;
-  background-origin: content-box;
-  background-clip: content-box;
+  background-size: calc((100% + var(--page-gutter)) / 12) 100%, 100% 100%;
   background-repeat: repeat, no-repeat;
 }
 @media (max-width: 820px) {
-  html[data-grid="1"] .admin-main::before {
-    background-size: calc((100% + var(--grid-gutter)) / 4) 100%, 100% 100%;
+  html[data-grid="1"] .admin-shell::before {
+    inset: 0 var(--fx-s4);
+    background-size: calc((100% + var(--page-gutter)) / 4) 100%, 100% 100%;
   }
 }
 

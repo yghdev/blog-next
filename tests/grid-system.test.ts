@@ -144,13 +144,35 @@ test("栅格化：后台不得再手写间距像素（消灭第二份事实来�
   assert.deepEqual(literals, [], "后台 :root 仍有像素字面量（应改为 var(--space-*)）：" + literals.join(", "));
 });
 
-test("栅格化：后台骨架参数已令牌化（232 / 1320 / 1440）", () => {
+test("栅格化：后台骨架也落在整页 12 列上（1 / 2 / 8 / 1）", () => {
+  /**
+   * 2026-11-08 第二轮：后台不再自己定义骨架宽度（旧的 --fx-sidebar-w:232px /
+   * --fx-content-max:1320 / --fx-content-max-wide:1440 已删除），而是和前台
+   * 共用 --page-max / --page-gutter，按 留白 / 侧栏 2 列 / 主体 8 列 / 留白 分配。
+   * 这样才能做到用户要的「两边留点留白」，也让 ?grid=1 的列线真的对上家具边界。
+   */
   const adminRoot = rootBlock(CSS_ADMIN);
-  assert.match(adminRoot, /--fx-sidebar-w:\s*232px/, "侧栏轨道应令牌化");
-  assert.match(adminRoot, /--fx-content-max:\s*1320px/, "内容上限应令牌化");
-  assert.match(adminRoot, /--fx-content-max-wide:\s*1440px/, "宽屏内容上限应令牌化");
-  assert.match(CSS_ADMIN, /\.admin-shell\s*\{[^}]*var\(--fx-sidebar-w\)/s, ".admin-shell 应使用 --fx-sidebar-w");
-  assert.match(CSS_ADMIN, /\.admin-main\s*\{[^}]*max-width:\s*var\(--fx-content-max\)/s, ".admin-main 应使用 --fx-content-max");
+  for (const dead of ["--fx-sidebar-w", "--fx-content-max", "--fx-content-max-wide"]) {
+    assert.doesNotMatch(adminRoot, new RegExp(dead + "\\s*:"), "后台不应再保留旧骨架令牌 " + dead);
+  }
+  assert.match(CSS_ADMIN, /\.admin-shell\s*\{[^}]*grid-template-columns:\s*repeat\(12,\s*minmax\(0,\s*1fr\)\)/s, ".admin-shell 应为整页 12 列");
+  assert.match(CSS_ADMIN, /\.admin-shell\s*\{[^}]*column-gap:\s*var\(--page-gutter\)/s, ".admin-shell 的列距应走 --page-gutter");
+  assert.match(CSS_ADMIN, /\.admin-shell\s*\{[^}]*max-width:\s*var\(--page-max\)/s, ".admin-shell 应受 --page-max 约束（两边留白）");
+  assert.match(CSS_ADMIN, /\.admin-sidebar\s*\{[^}]*grid-column:\s*2 \/ span 2/s, "侧栏应占第 2–3 列");
+  assert.match(CSS_ADMIN, /\.admin-body\s*\{[^}]*grid-column:\s*4 \/ span 8/s, "主体应占第 4–11 列");
+  assert.match(CSS_ADMIN, /body\.editor-focus-mode \.admin-body\s*\{\s*grid-column:\s*1 \/ -1/, "专注模式主体应铺满 12 列");
+});
+
+test("栅格化：后台主色调为中性白（大厂白），不再是暖纸", () => {
+  /**
+   * 用户要求「主色调改成大厂常用的白色」：surface 纯白、canvas 极浅中性灰、
+   * 分隔线中性灰；暖纸底（#f5f2eb / #fbfaf6 / #fffdf9）不得复活。
+   */
+  const adminRoot = rootBlock(CSS_ADMIN);
+  assert.match(adminRoot, /--fx-surface:\s*#ffffff/, "内容表面应为纯白");
+  assert.match(adminRoot, /--fx-canvas:\s*#f7f8fa/, "页面底应为中性浅灰");
+  assert.match(adminRoot, /--fx-line:\s*#e4e7ec/, "分隔线应为中性灰");
+  assert.doesNotMatch(adminRoot, /#f5f2eb|#fbfaf6|#fffdf9|#efece3/, "不应再出现暖纸底色");
 });
 
 /* ────────────────────────── 12 列契约 ────────────────────────── */
@@ -227,7 +249,7 @@ test("栅格化：叠加层规则必须全部挂在 html[data-grid=\"1\"] 下", 
   // 不允许存在"没有前缀的 .content::before / .admin-main::before"（那等于常驻叠加层）
   for (const [css, sel] of [
     [CSS_GLOBALS, ".site-shell::before"],
-    [CSS_ADMIN, ".admin-main::before"],
+    [CSS_ADMIN, ".admin-shell::before"],
   ] as const) {
     for (const r of rules(css)) {
       if (!r.selector.includes(sel)) continue;
@@ -258,7 +280,7 @@ test("栅格化：叠加层小屏切 4 列（12 列在手机上不可读）", ()
     "前台整页叠加层应在 ≤820px 切成 4 列"
   );
   assert.ok(
-    CSS_ADMIN.includes("calc((100% + var(--grid-gutter)) / 4)"),
+    CSS_ADMIN.includes("calc((100% + var(--page-gutter)) / 4)"),
     "后台叠加层应在 ≤820px 切成 4 列"
   );
 });

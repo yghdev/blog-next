@@ -188,6 +188,9 @@ try {
     return {
       sideRight: +side.right.toFixed(2),
       mainLeft: +mr.left.toFixed(2),
+      // 2026-11-08：后台也是整页 12 列，侧栏（第 2–3 列）与主体（第 4 列起）
+      // 之间隔着一个 --page-gutter 的列距，不再是「紧贴相接」。
+      gap: +parseFloat(getComputedStyle(document.querySelector(".admin-shell")).columnGap || "0").toFixed(2),
       contentLeft: +(mr.left + parseFloat(cs.paddingLeft)).toFixed(2),
       contentRight: +(mr.right - parseFloat(cs.paddingRight)).toFixed(2),
       blocks: [...main.children].map((el) => Object.assign({ cls: String(el.className) }, box(el))),
@@ -197,8 +200,8 @@ try {
     };
   });
   assert.ok(
-    Math.abs(overview.sideRight - overview.mainLeft) <= TOL,
-    "后台侧栏右缘应等于主体左缘：" + overview.sideRight + " vs " + overview.mainLeft
+    Math.abs(overview.mainLeft - overview.sideRight - overview.gap) <= TOL,
+    "后台主体左缘应与侧栏右缘相隔一个栅距（" + overview.gap + "）：" + overview.sideRight + " vs " + overview.mainLeft
   );
   for (const b of overview.blocks) {
     assert.ok(
@@ -316,13 +319,14 @@ try {
   const beforeAdmin = await layoutFingerprint(page, server.base + "/admin/overview");
   await open(page, server.base + "/admin/overview?grid=1");
   await page.waitForFunction(() => document.documentElement.getAttribute("data-grid") === "1", null, { timeout: 5000 });
-  const adminOverlay = await overlayState(page, ".admin-main");
+  const adminOverlay = await overlayState(page, ".admin-shell");
   assert.equal(adminOverlay.position, "absolute", "后台叠加层应为绝对定位");
   assert.equal(adminOverlay.pointerEvents, "none", "后台叠加层不能挡点击");
-  // 两层背景 → 计算值是 "content-box, content-box"，所以用包含而不是相等
+  // 画在整页容器上（骨架本身就是 12 列，容器也没有横向 padding，
+  // 所以 padding 盒 = 内容盒，不需要上一版 content-box 那套偏移技巧）
   assert.ok(
-    String(adminOverlay.backgroundOrigin).includes("content-box"),
-    "后台叠加层应画在内容盒里（background-origin: content-box），实际 " + adminOverlay.backgroundOrigin
+    String(adminOverlay.backgroundOrigin).includes("padding-box"),
+    "后台叠加层应铺在容器 padding 盒上，实际 " + adminOverlay.backgroundOrigin
   );
   const adminCols = overlayColumns(adminOverlay, adminOverlay.contentWidth);
   assert.ok(Math.abs(adminCols - 12) <= 0.6, "后台叠加层应为 12 列，实测 " + adminCols.toFixed(2) + " 列");
