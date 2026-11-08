@@ -162,54 +162,44 @@
   --space-24: 96px;
 
   /*
-   * ── 内容栅格（2026-11-08，栅格化）──
+   * ── 整页栅格（2026-11-08 第二轮：从"内容区标尺"改成"整页骨架"）──
    *
-   * 骨架栅距是 --gap-col(40px)，属于「三块家具之间」的距离；
-   * 这里这条是**内容区内部**的列间距（12 列），两件事不要混用。
+   * 12 列 × 24px 栅距。三栏页按 **1 / 2 / 6 / 2 / 1** 分配：
    *
-   * 列数固定 12，但**不提供 --grid-cols 令牌**：CSS Grid 的
-   * repeat() 不接受 var()（浏览器实测无效），所以列数在样式里写字面量，
-   * 由 tests/grid-system.test.ts 盯着，防漂移。
+   *   第 1 列     留白（页面左边缘）
+   *   第 2–3 列   左导航（fixed，宽 = 2 列 + 1 栅距）
+   *   第 4–9 列   正文（6 列）
+   *   第 10–11 列 右栏（2 列）
+   *   第 12 列    留白（页面右边缘）
+   *
+   * 两栏页与宽版页把右栏那 2 列并入正文（1 / 2 / 8 / 1）。
+   *
+   * **为什么不再用 288/800/320 + 40 栅距**：那三条轨在任何等宽列栅格上
+   * 都无整数解 —— 要 288 = ku − g、800 = ku − g、320 = ku − g 同时成立，
+   * 相减得 u 必须整除 512 与 32，再代入 0 < g < u 无解。所以"整页栅格"
+   * 只能由栅格反推轨道，而不是把栅格硬套到固定轨道上（上一轮的 12 列
+   * 叠加层因此只是一把尺，见 docs/grid-system.md 的变更记录）。
+   *
+   * --page-col 里的 100% 在**使用处**解析：fixed 定位按视口宽、页脚内边距
+   * 按包含块宽，两者都再被 --page-max 夹住，所以左栏在任意视口都停在
+   * 「第 2 列起点」。
+   */
+  --page-max: 1552px;
+  --page-gutter: 24px;
+  --page-col: calc((min(100%, var(--page-max)) - 11 * var(--page-gutter)) / 12);
+  /*
+   * 内容区内部 12 列栅格用的栅距。值与 --page-gutter 相同，但语义不同：
+   * 一个管整页家具，一个管"同一行里放多块"（统计 / 友链 / 冲突弹窗），
+   * 后者允许按密度局部覆盖（8 / 10 / 12）。
    */
   --grid-gutter: 24px;
   --grid-ruler: 8px;
-  --w-main: 800px;
-  --gap-col: 40px;
-  --w-side: 288px;
-  --w-toc: 320px;
   /*
-   * 宽版页（搜索 / 友链）的正文上限。取 960 而不是 800，是因为这两个页面
-   * 没有右栏——把省下来的 320px 让给正文，列表类内容读起来更舒展。
-   */
-  --w-read: 960px;
-  /*
-   * 正文行宽（P0-1，2026-11-07）。
-   *
-   * 原来正文宽度 = 中栏宽度，随视口在 640–800px 之间漂：1440 下 688、
-   * 1440→1600 一路涨到 800。16px 字号时 800px 约 50 个汉字/行，超出中文
-   * 阅读的舒适区（30–40 字），大屏上回扫成本明显。
-   *
-   * 这里只收敛**文章页**的正文，不动 --w-main：左栏是 fixed 定位，横向位置
-   * 由 --w-shell 的公式决定，改 --w-main 会连带把左栏在所有页面上的位置
-   * 改掉（见 .sidebar 的注释）。
+   * 正文行宽（P0-1，2026-11-07）。三栏页正文列 = 6 列（1440 下 708、
+   * 1552 下 764），行宽仍收敛到 672：17px 下约 39 个汉字/行。
    */
   --measure-prose: 672px;
   --fs-prose: 1.0625rem;   /* 17px：672px 下约 39 个汉字/行 */
-  /*
-   * 站点骨架宽度：**唯一事实来源**（B-2）。
-   *
-   * 这三个值以前是手抄在 5 处的同一串加法。改一个参数要记得改 5 个地方，
-   * 漏一处就出现「首页对齐了、友链页还是老偏移」这种只在某个页面出现的
-   * 错位。现在只在令牌里算一次。
-   *
-   * `--w-shell-narrow` 在 B-2 里曾刻意保留既有值 1152（漏了 gap-col 40），
-   * 因为那一步是纯重构、要求逐像素不变。B-3 重构两栏几何时一并修正为
-   * 1192 —— 否则 1192–1200 这一小段视口容器会多收 8px，左栏偏移 56px
-   * 而不是 32px（实测：修正前 1200px 视口的 .sidebar.left = 56）。
-   */
-  --w-shell: calc(var(--w-side) + var(--w-main) + var(--w-toc) + var(--gap-col) * 2 + 64px);
-  --w-shell-narrow: calc(var(--w-side) + var(--w-main) + var(--gap-col) + 64px);
-  --w-shell-read: calc(var(--w-side) + var(--w-read) + var(--gap-col) + 64px);
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
                "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
   --font-serif: "Iowan Old Style", "Palatino Linotype", "Noto Serif SC",
@@ -463,84 +453,55 @@ a:hover { color: var(--link-hover); }
    注意：这条必须写在所有 @media 之前，否则会覆盖断点里的 display:flex */
 .mobile-topbar { display: none; }
 
-/* ── 站点骨架：左导航 + 主内容 + 右目录 ── */
+/* ── 站点骨架：整页 12 列（1 / 2 / 6 / 2 / 1） ──
+ *
+ * 三块家具不再各写固定宽度，而是**落在同一套列线上**：
+ *   第 1 列留白 → 左导航（2 列）→ 正文（6 列）→ 右栏（2 列）→ 第 12 列留白。
+ * 左导航是 fixed（脱离文档流），所以它不占列，位置/宽度由 .sidebar 用
+ * --page-col 算出「第 2 列起点」和「2 列 + 1 栅距」。
+ */
 .site-shell {
   display: grid;
-  /*
-   * 默认按三栏渲染（历史行为）。
-   *
-   * B-1 会给每个页面加 `site-shell--three-col` / `--wide` 显式 variant；
-   * 在那之前这里必须先给出三列，否则所有页面会退化成单列（实测三栏下
-   * 正文从 800 撑到 1488）。保留这条默认值也让 B-2 成为**纯重构**：
-   * 逐视口宽度必须与改前完全一致，任何数值变化都说明改错了。
-   */
-  grid-template-columns: var(--w-side) minmax(0, var(--w-main)) var(--w-toc);
-  gap: var(--gap-col);
-  max-width: var(--w-shell);
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--page-gutter);
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: var(--space-12) var(--space-8) var(--space-24);
+  /* 横向为 0：左右留白由第 1 / 12 列承担；纵向仍是 48 / 96 */
+  padding: var(--space-12) 0 var(--space-24);
   align-items: start;
 }
 
 /*
- * 骨架有两种形态（B-1 的 SiteShell 组件据此渲染）：
- *   three-col —— 左导航 + 正文 + 右栏（首页/归档/说说/标签/文章）
- *   wide      —— 左导航 + 更宽的正文，没有右栏（搜索/友链）
- *
- * 「有没有右栏」由 variant 决定，而不是像以前那样各页自己拼 grid-template-columns —
- * 搜索页就是因为拼了三列却没写第三列，右侧空出 320px。
+ * 两种形态（SiteShell 组件的 variant）：
+ *   three-col —— 正文 6 列（4–9），右栏 2 列（10–11）
+ *   wide      —— 右栏那 2 列并入正文（4–11），没有右栏
  */
-.site-shell--three-col {
-  grid-template-columns: var(--w-side) minmax(0, var(--w-main)) var(--w-toc);
-}
-
-.site-shell--wide {
-  /*
-   * 宽版页 = 左导航 + 更宽的正文（没有右栏）。**只改列数，不改容器几何**。
-   *
-   * 演进过程（两次都踩在同一个坑上）：
-   *   1. 最初写成 `max-width: var(--w-shell-read)`(1352)：1440 视口下容器
-   *      被收窄并居中，左栏落到 76px，而首页是三栏、容器占满 → 左栏 32px，
-   *      两个页面并排就错位（≥1392 才暴露）；
-   *   2. 修法是改成 `max-width: none` + `justify-content: start`，1440 下
-   *      确实对齐了 —— 但视口 > 1552（--w-shell）时**标准页的容器会居中**
-   *      （左右各留 (vw-1552)/2），宽版页仍贴左，于是点「友链」左栏直接
-   *      横跳（实测 1920 视口：标准页 216px / 宽版页 32px，差 184px）。
-   *
-   * 现在：容器宽度与居中完全继承 `.site-shell`（max-width: --w-shell +
-   * margin: 0 auto），宽版页只覆盖列数。这样 32–2560 任意宽度下，左栏
-   * 的位置在所有页面都是同一个值；正文仍由 `.content` 的 --w-read(960) 限宽。
-   */
-  grid-template-columns: var(--w-side) minmax(0, 1fr);
-}
+.site-shell--three-col .content { grid-column: 4 / span 6; }
 
 .site-shell--wide .content {
-  max-width: var(--w-read);
+  grid-column: 4 / span 8;
   min-width: 0;
 }
 
 .sidebar {
   /*
-   * 左栏 = **固定**（2026-11-06 第三次调整）。
+   * 左栏 = **固定**（2026-11-06 第三次调整），2026-11-08 起落在整页栅格上。
    *
-   * 演进：先是 sticky（滚到底会在页尾释放一次），后来为了让三个图标贴在
-   * 视口底部把栏高拉到 820px —— 但 sticky 的释放点 = 行底 − stickyTop −
-   * 自身高度，栏越高释放得越早（实测页尾前 ~150px 就会整体上滑，
-   * 用户看到"菜单栏又动了一下"）。只要栏高接近视口高，sticky 就必然在
-   * 页尾释放，这是几何上的死结，所以改成脱离文档流的固定定位。
+   * 为什么固定：sticky 的释放点 = 行底 − stickyTop − 自身高度，栏越高
+   * 释放得越早（实测页尾前 ~150px 就整体上滑），只要栏高接近视口高，
+   * sticky 在页尾必然释放 —— 几何死结，只能脱离文档流。
    *
-   * 位置：水平方向与 `.site-shell` 的居中规则用同一个公式
-   *   shellLeft = max(0, (clientWidth − --w-shell) / 2) + padding-left(32px)
-   * 固定定位的百分比基准正是 clientWidth（不含滚动条，已实测 15px 滚动条下
-   * 仍与骨架逐像素一致），所以左栏在所有页面、所有宽度下都停在同一列。
+   * 位置 = 「第 2 列起点」：容器居中偏移 + 1 列 + 1 栅距。
+   * --page-col 里的 100% 对 fixed 定位按视口宽解析（不含滚动条），
+   * 所以任意视口、任意页面，左栏都停在同一根列线上。
    *
    * 高度铺到视口底（减 sticky 基线），底栏用 margin-top:auto 落在离底 32px；
    * 底色取页面色，避免滚到页脚时从图标下方的空隙里透出来。
    */
   position: fixed;
   top: var(--sticky-top);
-  left: max(32px, calc((100% - var(--w-shell)) / 2 + 32px));
-  width: var(--w-side);
+  left: calc(max(0px, (100% - var(--page-max)) / 2) + var(--page-col) + var(--page-gutter));
+  width: calc(2 * var(--page-col) + var(--page-gutter));
   height: calc(100dvh - var(--sticky-top));
   padding: var(--space-2) 0 var(--space-8);
   display: flex;
@@ -553,24 +514,23 @@ a:hover { color: var(--link-hover); }
 }
 
 /*
- * 左栏脱离文档流后，栅格里的两个流内子元素必须显式占位，
- * 否则浏览器会把它们自动排到第 1、2 列（正文跑到左栏列里）。
+ * 左栏脱离文档流后，正文与右栏必须显式占列号（第 4–9 / 10–11 列），
+ * 否则会自动排到第 1、2 列（正文跑到留白列里）。
  */
 .content {
-  grid-column: 2;
+  grid-column: 4 / span 6;
   min-width: 0;
 }
 
 /*
  * 文章页（P0-1，2026-11-07）：正文收敛到 --measure-prose。
  *
- * 为什么加在 .content 上而不是改 --w-main：
- *   · .content 是栅格的第 2 列，宽度 ≤800；限宽后 margin-inline:auto 让它在
- *     这一列里居中 —— 左栏位置不变，其它页面也不受影响；
- *   · 若直接改 --w-main，--w-shell 跟着变，左栏（fixed，用 --w-shell 算 left）
- *     在所有页面都会横向移动，等于重演友链页"左栏横跳"的老问题。
+ * 为什么加在 .content 上而不是改正文列宽：
+ *   · .content 是 6 列（1440 下 708、1552 下 764），限宽后 justify-self:center
+ *     让正文在这一列里居中 —— 左栏与右栏位置不变，其它页面也不受影响；
+ *   · 若直接改列宽，左栏（fixed，用 --page-col 算 left）在所有页面上都会
+ *     横向移动，等于重演友链页"左栏横跳"的老问题。
  *
- * 1440 下中栏 688 → 正文 672（几乎贴齐）；1600+ 中栏 800 → 正文 672（两侧各 64）。
  * 移动端（≤820）单栏，max-width 不构成约束，字号由断点里的 .prose 覆盖。
  */
 .content--article {
@@ -586,7 +546,7 @@ a:hover { color: var(--link-hover); }
 }
 
 .toc-col {
-  grid-column: 3;
+  grid-column: 10 / span 2;
 }
 
 /*
@@ -1822,28 +1782,11 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
    * `max-width: none`，于是宽版页在 1391 及以下从 960 掉到 800 ——
    * 友链页正文突然变窄 160px，而 §10.3 表格要求 1391 宽版仍是 960。
    */
-  .site-shell:not(.site-shell--wide) {
-    /*
-     * 标准页：**不要用 max-width 收容器**，让网格轨道自己限制中栏。
-     *
-     * 原先写的是 `max-width: calc(--w-side + --w-main + 64px)`，问题是
-     * 容器被收窄后会在视口里居中：1200px 视口下容器 1152 居中，左右各留
-     * 24px，于是左栏落到 56px —— 而首页在三栏时是 32px，两个断点之间
-     * 左栏会"跳"一下（实测 1200→1201 从 56 跳到 32）。
-     *
-     * 改成不收容器、由 `minmax(0, var(--w-main))` 限中栏之后：
-     *   容器始终占满（vw - 64），左栏恒在 32px；
-     *   中栏 = min(800, vw - 64 - 288 - 40)，与 §10.3 的公式一致。
-     */
-    grid-template-columns: var(--w-side) minmax(0, var(--w-main));
-    max-width: none;
-    justify-content: start;
-  }
-  /* 宽版页在两栏区同样是"容器占满、只有两列"（与标准页几何一致） */
-  .site-shell--wide {
-    max-width: none;
-    justify-content: start;
-  }
+  /*
+   * 两栏：右栏收起，它那两列（10–11）并入正文 → 正文 4–11 共 8 列。
+   * 容器与左栏公式完全不变，所以断点前后左栏不会横跳。
+   */
+  .site-shell--three-col .content { grid-column: 4 / span 8; }
   .toc-col { display: none; }
 }
 
@@ -1875,8 +1818,12 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
      已无必要；保留它反而会让以后想在小屏露出右栏时改不动。 */
   .toc-col { display: none; }
 
-  /* 桌面用显式列号（左栏 fixed 后必须），单栏时恢复自动放置 */
-  .content { max-width: 100%; grid-column: auto; }
+  /* 桌面用显式列号（左栏 fixed 后必须），单栏时恢复自动放置。
+     必须带上 .site-shell--three-col / --wide：那两个选择器的特异性（0,2,0）
+     高于裸 .content（0,1,0），否则手机上正文仍按 4–9 / 4–11 列放置。 */
+  .site-shell .content,
+  .site-shell--three-col .content,
+  .site-shell--wide .content { max-width: 100%; grid-column: auto; }
   /* `.article-title` 的移动端字号**不再需要覆盖**（F8，2026-11-07）：
      基础定义已改成 clamp(1.75rem, 1.5rem + 1vw, 2.35rem)，375px 自动算出
      28px。此前那条 `@media (max-width:820px) { font-size: 1.5rem }` 必须
@@ -2934,9 +2881,12 @@ summary:focus-visible,
   background: var(--bg-warm);
 }
 .site-footer-inner {
-  max-width: var(--w-shell);
+  max-width: var(--page-max);
   margin: 0 auto;
-  padding: 26px 32px 34px;
+  /* 内边距与整页栅格的留白一致（1 列 + 1 栅距）。
+     页脚文字本身居中，所以视觉上仍是页面居中；这条保证"盒"与栅格同源，
+     以后若改成左对齐，文字会自然落在第 2 列。 */
+  padding: 26px calc(var(--page-col) + var(--page-gutter)) 34px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3141,44 +3091,48 @@ summary:focus-visible,
 }
 
 /* ══════════════════════════════════════════════════════════════
-   栅格叠加层（?grid=1，2026-11-08 栅格化）
+   栅格叠加层（?grid=1，2026-11-08 栅格化 · 整页版）
    ──────────────────────────────────────────────────────────────
    只在 <html data-grid="1"> 时生效，属性由 components/GridOverlay.tsx
-   在客户端按 URL 的 grid=1 打上 —— 因此**服务端 HTML 没有任何差异**，
+   在客户端按 URL 的 grid=1 打上 —— 服务端 HTML 没有任何差异，
    也不影响 nginx 的 30s 微缓存与 SEO。
 
-   画两层：
-     1. 12 列内容栅格（栅距 --grid-gutter）。列宽用 background-size 反推：
-        tile = (100% + gutter) / 12，每格里画出 tile − gutter 宽的列，
-        12 格合计正好等于内容宽（推导见 docs/grid-system.md）；
+   画的是**整页 12 列**（.site-shell 的内容盒 = 除上下 padding 外的整块），
+   所以左导航 / 正文 / 右栏的边缘都必须落在列线上 —— 这正是"整页栅格"
+   与上一轮"只画内容区、谁也不对齐"的区别。
+
+   两层：
+     1. 12 列（栅距 --page-gutter）。列宽用 background-size 反推：
+        tile = (100% + gutter) / 12，每格画 tile − gutter 宽的列，
+        12 格合计正好等于容器宽（推导见 docs/grid-system.md）；
      2. 纵向刻度（--grid-ruler，8px），用来量块与块之间的节奏。
 
-   ≤820px 切 4 列：手机内容宽约 335px，12 列每列只有 5.9px，
-   除了糊成一片没有信息量。
+   ≤820px 切 4 列：手机内容宽约 335px，12 列每列只有 5.9px。
 
-   position: relative 只在 debug 态加 —— 平常态绝不能改变 .content
-   作为绝对定位包含块的身份（那会让某些装饰元素换参照物）。
+   position: relative 只在 debug 态加 —— 平常态不改变 .site-shell 的
+   定位上下文（避免绝对定位子元素换参照物）。
    ══════════════════════════════════════════════════════════════ */
-html[data-grid="1"] .content { position: relative; }
-html[data-grid="1"] .content::before {
+html[data-grid="1"] .site-shell { position: relative; }
+html[data-grid="1"] .site-shell::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: var(--space-12) 0 var(--space-24);
   z-index: var(--z-base);
   pointer-events: none;
   background-image:
     linear-gradient(90deg,
-      color-mix(in oklab, var(--link) 14%, transparent) 0 calc(100% - var(--grid-gutter)),
-      transparent calc(100% - var(--grid-gutter))),
+      color-mix(in oklab, var(--link) 14%, transparent) 0 calc(100% - var(--page-gutter)),
+      transparent calc(100% - var(--page-gutter))),
     repeating-linear-gradient(180deg,
       color-mix(in oklab, var(--text-p2) 10%, transparent) 0 1px,
       transparent 1px var(--grid-ruler));
-  background-size: calc((100% + var(--grid-gutter)) / 12) 100%, 100% 100%;
+  background-size: calc((100% + var(--page-gutter)) / 12) 100%, 100% 100%;
   background-repeat: repeat, no-repeat;
 }
 @media (max-width: 820px) {
-  html[data-grid="1"] .content::before {
-    background-size: calc((100% + var(--grid-gutter)) / 4) 100%, 100% 100%;
+  html[data-grid="1"] .site-shell::before {
+    inset: 14px 20px 0;
+    background-size: calc((100% + var(--page-gutter)) / 4) 100%, 100% 100%;
   }
 }
 

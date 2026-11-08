@@ -4,39 +4,31 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * 布局宽度令牌（B-2，2026-11-01）。
+ * 整页栅格契约（2026-11-08 第二轮）。
  *
- * ## 为什么值得单独测
+ * ## 为什么重写这个文件
  *
- * 站点骨架的宽度公式原来是**手抄 5 遍**的同一串加法：
+ * 第一轮（commit 4d0b9a0）把 12 列画在 `.content` 里，但内容区是单列、
+ * 三个"12 列消费者"又各自覆盖了栅距（8/10/12px）——结果 12 列只是叠在
+ * 单列内容上的一把尺子，谁也不对齐。用户看截图第一眼就指出了这一点。
  *
- *   calc(var(--w-side) + var(--w-main) + var(--w-toc) + var(--gap-col) * 2 + 64px)
+ * 第二轮改成**整页**栅格：12 列 × 24px 栅距，三栏页按 1 / 2 / 6 / 2 / 1 分配
+ * （留白 / 左导航 / 正文 / 右栏 / 留白），骨架轨道由列反推 —— 因为旧的
+ * 288/800/320 + 40 栅距在任何等宽列栅格上都没有整数解（见 globals.css 注释）。
  *
- * 出现在 `globals.css` 的 `.site-shell`、`1200px` 断点、`.site-footer-inner`，
- * 以及 `friends.css` 的两处（那两处还偷偷把 `--w-main` 换成了硬编码 960px）。
- *
- * 后果不是"代码难看"，而是**改一个参数要记得改 5 个地方**：漏一处就出现
- * 「首页对齐了，友链页还是老偏移」这种只在某个页面出现的错位。
- *
- * 这个文件守两件事：
- *   ① 用法处不许再出现 `calc(var(--w-side) …)`，只能用 `var(--w-…)`；
- *   ② 三个 shell 宽度令牌必须存在且语义正确。
- *
- * ## 为什么不是「globals 只剩 1 处」
- *
- * 路线图验收标准写的是「globals 只剩 1 处（`--w-shell` 自身）」。实际有
- * **三种**不同的 shell 宽度（三栏 / 两栏 / 宽版阅读），所以令牌定义里
- * 会有 2 处 `calc(var(--w-side)`。关键是它们必须**全部集中在 `:root`
- * 令牌块内**，而任何 `max-width` / `grid-template-columns` 用法处都不许
- * 再写公式 —— 那才是「改一处即全站生效」的实际含义。
+ * 这个文件只守**结构事实**：令牌、列分配、定位公式、页脚对齐、叠加层画在哪；
+ * 数值推论在 breakpoints.test.ts，浏览器实测在 grid-alignment.mjs。
  */
 
-const CSS = {
-  globals: fs.readFileSync(path.join(process.cwd(), "app/globals.css"), "utf8"),
-  friends: fs.readFileSync(path.join(process.cwd(), "app/friend-links/friends.css"), "utf8"),
-};
+const ROOT = process.cwd();
+const read = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
+const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "");
 
-/** 取出 `:root { … }` 令牌块（按大括号配平，避免嵌套块截断） */
+const GLOBALS = read("app/globals.css");
+const FRIENDS = read("app/friend-links/friends.css");
+const CSS = strip(GLOBALS);
+const CSS_FRIENDS = strip(FRIENDS);
+
 function rootBlock(src: string): string {
   const start = src.indexOf(":root {");
   assert.ok(start >= 0, "找不到 :root 令牌块");
@@ -48,8 +40,9 @@ function rootBlock(src: string): string {
       if (depth === 0) return src.slice(start, i + 1);
     }
   }
-  throw new Error(":root 块未闭合");
+  throw new Error(":root 未闭合");
 }
+const ROOT_BLOCK = rootBlock(CSS);
 
 /** 找出所有含某模式的声明行（带行号，便于报错定位） */
 function findLines(src: string, pattern: RegExp): { line: number; text: string }[] {
@@ -58,133 +51,130 @@ function findLines(src: string, pattern: RegExp): { line: number; text: string }
   );
 }
 
-test("B-2 令牌存在：--w-read / --w-shell 系列", () => {
-  const root = rootBlock(CSS.globals);
-  for (const name of ["--w-read", "--w-shell", "--w-shell-narrow", "--w-shell-read"]) {
-    assert.match(root, new RegExp("\\" + name + "\\s*:"), ":root 应定义 " + name);
-  }
-  // --w-read 必须是 960px（Q1 默认方案：友链页历史宽度，也适合搜索结果这种列表页）
-  assert.match(root, /--w-read:\s*960px/, "--w-read 应为 960px");
-  // 三栏 shell 宽度 = 288 + 800 + 320 + 40*2 + 64 = 1552，与改前逐像素一致
+/* ────────────────────────── 令牌 ────────────────────────── */
+
+test("整页栅格：三个令牌存在且语义正确", () => {
+  assert.match(ROOT_BLOCK, /--page-max:\s*1552px/, "容器上限应为 1552px（12 列 + 11 栅距 + 两侧各一列留白）");
+  assert.match(ROOT_BLOCK, /--page-gutter:\s*24px/, "整页栅距应为 24px");
+  // 单列宽必须由「容器宽（被 --page-max 夹住）− 11 个栅距」除以 12 算出
   assert.match(
-    root,
-    /--w-shell:\s*calc\(var\(--w-side\)\s*\+\s*var\(--w-main\)\s*\+\s*var\(--w-toc\)\s*\+\s*var\(--gap-col\)\s*\*\s*2\s*\+\s*64px\)/,
-    "--w-shell 应保留原三栏公式（不得为了简化而改数值）"
+    ROOT_BLOCK,
+    /--page-col:\s*calc\(\(min\(100%,\s*var\(--page-max\)\)\s*-\s*11\s*\*\s*var\(--page-gutter\)\)\s*\/\s*12\)/,
+    "--page-col 的公式必须是 (min(100%, --page-max) - 11 * --page-gutter) / 12"
   );
+  // 正文行宽是独立的阅读参数，不能被列宽"顺手改掉"
+  assert.match(ROOT_BLOCK, /--measure-prose:\s*672px/, "正文行宽应保持 672px");
 });
 
-test("B-2 用法处不得再写宽度公式：globals.css 的 max-width 全部用变量", () => {
-  // 找所有 max-width 声明里还带 calc(var(--w-side) 的 —— 那就是漏改的用法处
-  const leftovers = findLines(CSS.globals, /max-width:\s*calc\(var\(--w-side\)/);
-  assert.deepEqual(
-    leftovers,
-    [],
-    "globals.css 的 max-width 仍在写宽度公式（应改用 var(--w-shell…)）：\n" +
-      leftovers.map((l) => "  第 " + l.line + " 行: " + l.text).join("\n")
-  );
-});
-
-test("B-2 globals.css 的 calc(var(--w-side) 只能出现在 :root 令牌定义内", () => {
-  const root = rootBlock(CSS.globals);
-  const all = findLines(CSS.globals, /calc\(var\(--w-side\)/);
-  const outside = all.filter((l) => {
-    // 该行的偏移量是否落在 :root 块的字符区间内
-    const offset = CSS.globals.split("\n").slice(0, l.line - 1).join("\n").length;
-    const rootStart = CSS.globals.indexOf(root);
-    return !(offset >= rootStart && offset < rootStart + root.length);
-  });
-  assert.deepEqual(
-    outside,
-    [],
-    "令牌定义之外仍有宽度公式：\n" + outside.map((l) => "  第 " + l.line + " 行: " + l.text).join("\n")
-  );
-  assert.ok(all.length >= 1, "至少应有一个令牌定义（否则说明公式被删光了）");
-});
-
-test("B-2 friends.css 不得再出现任何宽度公式", () => {
-  const leftovers = findLines(CSS.friends, /calc\(var\(--w-side\)/);
-  assert.deepEqual(
-    leftovers,
-    [],
-    "friends.css 仍有宽度公式（应改用 var(--w-shell-read)）：\n" +
-      leftovers.map((l) => "  第 " + l.line + " 行: " + l.text).join("\n")
-  );
-});
-
-test("B-2/B-4 friends.css 不再参与任何宽度计算（全部交给全局令牌）", () => {
+test("整页栅格：旧骨架令牌不得复活（否则两套几何又并存）", () => {
   /**
-   * B-2 时这里断言「friends.css 应使用 --w-shell-read」；B-4 之后连
-   * `--w-shell-read` 都不该出现在这个文件里 —— 页面骨架由 SiteShell 的
-   * `variant="wide"` 决定，宽度全部来自 globals 的 :root。
-   *
-   * friends.css 只剩"专题页自己的样式"（hero / 目录 / 申请表单），
-   * 一旦它又开始算宽度，友链页就会再次与其它页错位。
+   * 第一轮之前是 288/800/320 + 40 栅距。如果哪天有人把它们加回来，
+   * 就会出现「两套骨架并存、页面各用一套」的错位（B-2/B-3 花了两轮才收敛）。
    */
-  const refs = findLines(CSS.friends, /var\(--w-shell|var\(--w-read\)|960px/);
-  const serious = refs.filter((l) => !/^\s*\*/.test(l.text)); // 注释里的历史说明不算
+  for (const name of ["--w-side", "--w-main", "--w-toc", "--gap-col", "--w-shell", "--w-shell-narrow", "--w-shell-read", "--w-read"]) {
+    assert.doesNotMatch(ROOT_BLOCK, new RegExp("\\" + name + "\\s*:"), ":root 不应再定义旧骨架令牌 " + name);
+  }
+  const uses = findLines(CSS, /var\(--(w-side|w-main|w-toc|gap-col|w-shell|w-read)\b/);
+  assert.deepEqual(uses, [], "globals.css 仍在引用旧骨架令牌：\n" + uses.map((l) => l.line + ": " + l.text).join("\n"));
+});
+
+/* ────────────────────────── 骨架 ────────────────────────── */
+
+test("整页栅格：.site-shell 是 12 列容器，横向留白交给第 1 / 12 列", () => {
+  const m = CSS.match(/\.site-shell\s*\{([^}]*)\}/s);
+  assert.ok(m, "找不到 .site-shell 规则");
+  const body = m[1];
+  assert.match(body, /grid-template-columns:\s*repeat\(12,\s*minmax\(0,\s*1fr\)\)/, ".site-shell 应为 12 等宽列");
+  assert.match(body, /column-gap:\s*var\(--page-gutter\)/, "列间距应走 --page-gutter");
+  assert.match(body, /max-width:\s*var\(--page-max\)/, "容器上限应走 --page-max");
+  assert.match(body, /margin:\s*0 auto/, "容器应居中");
+  // 横向 padding 必须是 0：左右留白由列承担，否则会变成「留白列 + padding」两层
+  assert.match(body, /padding:\s*var\(--space-12\)\s+0\s+var\(--space-24\)/, "横向 padding 应为 0（留白由列承担）");
+});
+
+test("整页栅格：正文 / 右栏 / 宽版的列号分配固定", () => {
+  assert.match(CSS, /\.content\s*\{[^}]*grid-column:\s*4 \/ span 6/s, "三栏正文应占 4–9 列（6 列）");
+  assert.match(CSS, /\.site-shell--three-col \.content\s*\{\s*grid-column:\s*4 \/ span 6/, "三栏 variant 显式写 4 / span 6");
+  assert.match(CSS, /\.site-shell--wide \.content\s*\{[^}]*grid-column:\s*4 \/ span 8/s, "宽版正文应占 4–11 列（8 列）");
+  assert.match(CSS, /\.toc-col\s*\{\s*grid-column:\s*10 \/ span 2/, "右栏应占 10–11 列（2 列）");
+  // ≤1391：右栏收起，它那两列并入正文
+  assert.match(
+    CSS,
+    /@media \(max-width: 1391px\) \{[\s\S]*?\.site-shell--three-col \.content\s*\{\s*grid-column:\s*4 \/ span 8/,
+    "两栏区应把正文扩到 4–11 列"
+  );
+});
+
+test("整页栅格：左导航固定定位必须落在第 2 列起点", () => {
+  /**
+   * 左栏是 fixed，脱离文档流，没法靠 grid-column 落位 —— 只能用
+   * --page-col 算「容器居中偏移 + 1 列 + 1 栅距」。这条断言守的就是
+   * 「别再用写死的 32px / 288px」。
+   */
+  const m = CSS.match(/\.sidebar\s*\{([^}]*)\}/s);
+  assert.ok(m, "找不到 .sidebar 规则");
+  const body = m[1];
+  assert.match(
+    body,
+    /left:\s*calc\(max\(0px,\s*\(100% - var\(--page-max\)\) \/ 2\) \+ var\(--page-col\) \+ var\(--page-gutter\)\)/,
+    "左栏 left 应为「容器居中偏移 + 1 列 + 1 栅距」"
+  );
+  assert.match(
+    body,
+    /width:\s*calc\(2 \* var\(--page-col\) \+ var\(--page-gutter\)\)/,
+    "左栏宽度应为 2 列 + 1 栅距"
+  );
+  assert.match(body, /position:\s*fixed/, "左栏必须仍是 fixed");
+});
+
+test("整页栅格：页脚内边距与栅格留白同源", () => {
+  const m = CSS.match(/\.site-footer-inner\s*\{([^}]*)\}/s);
+  assert.ok(m, "找不到 .site-footer-inner 规则");
+  const body = m[1];
+  assert.match(body, /max-width:\s*var\(--page-max\)/, "页脚容器上限应与骨架一致");
+  assert.match(
+    body,
+    /padding:\s*26px calc\(var\(--page-col\) \+ var\(--page-gutter\)\) 34px/,
+    "页脚内边距应为「1 列 + 1 栅距」（文字仍居中，但盒与栅格同源）"
+  );
+});
+
+/* ────────────────────────── 叠加层 ────────────────────────── */
+
+test("整页栅格：叠加层画在整页容器上，而不是内容区", () => {
+  /**
+   * 第一轮画在 `.content` 上 —— 单列内容里那 12 条线谁也不碰，看起来就是摆设。
+   * 现在必须画在 `.site-shell` 的内容盒里，12 列才与左导航/正文/右栏的边界一一对应。
+   */
+  assert.match(CSS, /html\[data-grid="1"\] \.site-shell\s*\{\s*position:\s*relative/, "叠加层的定位上下文应是 .site-shell");
+  assert.match(
+    CSS,
+    /html\[data-grid="1"\] \.site-shell::before \{[\s\S]*?background-size:\s*calc\(\(100% \+ var\(--page-gutter\)\) \/ 12\) 100%/,
+    "整页叠加层应用 --page-gutter 铺 12 列"
+  );
+  // 不允许再有"画在 .content 上"的旧叠加层（两份会互相叠）
+  const stale = findLines(CSS, /html\[data-grid="1"\] \.content::before/);
+  assert.deepEqual(stale, [], "旧的 .content 叠加层应已删除：" + stale.map((l) => l.line).join(", "));
+});
+
+test("整页栅格：叠加层小屏切 4 列", () => {
+  assert.match(
+    CSS,
+    /@media \(max-width: 820px\) \{\s*html\[data-grid="1"\] \.site-shell::before \{[\s\S]*?\/ 4\)/,
+    "手机端叠加层应切 4 列（12 列在 335px 宽下不可读）"
+  );
+});
+
+test("friends.css 不再参与任何宽度计算（骨架全在 globals）", () => {
+  /**
+   * B-4 的教训：友链页曾自己覆盖 grid-template-columns / max-width，
+   * 导致 1440 下左栏比首页偏 44px。页面骨架只应有 SiteShell 一个出口。
+   */
+  const serious = findLines(CSS_FRIENDS, /var\(--page-(max|gutter|col)\)|var\(--w-\w+\)|960px/);
   assert.deepEqual(
     serious,
     [],
-    "friends.css 仍引用骨架宽度令牌或硬编码 960px：\n" +
+    "friends.css 不应再引用骨架/栅格宽度令牌或硬编码 960px：\n" +
       serious.map((l) => "  第 " + l.line + " 行: " + l.text).join("\n")
   );
-});
-
-test("B-2 三个 variant 类必须存在（供 B-1 的 SiteShell 使用）", () => {
-  for (const cls of [".site-shell--three-col", ".site-shell--wide"]) {
-    assert.ok(CSS.globals.includes(cls), "globals.css 应定义 " + cls);
-  }
-  // --wide 的正文上限走 --w-read
-  assert.match(
-    CSS.globals,
-    /\.site-shell--wide\s+\.content\s*\{[^}]*max-width:\s*var\(--w-read\)/s,
-    ".site-shell--wide .content 应限制为 var(--w-read)"
-  );
-});
-
-test("B-2 是纯重构：三个 shell 宽度的令牌值必须与改前的 5 处公式逐字等价", () => {
-  /**
-   * 这条是 B-2 的**安全网**。
-   *
-   * 改前是 5 处手写加法，改后是 3 个令牌。如果令牌算错了（比如少乘一个
-   * gap、或把 64 写成 32），页面会整体变宽/变窄 —— 而那种变化很容易被
-   * 当成"反正是重构，差一点正常"糊过去。
-   *
-   * 这里把三个令牌**代入数值**算一遍，与改前公式的结果比：
-   *   三栏 1552 / 两栏 1152 / 宽版 1352
-   *
-   * 注意两栏的 1152 是**既有值**（漏了 gap-col），B-3 会改成 1192；
-   * 到时这条断言要跟着更新 —— 那正是"行为发生了变化"的显式信号。
-   */
-  const root = rootBlock(CSS.globals);
-  const num = (name: string) => {
-    const m = root.match(new RegExp("\\" + name + ":\\s*([0-9.]+)px"));
-    assert.ok(m, name + " 应是 px 数值");
-    return Number(m[1]);
-  };
-  const side = num("--w-side");
-  const main = num("--w-main");
-  const toc = num("--w-toc");
-  const gap = num("--gap-col");
-  const read = num("--w-read");
-
-  // 设计参数本身不得被改动（否则就不是"重构"而是"改设计"）
-  assert.equal(side, 288, "--w-side 应为 288px");
-  assert.equal(main, 800, "--w-main 应为 800px");
-  assert.equal(toc, 320, "--w-toc 应为 320px");
-  assert.equal(gap, 40, "--gap-col 应为 40px");
-  assert.equal(read, 960, "--w-read 应为 960px");
-
-  // 三栏：288 + 800 + 320 + 40*2 + 64 = 1552
-  assert.equal(side + main + toc + gap * 2 + 64, 1552, "三栏 shell 宽度应为 1552");
-  /**
-   * 两栏：288 + 800 + 40 + 64 = 1192。
-   *
-   * B-2 阶段这里曾是 1152（漏了 gap-col 40），因为那一步是纯重构、要求
-   * 逐像素不变。B-3 修正后应为 1192 —— 这条断言从「守住 1152」变成
-   * 「守住 1192」，正好记录了那次有意的行为变化。
-   */
-  assert.equal(side + main + gap + 64, 1192, "两栏 shell 宽度应为 1192（含 gap-col）");
-  // 宽版：288 + 960 + 40 + 64 = 1352
-  assert.equal(side + read + gap + 64, 1352, "宽版 shell 宽度应为 1352");
 });

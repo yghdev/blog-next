@@ -194,14 +194,8 @@ const ALLOWED_UNREFERENCED = new Map<string, string>([
   ["--tap-lg", "触控热区"],
   ["--safe-bottom", "安全区"],
   ["--safe-top", "安全区"],
-  ["--w-main", "布局"],
-  ["--w-side", "布局"],
-  ["--w-toc", "布局"],
-  ["--w-read", "布局（B-2 新增）"],
-  ["--w-shell", "布局（B-2 新增）"],
-  ["--w-shell-narrow", "布局（B-2 新增）"],
-  ["--w-shell-read", "布局（B-2 新增）"],
-  ["--gap-col", "布局"],
+  // 2026-11-08 第二轮：旧骨架令牌（--w-side/--w-main/--w-toc/--gap-col/--w-shell*）
+  // 已被「整页 12 列」取代并删除，白名单里不能留尸。
   ["--sticky-top", "布局（A-4 新增）"],
   // ② 分类色：由 categoryColor() 在运行时读（见 lib/posts.ts）
   ["--cat-1", "分类色"], ["--cat-1-bg", "分类色"],

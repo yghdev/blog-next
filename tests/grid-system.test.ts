@@ -102,8 +102,8 @@ test("栅格化：前台被锁定的布局值必须走令牌（同源而非手�
   assert.match(ROOT_BLOCK, /--sticky-top:\s*var\(--space-12\)/, "--sticky-top 应引用 --space-12（48px）");
   assert.match(
     CSS_GLOBALS,
-    /\.site-shell\s*\{[^}]*padding:\s*var\(--space-12\)\s+var\(--space-8\)\s+var\(--space-24\)/s,
-    ".site-shell 的 padding 应使用刻度令牌（48/32/96）"
+    /\.site-shell\s*\{[^}]*padding:\s*var\(--space-12\)\s+0\s+var\(--space-24\)/s,
+    ".site-shell 的纵向 padding 应使用刻度令牌（48/96），横向必须是 0（留白交给第 1 / 12 列）"
   );
 });
 
@@ -226,7 +226,7 @@ test("栅格化：叠加层规则必须全部挂在 html[data-grid=\"1\"] 下", 
 
   // 不允许存在"没有前缀的 .content::before / .admin-main::before"（那等于常驻叠加层）
   for (const [css, sel] of [
-    [CSS_GLOBALS, ".content::before"],
+    [CSS_GLOBALS, ".site-shell::before"],
     [CSS_ADMIN, ".admin-main::before"],
   ] as const) {
     for (const r of rules(css)) {
@@ -246,18 +246,21 @@ test("栅格化：叠加层不挡点击、不参与布局", () => {
   // position: relative 也必须在调试态下才加（否则改变绝对定位包含块）
   for (const r of rules(CSS_GLOBALS)) {
     if (!/position:\s*relative/.test(r.body)) continue;
-    if (!r.selector.includes(".content")) continue;
-    assert.ok(r.selector.includes(GUARD), ".content 的 position:relative 只应在调试态加：" + r.selector);
+    if (!r.selector.includes(".site-shell")) continue;
+    assert.ok(r.selector.includes(GUARD), ".site-shell 的 position:relative 只应在调试态加：" + r.selector);
   }
 });
 
 test("栅格化：叠加层小屏切 4 列（12 列在手机上不可读）", () => {
-  for (const [css, label] of [[CSS_GLOBALS, "前台"], [CSS_ADMIN, "后台"]] as const) {
-    assert.ok(
-      css.includes("calc((100% + var(--grid-gutter)) / 4)"),
-      label + "叠加层应在 ≤820px 切成 4 列"
-    );
-  }
+  // 前台整页叠加层用 --page-gutter；后台（内容区叠加层）用 --grid-gutter
+  assert.ok(
+    CSS_GLOBALS.includes("calc((100% + var(--page-gutter)) / 4)"),
+    "前台整页叠加层应在 ≤820px 切成 4 列"
+  );
+  assert.ok(
+    CSS_ADMIN.includes("calc((100% + var(--grid-gutter)) / 4)"),
+    "后台叠加层应在 ≤820px 切成 4 列"
+  );
 });
 
 test("栅格化：GridOverlay 组件不写内联样式、不注入脚本", () => {

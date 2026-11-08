@@ -293,7 +293,7 @@ try {
 
   /* ── 12. 不带参数：没有任何痕迹 ── */
   await open(page, server.base + "/");
-  const off = await overlayState(page, ".content");
+  const off = await overlayState(page, ".site-shell");
   assert.equal(off.attr, false, "不带 ?grid=1 时 html 不应有 data-grid");
   assert.equal(off.content, "none", "不带 ?grid=1 时 .content::before 不应生成内容，实际 " + off.content);
   console.log("PASS 叠加层：默认关闭（无 data-grid、无伪元素内容）");
@@ -302,7 +302,7 @@ try {
   const beforeOn = await layoutFingerprint(page, server.base + "/");
   await open(page, server.base + "/?grid=1");
   await page.waitForFunction(() => document.documentElement.getAttribute("data-grid") === "1", null, { timeout: 5000 });
-  const frontOverlay = await overlayState(page, ".content");
+  const frontOverlay = await overlayState(page, ".site-shell");
   assert.equal(frontOverlay.attr, true, "?grid=1 应给 html 打 data-grid=1");
   assert.equal(frontOverlay.position, "absolute", "叠加层应为绝对定位，实际 " + frontOverlay.position);
   assert.equal(frontOverlay.pointerEvents, "none", "叠加层不能挡点击，实际 " + frontOverlay.pointerEvents);
@@ -334,7 +334,7 @@ try {
   await page.setViewportSize({ width: 375, height: 812 });
   await open(page, server.base + "/?grid=1");
   await page.waitForFunction(() => document.documentElement.getAttribute("data-grid") === "1", null, { timeout: 5000 });
-  const mobileOverlay = await overlayState(page, ".content");
+  const mobileOverlay = await overlayState(page, ".site-shell");
   const mobileCols = overlayColumns(mobileOverlay, mobileOverlay.contentWidth);
   assert.ok(Math.abs(mobileCols - 4) <= 0.6, "手机叠加层应切 4 列，实测 " + mobileCols.toFixed(2) + " 列");
   console.log("PASS 叠加层：375px 下切 " + mobileCols.toFixed(0) + " 列（12 列在手机上不可读）");

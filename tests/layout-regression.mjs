@@ -771,18 +771,20 @@ try {
    */
   const GRID = [
     // [视口, 标准页 content, 宽版页 content, sidebar.left]
-    [1600, 800, 960, 56],
-    [1552, 800, 960, 32],
-    [1440, 688, 960, 32],
-    [1392, 640, 960, 32],   // 三栏最低点
-    [1391, 800, 960, 32],   // 两栏最高点（跳变在此）
-    [1202, 800, 810, 32],
-    [1201, 800, 809, 32],
-    [1200, 800, 808, 32],
-    [1199, 800, 807, 32],
-    [1100, 708, 708, 32],
-    [900, 508, 508, 32],
-    [821, 429, 429, 32],
+    // 2026-11-08 第二轮：骨架 = 整页 12 列（1 / 2 / 6 / 2 / 1），
+    // 数值是 tests/breakpoints.test.ts 里公式的浏览器实测版（容差 2px）。
+    [1600, 764, 1027, 155],
+    [1552, 764, 1027, 131],
+    [1440, 708, 952, 122],
+    [1392, 684, 920, 118],  // 三栏最低点
+    [1391, 919, 919, 118],  // 两栏最高点（右栏收起 → 正文 +2 列）
+    [1202, 793, 793, 102],
+    [1201, 793, 793, 102],
+    [1200, 792, 792, 102],
+    [1199, 791, 791, 102],
+    [1100, 725, 725, 94],
+    [900, 592, 592, 77],
+    [821, 539, 539, 70],
     [820, 780, 780, null],  // 单栏，左栏隐藏
     [375, 335, 335, null],
   ];
@@ -869,8 +871,16 @@ try {
     await page.goto(server.base + "/", { waitUntil: "networkidle" });
     continuity.push(await page.evaluate(() => Math.round(document.querySelector(".content").getBoundingClientRect().width)));
   }
-  assert.deepEqual(continuity, [800, 800, 800, 800], "1202/1201/1200/1199 应恒为 800，实际 " + JSON.stringify(continuity));
-  console.log("PASS B-3 断崖消失：1202/1201/1200/1199 = " + JSON.stringify(continuity));
+  // 2026-11-08：新模型是连续列宽（8 列），约束从"四档同值"改成"相邻档差 ≤1px 且单调收窄"。
+  // 真正的断崖只允许出现在两个模式切换点（1392 / 820），已在 breakpoints.test.ts 登记为预期值。
+  for (let i = 1; i < continuity.length; i++) {
+    assert.ok(
+      Math.abs(continuity[i] - continuity[i - 1]) <= 1,
+      "1202–1199 应连续收缩（无断崖），实际 " + JSON.stringify(continuity)
+    );
+  }
+  assert.ok(continuity[0] >= continuity[continuity.length - 1], "视口变窄时正文不应变宽：" + JSON.stringify(continuity));
+  console.log("PASS 断崖消失：1202/1201/1200/1199 = " + JSON.stringify(continuity));
 
   /* ── 断言 11（B-3 / 2026-11-06）：右栏入口落在悬浮组里，按断点增减 ── */
   /**
@@ -1012,7 +1022,7 @@ try {
    * 放开容器之后要确认正文没被"顺势拉宽"：宽版页上限仍是 --w-read(960)，
    * 并且 1391 以下随视口线性收缩。
    */
-  const WIDE_EXPECT = [[1440, 960], [1391, 960], [1200, 808], [1100, 708], [900, 508], [821, 429]];
+  const WIDE_EXPECT = [[1440, 952], [1391, 919], [1200, 792], [1100, 725], [900, 592], [821, 539]];
   for (const [vw, want] of WIDE_EXPECT) {
     await page.setViewportSize({ width: vw, height: 900 });
     await page.goto(server.base + "/friend-links", { waitUntil: "networkidle" });
