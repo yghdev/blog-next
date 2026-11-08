@@ -26,7 +26,7 @@ const out = path.join(root, "public", "og-default.png");
 
 /* 配色与站点设计令牌一致（app/globals.css）：--bg / --text-p0 / --link，
    元信息灰取 --text-meta 合成到浅底后的等效实色。 */
-const BG = "#fffefc";
+const BG = "#ffffff";
 const INK = "#111111";
 const META = "#616161";
 const LINK = "#2f7a6b";

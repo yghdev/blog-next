@@ -26,7 +26,7 @@ import path from "node:path";
  *
  * 值抽成一组 `--dark-*` 变量（只写一份），两个作用域只做机械映射：
  *
- *     :root { --dark-bg: #141414; … }              ← 值只在这里
+ *     :root { --dark-bg: #0b0f14; … }              ← 值只在这里
  *     :root[data-theme="dark"] { --bg: var(--dark-bg); … }        ← 映射
  *     @media (…) { :root:not(…) { --bg: var(--dark-bg); … } }     ← 同样的映射
  *
@@ -140,10 +140,11 @@ test("C-2 每个 --dark-* 都必须被两个作用域各引用一次", () => {
   }
 });
 
-test("C-2 #141414 在整个文件里只出现一次（--dark-bg 的定义处）", () => {
+test("C-2 暗色底色在整个文件里只出现一次（--dark-bg 的定义处）", () => {
   /**
-   * 路线图给的验收硬指标。`#141414` 原本在手动块与系统块各一份。
+   * 路线图给的验收硬指标（原值是 #141414，2026-11-08 第四轮换成 #0b0f14）。
+   * 值只在 --dark-bg 定义处出现一次，两个暗色作用域只做机械映射。
    */
-  const hits = [...CSS.matchAll(/#141414/g)].length;
-  assert.equal(hits, 1, "#141414 应只出现 1 次（--dark-bg 定义处），实际 " + hits + " 次");
+  const hits = [...CSS.matchAll(/#0b0f14/g)].length;
+  assert.equal(hits, 1, "#0b0f14 应只出现 1 次（--dark-bg 定义处），实际 " + hits + " 次");
 });

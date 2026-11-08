@@ -14,13 +14,17 @@
    * （问系统偏好），这是声明（告诉浏览器怎么画原生控件）。
    */
   color-scheme: light;
-  --bg: #fffefc;
-  --bg-subtle: #f7f6f3;
-  --text-p0: #111111;
-  --text-p1: rgba(0,0,0,.80);
-  --text-p2: rgba(0,0,0,.70);
-  --text-p3: rgba(0,0,0,.50);
-  --text-p4: rgba(0,0,0,.38);
+  /* 2026-11-08 第四轮：主色调与后台统一为「大厂白」。
+     原来是暖纸（#fffefc / #f7f6f3 + 黑度文字），带一层纸黄；
+     现在页面纯白、表面纯白、灰阶中性（带一点冷），文字用近墨的深蓝黑。
+     暖纸值（#fffefc / #f7f6f3 / #faf9f7 / #fcfcfb）不得复活。 */
+  --bg: #ffffff;
+  --bg-subtle: #f4f6f8;
+  --text-p0: #0f172a;
+  --text-p1: rgba(15,23,42,.86);
+  --text-p2: rgba(15,23,42,.74);
+  --text-p3: rgba(15,23,42,.50);
+  --text-p4: rgba(15,23,42,.38);
   /*
    * 元信息文字（P0-2，2026-11-07）：日期 / 阅读时长 / 浏览量 / 计数 / 目录链接。
    *
@@ -28,16 +32,16 @@
    * 都达不到 WCAG AA 的 4.5:1 —— 这些字看上去"高级"，但在户外或低亮度屏上
    * 读不出来。p3/p4 之后只保留给**纯装饰**（分隔点、图标、占位符、边框）。
    */
-  --text-meta: rgba(0,0,0,.62);
-  --border: rgba(0,0,0,.07);
-  --border-strong: rgba(0,0,0,.10);
-  /* 主色：低饱和青绿，克制的点缀 */
-  --link: #2f7a6b;
-  --link-hover: #1f5c50;
-  --accent: #d97757;
-  --accent-soft: rgba(217,119,87,.10);
-  --bg-warm: #faf9f7;
-  --bg-tint: rgba(47,122,107,.035);
+  --text-meta: rgba(15,23,42,.62);
+  --border: rgba(15,23,42,.08);
+  --border-strong: rgba(15,23,42,.12);
+  /* 主色与强调色与后台同一组（--fx-brand / --fx-accent） */
+  --link: #36796b;
+  --link-hover: #2b6459;
+  --accent: #d77858;
+  --accent-soft: rgba(215,120,88,.10);
+  --bg-warm: #f7f8fa;
+  --bg-tint: rgba(54,121,107,.04);
   /*
    * 导航选中态的填充色（C-10）。
    *
@@ -45,7 +49,7 @@
    * （像张浮起来的卡片）、更不做位移。填充比 hover 的 --bg-subtle 多一点
    * 主色，才能一眼分出"当前页"和"鼠标正停在这"。
    */
-  --nav-active-bg: rgba(47,122,107,.085);
+  --nav-active-bg: rgba(54,121,107,.09);
   /*
    * 侧栏悬浮按钮组（2026-11-06）：半透明深灰玻璃。
    * 浅色页面上深灰胶囊对比清楚；暗色下再压暗一点，靠描边与阴影定形。
@@ -55,15 +59,15 @@
   --dock-border: rgba(255, 255, 255, .18);
   --dock-line: rgba(255, 255, 255, .18);
   --dock-shadow: 0 8px 24px rgba(0, 0, 0, .22), 0 1px 2px rgba(0, 0, 0, .14);
-  --cat-1: #2f7a6b;  --cat-1-bg: rgba(47,122,107,.10);
+  --cat-1: #36796b;  --cat-1-bg: rgba(54,121,107,.10);
   --cat-2: #6b7fa3;  --cat-2-bg: rgba(107,127,163,.10);
   --cat-3: #a3766b;  --cat-3-bg: rgba(163,118,107,.10);
   --cat-4: #7a6ba3;  --cat-4-bg: rgba(122,107,163,.10);
   --cat-5: #a39a6b;  --cat-5-bg: rgba(163,154,107,.10);
   --cat-6: #6b9aa3;  --cat-6-bg: rgba(107,154,163,.10);
   --cat-7: #a36b8a;  --cat-7-bg: rgba(163,107,138,.10);
-  --code-bg: rgba(0,0,0,.035);
-  --card-bg: #fcfcfb;
+  --code-bg: rgba(15,23,42,.05);
+  --card-bg: #ffffff;
   --radius: 24px;
   --fs: 16px;
   /*
@@ -218,9 +222,9 @@
 
   /* ── 层次与投影（此前 --lift-1 / --lift-2 / --surface-2 只被引用、从未定义，
         导致 .article-nav-item 的 box-shadow 整条声明被浏览器丢弃）── */
-  --surface-2: #ffffff;
-  --lift-1: 0 1px 2px rgba(0,0,0,.04);
-  --lift-2: 0 6px 20px rgba(47,122,107,.10), 0 2px 6px rgba(0,0,0,.05);
+  --surface-2: #f7f8fa;
+  --lift-1: 0 1px 2px rgba(15,23,42,.05);
+  --lift-2: 0 6px 20px rgba(54,121,107,.10), 0 2px 6px rgba(15,23,42,.06);
 
   /* 浮层与安全区 */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -236,22 +240,24 @@
      注意：CSS 变量在计算期展开，多一层间接没有运行时成本；
      但 DevTools 里会多显示一层（--bg → --dark-bg → 具体色值），
      调试时别被绕晕。 */
-  --dark-bg: #141414;
-  --dark-bg-subtle: #1a1a1a;
-  --dark-bg-warm: #171717;
-  --dark-link: #5fbfa8;
-  --dark-link-hover: #86d8c2;
-  --dark-accent: #e08968;
-  --dark-accent-soft: rgba(224,137,104,.14);
-  --dark-bg-tint: rgba(95,191,168,.06);
-  --dark-nav-active-bg: rgba(95,191,168,.12);
-  --dark-dock-bg: rgba(42, 42, 42, .62);
+  /* 2026-11-08：暗色也跟着浅色换成中性石墨（原来 #141414 是纯灰，
+     现在与后台暗色同族：偏蓝的近黑，层次靠 #121821 / #0e141b 三个面）。 */
+  --dark-bg: #0b0f14;
+  --dark-bg-subtle: #121821;
+  --dark-bg-warm: #0e141b;
+  --dark-link: #6fb3a1;
+  --dark-link-hover: #8ec9b9;
+  --dark-accent: #d99372;
+  --dark-accent-soft: rgba(217,147,114,.14);
+  --dark-bg-tint: rgba(111,179,161,.07);
+  --dark-nav-active-bg: rgba(111,179,161,.14);
+  --dark-dock-bg: rgba(15, 23, 42, .72);
   --dark-dock-fg: rgba(255, 255, 255, .94);
   --dark-dock-border: rgba(255, 255, 255, .14);
   --dark-dock-line: rgba(255, 255, 255, .14);
   --dark-dock-shadow: 0 8px 24px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
-  --dark-cat-1: #5fbfa8;
-  --dark-cat-1-bg: rgba(95,191,168,.13);
+  --dark-cat-1: #6fb3a1;
+  --dark-cat-1-bg: rgba(111,179,161,.13);
   --dark-cat-2: #8fa3c9;
   --dark-cat-2-bg: rgba(143,163,201,.13);
   --dark-cat-3: #c99a8c;
@@ -264,17 +270,17 @@
   --dark-cat-6-bg: rgba(140,196,201,.13);
   --dark-cat-7: #c98cb0;
   --dark-cat-7-bg: rgba(201,140,176,.13);
-  --dark-text-p0: rgba(255,255,255,.95);
-  --dark-text-p1: rgba(255,255,255,.85);
-  --dark-text-p2: rgba(255,255,255,.72);
-  --dark-text-p3: rgba(255,255,255,.50);
-  --dark-text-p4: rgba(255,255,255,.38);
-  /* 暗色下的元信息色：白 62% ≈ 7.6:1（#141414 底），同样过 AA */
-  --dark-text-meta: rgba(255,255,255,.62);
-  --dark-border: rgba(255,255,255,.09);
-  --dark-border-strong: rgba(255,255,255,.14);
-  --dark-code-bg: rgba(255,255,255,.06);
-  --dark-card-bg: #1a1a19;
+  --dark-text-p0: rgba(230,234,241,.96);
+  --dark-text-p1: rgba(230,234,241,.86);
+  --dark-text-p2: rgba(230,234,241,.74);
+  --dark-text-p3: rgba(230,234,241,.50);
+  --dark-text-p4: rgba(230,234,241,.38);
+  /* 暗色下的元信息色：约 62% ≈ 7.4:1（#0b0f14 底），同样过 AA */
+  --dark-text-meta: rgba(230,234,241,.62);
+  --dark-border: rgba(230,234,241,.10);
+  --dark-border-strong: rgba(230,234,241,.15);
+  --dark-code-bg: rgba(230,234,241,.06);
+  --dark-card-bg: #121821;
   --dark-fw-body: 360;
   --dark-danger: #ff8a8d;
   --dark-danger-bg: rgba(255,110,114,.13);
@@ -288,7 +294,7 @@
   --dark-info: #8fb3dd;
   --dark-info-bg: rgba(143,179,221,.12);
   --dark-info-border: rgba(143,179,221,.28);
-  --dark-surface-2: #1e1e1d;
+  --dark-surface-2: #1a2330;
   --dark-lift-1: 0 1px 2px rgba(0,0,0,.30);
   --dark-lift-2: 0 6px 20px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.24);
 }
@@ -790,7 +796,7 @@ a:hover { color: var(--link-hover); }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card-bg);
-  background-image: linear-gradient(180deg, rgba(47,122,107,.012), transparent 120px);
+  background-image: linear-gradient(180deg, rgba(54,121,107,.012), transparent 120px);
   position: relative;
   overflow: hidden;
   transition: border-color .2s, transform .2s, box-shadow .2s;
@@ -807,7 +813,7 @@ a:hover { color: var(--link-hover); }
 .post-card:hover::before { opacity: 1; }
 .post-card:hover {
   border-color: var(--border-strong);
-  box-shadow: 0 4px 18px rgba(47,122,107,.07), 0 1px 3px rgba(0,0,0,.03);
+  box-shadow: 0 4px 18px rgba(54,121,107,.07), 0 1px 3px rgba(15,23,42,.04);
   text-decoration: none;
 }
 /* 卡片左侧一道渐隐的彩色竖线，hover 时显现 */

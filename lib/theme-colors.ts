@@ -3,7 +3,7 @@
  *
  * ## 为什么需要这个文件
  *
- * `#fffefc`（浅）与 `#141414`（深）原本在 5 个地方各写一份：
+ * 主题底色（2026-11-08 起：浅 #ffffff / 深 #0b0f14）原本在 5 个地方各写一份：
  *
  *   app/layout.tsx:55            metadata.themeColor（浏览器地址栏配色）
  *   app/manifest.ts:12-13        PWA 的 background_color / theme_color
@@ -28,10 +28,10 @@
  */
 
 /** 浅色主题的页面底色（= globals.css 的 `:root { --bg }`） */
-export const LIGHT_BG = "#fffefc";
+export const LIGHT_BG = "#ffffff";
 
 /** 深色主题的页面底色（= globals.css 的 `:root[data-theme="dark"] { --bg }`） */
-export const DARK_BG = "#141414";
+export const DARK_BG = "#0b0f14";
 
 /** localStorage 里存主题偏好的键；ThemeScript 与 ThemeToggle 必须一致 */
 export const THEME_STORAGE_KEY = "blog-theme";

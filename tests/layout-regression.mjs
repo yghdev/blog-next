@@ -1519,22 +1519,22 @@ try {
    * （--bg → --dark-bg → 具体色），也证明没有把某个值弄丢。
    */
   const DARK_KEY_TOKENS = [
-    ["--bg", "#141414"],
-    ["--bg-subtle", "#1a1a1a"],
-    ["--bg-warm", "#171717"],
-    ["--link", "#5fbfa8"],
-    ["--link-hover", "#86d8c2"],
-    ["--accent", "#e08968"],
+    ["--bg", "#0b0f14"],
+    ["--bg-subtle", "#121821"],
+    ["--bg-warm", "#0e141b"],
+    ["--link", "#6fb3a1"],
+    ["--link-hover", "#8ec9b9"],
+    ["--accent", "#d99372"],
     // 注意：浏览器会把 rgba(255,255,255,.95) 规范化成 #fffffff2，
     // 所以这里只断言"不透明度接近 0.95 的白色"，不写死字符串形式。
     ["--text-p0", null],
-    ["--card-bg", "#1a1a19"],
-    ["--surface-2", "#1e1e1d"],
+    ["--card-bg", "#121821"],
+    ["--surface-2", "#1a2330"],
     ["--danger", "#ff8a8d"],
     ["--ok", "#6fd6a6"],
     ["--warn", "#e0b062"],
     ["--info", "#8fb3dd"],
-    ["--cat-1", "#5fbfa8"],
+    ["--cat-1", "#6fb3a1"],
     ["--cat-7", "#c98cb0"],
   ];
 
