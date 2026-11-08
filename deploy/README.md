@@ -14,6 +14,8 @@
 Nginx（原证书沿用）
   ├─ /images/*  → /var/www/blog-images/（静态直出，不经 Node）
   └─ /*         → 127.0.0.1:8090
+                    ↑
+              内容页 30s 微缓存（C1，见 2.1）
                     ↓
               blog.service（systemd）
                     ↓
@@ -29,6 +31,7 @@ Nginx（原证书沿用）
 | 服务名 | `blog.service` |
 | 端口 | `127.0.0.1:8090` |
 | 内存限制 | MemoryHigh 300M / MemoryMax 400M |
+| HTML 缓存 | nginx `proxy_cache`，zone `blog_html`，目录 `/var/cache/nginx/blog` |
 
 ---
 
@@ -52,6 +55,53 @@ systemctl show blog -p MemoryCurrent | awk -F= '{printf "%d MB\n", $2/1048576}'
 # nginx 改动后
 nginx -t && systemctl reload nginx
 ```
+
+### 2.1 HTML 微缓存（C1，2026-11-08）
+
+Next 自托管动态页默认下发 `cache-control: private, no-cache, no-store`，
+而 nginx 之前没有 `proxy_cache` —— 每个请求都进 Node 渲染。现在内容页
+缓存 30 秒，后端故障时用 stale 顶住。
+
+**两个文件，缺一不可**：
+
+| 仓库文件 | 服务器位置 | 作用 |
+|---|---|---|
+| `deploy/nginx-cache.conf` | `/etc/nginx/conf.d/blog-cache.conf` | `proxy_cache_path` + 两个 `map`（哪些路径可缓存、什么时候 bypass） |
+| `deploy/nginx-blog.conf` | `/etc/nginx/sites-available/blog` | `location /` 里的缓存指令 |
+
+**四条安全边界**（改配置时不要动，`tests/nginx-cache.test.ts` 会红）：
+
+1. **登录态 bypass**：带 `blog_session` cookie 的请求不读也不写缓存 ——
+   站主改完内容刷新就能看到实时结果，不会被自己的缓存骗。
+2. **RSC bypass**：`?_rsc=…` 查询串与 `RSC: 1` 头一律 bypass ——
+   客户端导航要的是 RSC 载荷，拿缓存的 HTML 会直接坏掉。
+3. **只缓存 200，且不忽略 `Set-Cookie`** —— 带 Set-Cookie 的响应 nginx
+   默认不缓存，这是防止登录态写进公共缓存的安全网。
+4. **5xx 不缓存**，只用 stale 顶住。
+
+**验证**：
+
+```bash
+curl -sI https://blog.yghsite.cn/ | grep -i x-cache-status        # MISS → HIT
+curl -sI -H 'Cookie: blog_session=<64位hex>' https://blog.yghsite.cn/ | grep -i x-cache-status  # BYPASS
+curl -sI 'https://blog.yghsite.cn/p/34?_rsc=abc' | grep -i x-cache-status                        # BYPASS
+curl -sI https://blog.yghsite.cn/api/healthz | grep -i x-cache-status                            # BYPASS
+```
+
+**紧急关闭**（怀疑缓存导致问题时）：
+
+```bash
+# 方式一：只清缓存，不改配置
+rm -rf /var/cache/nginx/blog/* && systemctl reload nginx
+
+# 方式二：整块关掉（注释掉 location / 里的 proxy_cache 一行即可）
+sed -i 's/^        proxy_cache blog_html;/        # proxy_cache blog_html;/' /etc/nginx/sites-available/blog
+nginx -t && systemctl reload nginx
+```
+
+**已知取舍**：TTL 30 秒、不做主动 purge（nginx 1.24 没有 `ngx_cache_purge`
+模块）。发布后访客最多看到 30 秒旧内容；站主带 cookie 会 bypass，看到实时内容。
+验收标准是「发布后 60 秒内可见」，30s TTL 满足。
 
 ---
 

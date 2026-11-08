@@ -165,6 +165,7 @@ ssh <host> '/opt/blog/deploy.sh --list'       # 看现有版本与当前指向
 | 部署脚本报 WorkingDirectory 不对 | `sed -i 's\|^WorkingDirectory=.*\|WorkingDirectory=/opt/blog/current\|' /etc/systemd/system/blog.service && systemctl daemon-reload` |
 | healthz 没有 `commit` 字段 | 那个产物是加版本戳之前构建的，重新 `build:dist` |
 | 改了代码但线上没变 | 是不是手工 cp 了文件？用 `deploy.sh`；或 current 软链没切 |
+| 发了文章但访客看到旧内容 | 先看 `curl -sI https://blog.yghsite.cn/ \| grep -i x-cache-status`：`HIT`/`STALE` 是 nginx 30s 微缓存（C1），等 30 秒或 `rm -rf /var/cache/nginx/blog/*`。站主带 `blog_session` cookie 会 `BYPASS`，看到的是实时内容 |
 | 上传报 413 | 只改了应用层没改 nginx（`client_max_body_size` 与 Next 两层要一致） |
 | 上传后全站卡死 | `cat /proc/$(systemctl show blog -p MainPID --value)/wchan`，返回 `mem_cgroup_handle_over_high` 即被节流 |
 
