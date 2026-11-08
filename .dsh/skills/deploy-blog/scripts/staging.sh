@@ -96,6 +96,7 @@ JS
     systemd-run --unit="$UNIT" --uid=blog --gid=blog --working-directory="$ROOT" \
       --setenv=NODE_ENV=production --setenv=PORT="$PORT" --setenv=HOSTNAME=127.0.0.1 \
       --setenv=DATA_DIR="$TMP" --setenv=UPLOAD_DIR="$UPLOADS" --setenv=TZ=UTC \
+      --setenv=CSP_MODE="${CSP_MODE:-report-only}" \
       --collect /usr/bin/node server.js >/dev/null 2>&1 \
       || die "systemd-run 起不来（unit 名 $UNIT 是否已被占用？）"
 

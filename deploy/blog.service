@@ -22,6 +22,11 @@ Environment=DATA_DIR=/var/lib/blog
 Environment=UPLOAD_DIR=/var/www/blog-images
 # 时区：展示层用 Intl 指定 Asia/Shanghai，这里固定 UTC 让日志与库内时间一致
 Environment=TZ=UTC
+# CSP 模式（D，2026-11-08）：enforce = 真正拦截；report-only = 只上报不拦。
+# 默认值在 proxy.ts 里是 report-only，这里显式写 enforce 才是"生效"。
+# 切换前必须先在隔离副本上验证：CSP_MODE=enforce bash smoke-remote.sh
+# （2026-11-08 实测 32/32 通过，含后台编辑器/自动保存/发布/移动端）。
+Environment=CSP_MODE=enforce
 ExecStart=/usr/bin/node server.js
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=always

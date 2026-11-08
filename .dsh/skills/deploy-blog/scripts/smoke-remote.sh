@@ -36,7 +36,10 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "== 1/4 在 $HOST 起隔离实例（生产库副本 + 临时账号） =="
-OUT="$(ssh -o BatchMode=yes "$HOST" 'bash -s -- up' < "$SKILL_DIR/scripts/staging.sh")"
+# CSP_MODE 透传：默认 report-only，与线上一致；想验证 enforce 时
+#   CSP_MODE=enforce bash smoke-remote.sh
+# 这样冒烟覆盖的就是"切到强制模式后"的真实行为，而不是只测默认值。
+OUT="$(ssh -o BatchMode=yes "$HOST" "CSP_MODE=${CSP_MODE:-report-only} bash -s -- up" < "$SKILL_DIR/scripts/staging.sh")"
 echo "$OUT" | grep -v '^SMOKE_PASS=' | sed 's/^/   /'
 
 SMOKE_BASE_LINE="$(echo "$OUT" | grep '^SMOKE_BASE=' || true)"
