@@ -22,7 +22,7 @@ import path from "node:path";
  *
  * ## 问题二：主题色散落在 5 处
  *
- * 主题底色（浅色 #ffffff / 深色 #0b0f14）曾在 5 个文件里各写一份：
+ * 主题底色（浅色 #f4f5f7 / 深色 #0b0f14）曾在 5 个文件里各写一份：
  *   app/layout.tsx:55           metadata.themeColor
  *   app/manifest.ts:12-13       PWA 的 background/theme color
  *   components/ThemeToggle.tsx  切换时同步 meta
@@ -46,7 +46,7 @@ test("C-4 存在 lib/theme-colors.ts 且导出两个主题色", () => {
   const f = path.join(ROOT, "lib/theme-colors.ts");
   assert.ok(fs.existsSync(f), "应存在 lib/theme-colors.ts");
   const src = read("lib/theme-colors.ts");
-  assert.match(src, /export const LIGHT_BG\s*=\s*"#ffffff"/, "应导出 LIGHT_BG = #ffffff");
+  assert.match(src, /export const LIGHT_BG\s*=\s*"#f4f5f7"/, "应导出 LIGHT_BG = #f4f5f7");
   assert.match(src, /export const DARK_BG\s*=\s*"#0b0f14"/, "应导出 DARK_BG = #0b0f14");
 });
 
@@ -64,7 +64,7 @@ test("C-4 ThemeToggle 必须用 useSyncExternalStore 订阅 data-theme", () => {
 
 test("C-4 主题色不得再散落成字面量（除 lib/theme-colors.ts 本身）", () => {
   /**
-   * 逐文件检查：除了定义处，任何 .ts/.tsx 都不该出现 #ffffff / #0b0f14。
+   * 逐文件检查：除了定义处，任何 .ts/.tsx 都不该出现 #f4f5f7 / #0b0f14。
    * CSS 里当然还有（那是设计令牌定义），这里只管 TS/TSX。
    */
   const files: string[] = [];
@@ -85,7 +85,7 @@ test("C-4 主题色不得再散落成字面量（除 lib/theme-colors.ts 本身�
     const rel = path.relative(ROOT, f).replace(/\\/g, "/");
     if (rel === "lib/theme-colors.ts") continue; // 定义处
     const text = fs.readFileSync(f, "utf8");
-    if (/#ffffff|#0b0f14/i.test(text)) offenders.push(rel);
+    if (/#f4f5f7|#0b0f14/i.test(text)) offenders.push(rel);
   }
   assert.deepEqual(
     offenders,
@@ -103,7 +103,7 @@ test("C-4 ThemeScript 的脚本必须引用常量而不是字面量", () => {
   assert.match(src, /theme-colors/, "ThemeScript 应 import 主题色常量");
   assert.match(src, /LIGHT_BG|DARK_BG/, "应使用 LIGHT_BG / DARK_BG 拼脚本");
   // 字符串里不该再出现原始色值
-  assert.doesNotMatch(src, /#ffffff|#0b0f14/i, "ThemeScript 的脚本字面量里不应再有原始色值");
+  assert.doesNotMatch(src, /#f4f5f7|#0b0f14/i, "ThemeScript 的脚本字面量里不应再有原始色值");
 });
 
 test("C-4 主题切换的所有入口都还在（不能靠删实例解决同步）", () => {

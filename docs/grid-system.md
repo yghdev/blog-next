@@ -78,13 +78,18 @@
 
 | 令牌 | 浅色 | 深色 | 用途 |
 |---|---|---|---|
-| `--bg` | `#ffffff` | `#0b0f14` | 页面底（纯白，不再带纸黄） |
-| `--bg-subtle` | `#f4f6f8` | `#121821` | hover / 次级填充 |
-| `--card-bg` | `#ffffff` | `#121821` | 卡片表面 |
-| `--bg-warm` | `#f7f8fa` | `#0e141b` | 页脚色带 |
-| `--link` | `#36796b` | `#6fb3a1` | 主色（= 后台 `--fx-brand`） |
-| `--accent` | `#d77858` | `#d99372` | 次强调（= 后台 `--fx-accent`） |
-| `--border` | `rgba(15,23,42,.08)` | `rgba(230,234,241,.10)` | 分隔线（中性灰，不偏黄） |
+| `--bg` | `#f4f5f7` | `#0b0f14` | 页面底（偏灰） |
+| `--bg-subtle` | `#edeff3` | `#121821` | hover / 输入框 / 次级按钮填充 |
+| `--card-bg` | `#ffffff` | `#121821` | 卡片表面（白卡浮在灰底上） |
+| `--brand-fill` | `#8fd3b3` | `#8fd3b3` | 品牌浅绿填充（主按钮 / 选中） |
+| `--brand-on` | `#0b2e22` | `#06211a` | 浅绿底上的字 |
+| `--link` | `#27755c` | `#8fd3b3` | 文字/链接（同色系深一档，白底 5.2:1） |
+| `--border` | `transparent` | `transparent` | **线条已取消**，模块靠色差分界 |
+
+**无线框约定（第五轮）**：前后台的描边令牌（`--border` / `--border-strong` /
+`--fx-line` / `--fx-line-strong` / 语义 `--*-border` / `--fr-line`）一律
+`transparent`。模块边界靠三层色差：**灰画布 → 白卡 → 浅绿强调**；
+输入框/次级按钮用比卡片深一档的灰底（`--bg-subtle` / `--fx-sunken`）定形。
 
 暖纸值（`#fffefc` / `#f7f6f3` / `#faf9f7` / `#fcfcfb`）不得复活；
 主题色仍由 `lib/theme-colors.ts` 的 `LIGHT_BG` / `DARK_BG` 单点导出（meta / PWA / 首屏脚本共用）。
@@ -124,12 +129,14 @@
 
 | 令牌 | 浅色 | 用途 |
 |---|---|---|
-| `--fx-canvas` | `#f7f8fa` | 页面底（极浅中性灰） |
+| `--fx-canvas` | `#f4f5f7` | 页面底（偏灰） |
 | `--fx-surface` | `#ffffff` | 卡片 / 侧栏 / 浮层（纯白） |
 | `--fx-raised` | `#ffffff` | 弹窗 / 下拉（靠阴影分层） |
-| `--fx-sunken` | `#f1f3f6` | 代码 / 工具条 / 内嵌区 |
-| `--fx-ink` | `#0f172a` | 主文字 17.4:1 |
-| `--fx-line` | `#e4e7ec` | 分隔线（中性灰） |
+| `--fx-sunken` | `#edeff3` | 输入框 / 次级按钮 / 工具条 |
+| `--fx-brand-fill` | `#8fd3b3` | 品牌浅绿填充（主按钮） |
+| `--fx-brand-on` | `#0b2e22` | 浅绿底上的字 |
+| `--fx-brand` | `#27755c` | 文字/链接（白底 5.2:1） |
+| `--fx-line` | `transparent` | 线条已取消 |
 
 暖纸底（`#f5f2eb` / `#fbfaf6` / `#fffdf9`）不得复活，由 `tests/grid-system.test.ts` 守着。
 深色主题同步换成中性石墨（`#0b0f14` / `#121821`），不再带暖棕。

@@ -170,9 +170,34 @@ test("栅格化：后台主色调为中性白（大厂白），不再是暖纸",
    */
   const adminRoot = rootBlock(CSS_ADMIN);
   assert.match(adminRoot, /--fx-surface:\s*#ffffff/, "内容表面应为纯白");
-  assert.match(adminRoot, /--fx-canvas:\s*#f7f8fa/, "页面底应为中性浅灰");
-  assert.match(adminRoot, /--fx-line:\s*#e4e7ec/, "分隔线应为中性灰");
+  assert.match(adminRoot, /--fx-canvas:\s*#f4f5f7/, "页面底应为偏灰的 #f4f5f7");
+  assert.match(adminRoot, /--fx-line:\s*transparent/, "分隔线令牌应为 transparent（第五轮取消线条）");
   assert.doesNotMatch(adminRoot, /#f5f2eb|#fbfaf6|#fffdf9|#efece3/, "不应再出现暖纸底色");
+});
+
+test("配色：前后台统一「灰底 + 白卡 + 浅绿品牌」，且取消线框", () => {
+  /**
+   * 2026-11-08 第五轮：用户要求「底色偏灰 #F4F5F7、卡片白色、品牌色浅绿、
+   * 取消各种线条，用颜色色差区分模块」。
+   * 这条守三件事：颜色令牌值、线框令牌透明、品牌填充是浅绿。
+   */
+  const frontRoot = rootBlock(CSS_GLOBALS);
+  const adminRoot = rootBlock(CSS_ADMIN);
+
+  for (const [name, block] of [["前台", frontRoot], ["后台", adminRoot]] as const) {
+    assert.match(block, /--(bg|fx-canvas):\s*#f4f5f7/, name + "底色应为 #f4f5f7");
+    assert.match(block, /--(card-bg|fx-surface):\s*#ffffff/, name + "卡片/表面应为纯白");
+  }
+  // 线框令牌必须透明（线条取消，靠色差分界）
+  assert.match(frontRoot, /--border:\s*transparent/, "前台 --border 应为 transparent");
+  assert.match(frontRoot, /--border-strong:\s*transparent/, "前台 --border-strong 应为 transparent");
+  assert.match(adminRoot, /--fx-line:\s*transparent/, "后台 --fx-line 应为 transparent");
+  assert.match(adminRoot, /--fx-line-strong:\s*transparent/, "后台 --fx-line-strong 应为 transparent");
+  // 品牌浅绿：填充浅、文字深
+  assert.match(frontRoot, /--brand-fill:\s*#8fd3b3/, "前台品牌填充应为浅绿 #8fd3b3");
+  assert.match(adminRoot, /--fx-brand-fill:\s*#8fd3b3/, "后台品牌填充应为浅绿 #8fd3b3");
+  assert.match(adminRoot, /--fx-brand-on:\s*#0b2e22/, "浅绿底上的字应为深绿 #0b2e22");
+  assert.match(frontRoot, /--link:\s*#27755c/, "前台链接应为同色系深绿（白底 5.2:1）");
 });
 
 /* ────────────────────────── 12 列契约 ────────────────────────── */

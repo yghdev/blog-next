@@ -269,7 +269,9 @@
   padding: 16px;
   border: 1px solid var(--fr-line);
   border-radius: var(--fr-radius);
-  background: var(--bg);
+  /* 灰底上的白卡（第五轮：无线框，靠底色差分界） */
+  background: var(--card-bg);
+  box-shadow: var(--card-lift);
   color: var(--text-p1);
   text-decoration: none;
   transition: transform .18s var(--ease), border-color .18s var(--ease),
@@ -278,7 +280,7 @@
 .fr-card:hover,
 .fr-card:focus-visible {
   transform: translateY(-2px);
-  border-color: color-mix(in oklab, var(--fr-accent) 34%, var(--fr-line));
+  box-shadow: 0 6px 22px rgba(15,23,42,.09), 0 1px 3px rgba(15,23,42,.05);
   background: var(--card-bg);
   color: var(--text-p1);
   text-decoration: none;
@@ -543,7 +545,7 @@
   padding: 8px 13px;
   border: 1px solid var(--fr-line-strong);
   border-radius: 9px;
-  background: var(--bg);
+  background: var(--bg-subtle);
   color: var(--text-p2);
   font-family: inherit;
   font-size: .78rem;
@@ -597,7 +599,7 @@
   width: 100%;
   border: 1px solid var(--fr-line-strong);
   border-radius: 7px;
-  background: var(--bg);
+  background: var(--bg-subtle);
   color: var(--text-p1);
   font-family: var(--fr-mono-font);
   font-size: .72rem;

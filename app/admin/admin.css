@@ -21,37 +21,43 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── 表面与文字（浅色：中性白，2026-11-08 第三轮改「大厂白」）──
+  /* ── 表面与文字（浅色：2026-11-08 第五轮「灰底 + 白卡」）──
    *
-   * 上一版是暖纸（#f5f2eb / #fbfaf6 / #fffdf9），偏编辑部/刊物感。用户要求
-   * 「主色调改成大厂常用的白色」：B 端工作台需要更高的信息对比、更中性的
-   * 灰阶，以及**纯白表面**（卡片 / 侧栏 / 浮层），品牌绿只做强调，不染画布。
+   * 三条规则（与前台完全一致）：
+   *   1. 画布是偏灰的 #f4f5f7，卡片/侧栏/浮层是纯白 #ffffff；
+   *   2. 描边令牌全部 transparent —— 取消线条，模块靠色差分界；
+   *   3. 品牌色是浅绿 #8fd3b3（配深绿字 #0b2e22），文字/链接用深一档 #27755c。
    *
    * 对比度仍守 AA：主文字 17:1、次级 9.6:1、辅助 5.9:1、最弱 5.1:1（对白底）。
    */
-  --fx-canvas: #f7f8fa;      /* 页面底：极浅中性灰（白卡片浮在上面才有层次） */
+  --fx-canvas: #f4f5f7;      /* 页面底：偏灰（白卡浮在上面才分层） */
   --fx-surface: #ffffff;     /* 内容表面：纯白（卡片 / 侧栏 / 浮层） */
   --fx-raised: #ffffff;      /* 浮层表面：弹窗 / 下拉 / 抽屉（靠阴影分层） */
-  --fx-sunken: #f1f3f6;      /* 凹槽：代码、工具条、内嵌区 */
+  --fx-sunken: #edeff3;      /* 凹槽 / 输入框 / 次级按钮：比画布深一档 */
 
   --fx-ink: #0f172a;         /* 主文字 17.4:1 */
   --fx-ink-2: #334155;       /* 次级正文 9.6:1 */
   --fx-muted: #5b6675;       /* 辅助文字 5.9:1 */
   --fx-faint: #66707f;       /* 最弱一级文字 5.1:1 —— 仍守 AA */
 
-  --fx-line: #e4e7ec;        /* 分隔线（中性灰，不带纸黄） */
-  --fx-line-strong: #cfd5de; /* 需要被界定的边界 */
+  /* 线框全部透明（第五轮）：模块之间靠「灰底 / 白卡 / 浅绿」三层色差区分。 */
+  --fx-line: transparent;
+  --fx-line-strong: transparent;
 
   /* ── 品牌与强调 ── */
-  --fx-brand: #36796b;       /* 主强调：选中、链接、主交互 4.6:1 */
-  --fx-brand-ink: #2b6459;   /* 主强调的按压 / 悬停（更深一档） */
-  --fx-brand-fill: #36796b;  /* 主按钮填充 */
-  --fx-brand-on: #ffffff;    /* 主按钮文字 5.1:1 */
-  --fx-brand-tint: #e8efea;  /* 品牌极浅底（选中行、标记底） */
-  --fx-brand-line: rgba(54, 121, 107, 0.28);
-  --fx-accent: #d77858;      /* 次强调：只做标记与圆点，**不当文字**（2.8:1） */
-  --fx-accent-text: #a94f31; /* 次强调要当文字时的替身 4.9:1 */
-  --fx-accent-tint: #f7ebe4;
+  /* 品牌色 = 浅绿（第五轮）：
+     填充用 --fx-brand-fill(#8fd3b3) + 深绿字 --fx-brand-on(#0b2e22)，
+     文字/链接用同色系深一档 --fx-brand(#27755c，白底 5.2:1)。 */
+  --fx-brand: #27755c;          /* 文字/链接：白底 5.2:1 */
+  --fx-brand-ink: #1f6349;      /* 文字的按压/悬停 */
+  --fx-brand-fill: #8fd3b3;     /* 主按钮 / 选中填充：浅绿 */
+  --fx-brand-fill-hover: #7fcba7;
+  --fx-brand-on: #0b2e22;       /* 浅绿底上的字 */
+  --fx-brand-tint: #e7f5ee;     /* 品牌极浅底（选中行、标记底） */
+  --fx-brand-line: transparent;
+  --fx-accent: #4fa98b;      /* 次强调：浅绿的深一档，只做标记 */
+  --fx-accent-text: #27755c; /* 次强调当文字时的替身 */
+  --fx-accent-tint: #e7f5ee;
 
   /* ── 侧栏专属令牌 ──
      侧栏是全站唯一「常驻导航面」，它的层级靠这组色阶而不是靠线条：
@@ -59,17 +65,17 @@
   --fx-nav-group-ink: #6b7280;   /* 分组名 4.8:1，比菜单项更弱 */
   --fx-nav-ink: #475569;         /* 普通菜单项 7.5:1 */
   --fx-nav-icon: #7b8494;        /* 图标比文字再弱一档，仍 >= 3:1 */
-  --fx-nav-active-bg: #eef4f1;   /* 选中底：品牌极浅绿（白底上几乎无染色） */
-  --fx-nav-active-ink: #2b6459;  /* 选中字：深墨绿 5.7:1 */
-  --fx-nav-hover-bg: #f1f3f6;    /* hover 用中性灰，和选中绿区分开 */
-  --fx-nav-press-bg: #e8ecf1;
-  --fx-side-divider: rgba(15, 23, 42, 0.07);
+  --fx-nav-active-bg: #e7f5ee;   /* 选中底：品牌极浅绿 */
+  --fx-nav-active-ink: #27755c;  /* 选中字：深绿 5.2:1 */
+  --fx-nav-hover-bg: #edeff3;    /* hover 用中性灰，和选中绿区分开 */
+  --fx-nav-press-bg: #e3e7ec;
+  --fx-side-divider: transparent;
 
   /* ── 语义状态（浅底深字，按语义分配，不复用品牌色冒充状态）── */
-  --fx-ok: #1f7a52;      --fx-ok-bg: rgba(31, 122, 82, 0.09);     --fx-ok-line: rgba(31, 122, 82, 0.30);
-  --fx-warn: #8a5a12;    --fx-warn-bg: rgba(138, 90, 18, 0.10);   --fx-warn-line: rgba(138, 90, 18, 0.30);
-  --fx-danger: #b23a3e;  --fx-danger-bg: rgba(178, 58, 62, 0.08); --fx-danger-line: rgba(178, 58, 62, 0.30);
-  --fx-info: #3a5f8c;    --fx-info-bg: rgba(58, 95, 140, 0.08);   --fx-info-line: rgba(58, 95, 140, 0.26);
+  --fx-ok: #1f7a52;      --fx-ok-bg: rgba(31, 122, 82, 0.10);     --fx-ok-line: transparent;
+  --fx-warn: #8a5a12;    --fx-warn-bg: rgba(138, 90, 18, 0.10);   --fx-warn-line: transparent;
+  --fx-danger: #b23a3e;  --fx-danger-bg: rgba(178, 58, 62, 0.09); --fx-danger-line: transparent;
+  --fx-info: #3a5f8c;    --fx-info-bg: rgba(58, 95, 140, 0.09);   --fx-info-line: transparent;
 
   /* ── 间距（2026-11-08：改为前台 --space-* 的别名，前后台共用一套刻度）──
    *
@@ -164,32 +170,33 @@
   --fx-muted: #96a1b0;       /* 6.9:1 */
   --fx-faint: #8590a0;       /* 5.8:1 */
 
-  --fx-line: #212837;
-  --fx-line-strong: #2e3745;
+  --fx-line: transparent;
+  --fx-line-strong: transparent;
 
-  --fx-brand: #6fb3a1;       /* 7.1:1 */
-  --fx-brand-ink: #8ec9b9;
-  --fx-brand-fill: #4e9e8b;  /* 暗色用亮底配深字：5.9:1 */
-  --fx-brand-on: #08110e;
-  --fx-brand-tint: rgba(111, 179, 161, 0.13);
-  --fx-brand-line: rgba(111, 179, 161, 0.34);
-  --fx-accent: #d99372;      /* 暗色下 6.9:1，可直接做文字 */
-  --fx-accent-text: #d99372;
-  --fx-accent-tint: rgba(217, 147, 114, 0.13);
+  --fx-brand: #8fd3b3;       /* 暗色下的浅绿文字 8.9:1 */
+  --fx-brand-ink: #a6e0c6;
+  --fx-brand-fill: #8fd3b3;  /* 暗色用亮底配深字 */
+  --fx-brand-fill-hover: #a0dcc0;
+  --fx-brand-on: #06211a;
+  --fx-brand-tint: rgba(143, 211, 179, 0.14);
+  --fx-brand-line: transparent;
+  --fx-accent: #6fc9a4;
+  --fx-accent-text: #8fd3b3;
+  --fx-accent-tint: rgba(111, 201, 164, 0.14);
 
   --fx-nav-group-ink: #96a1b0;
   --fx-nav-ink: #c7cedb;
   --fx-nav-icon: #98a3b2;
-  --fx-nav-active-bg: rgba(111, 179, 161, 0.14);
-  --fx-nav-active-ink: #9ed2c3;
+  --fx-nav-active-bg: rgba(143, 211, 179, 0.16);
+  --fx-nav-active-ink: #a6e0c6;
   --fx-nav-hover-bg: rgba(230, 234, 241, 0.06);
   --fx-nav-press-bg: rgba(230, 234, 241, 0.10);
-  --fx-side-divider: rgba(230, 234, 241, 0.08);
+  --fx-side-divider: transparent;
 
-  --fx-ok: #74c79e;      --fx-ok-bg: rgba(116, 199, 158, 0.12);     --fx-ok-line: rgba(116, 199, 158, 0.32);
-  --fx-warn: #e0b063;    --fx-warn-bg: rgba(224, 176, 99, 0.12);    --fx-warn-line: rgba(224, 176, 99, 0.32);
-  --fx-danger: #ff8b85;  --fx-danger-bg: rgba(255, 139, 133, 0.12); --fx-danger-line: rgba(255, 139, 133, 0.32);
-  --fx-info: #8fb0dc;    --fx-info-bg: rgba(143, 176, 220, 0.12);   --fx-info-line: rgba(143, 176, 220, 0.32);
+  --fx-ok: #74c79e;      --fx-ok-bg: rgba(116, 199, 158, 0.12);     --fx-ok-line: transparent;
+  --fx-warn: #e0b063;    --fx-warn-bg: rgba(224, 176, 99, 0.12);    --fx-warn-line: transparent;
+  --fx-danger: #ff8b85;  --fx-danger-bg: rgba(255, 139, 133, 0.12); --fx-danger-line: transparent;
+  --fx-info: #8fb0dc;    --fx-info-bg: rgba(143, 176, 220, 0.12);   --fx-info-line: transparent;
 
   --fx-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
   --fx-shadow-2: 0 1px 3px rgba(0, 0, 0, 0.45), 0 10px 28px -14px rgba(0, 0, 0, 0.7);
@@ -208,29 +215,30 @@
     --fx-ink-2: #c2c9d5;
     --fx-muted: #96a1b0;
     --fx-faint: #8590a0;
-    --fx-line: #212837;
-    --fx-line-strong: #2e3745;
-    --fx-brand: #6fb3a1;
-    --fx-brand-ink: #8ec9b9;
-    --fx-brand-fill: #4e9e8b;
-    --fx-brand-on: #08110e;
-    --fx-brand-tint: rgba(111, 179, 161, 0.13);
-    --fx-brand-line: rgba(111, 179, 161, 0.34);
-    --fx-accent: #d99372;
-    --fx-accent-text: #d99372;
-    --fx-accent-tint: rgba(217, 147, 114, 0.13);
+    --fx-line: transparent;
+    --fx-line-strong: transparent;
+    --fx-brand: #8fd3b3;
+    --fx-brand-ink: #a6e0c6;
+    --fx-brand-fill: #8fd3b3;
+    --fx-brand-fill-hover: #a0dcc0;
+    --fx-brand-on: #06211a;
+    --fx-brand-tint: rgba(143, 211, 179, 0.14);
+    --fx-brand-line: transparent;
+    --fx-accent: #6fc9a4;
+    --fx-accent-text: #8fd3b3;
+    --fx-accent-tint: rgba(111, 201, 164, 0.14);
     --fx-nav-group-ink: #96a1b0;
     --fx-nav-ink: #c7cedb;
     --fx-nav-icon: #98a3b2;
-    --fx-nav-active-bg: rgba(111, 179, 161, 0.14);
-    --fx-nav-active-ink: #9ed2c3;
+    --fx-nav-active-bg: rgba(143, 211, 179, 0.16);
+    --fx-nav-active-ink: #a6e0c6;
     --fx-nav-hover-bg: rgba(230, 234, 241, 0.06);
     --fx-nav-press-bg: rgba(230, 234, 241, 0.10);
-    --fx-side-divider: rgba(230, 234, 241, 0.08);
-    --fx-ok: #74c79e;      --fx-ok-bg: rgba(116, 199, 158, 0.12);     --fx-ok-line: rgba(116, 199, 158, 0.32);
-    --fx-warn: #e0b063;    --fx-warn-bg: rgba(224, 176, 99, 0.12);    --fx-warn-line: rgba(224, 176, 99, 0.32);
-    --fx-danger: #ff8b85;  --fx-danger-bg: rgba(255, 139, 133, 0.12); --fx-danger-line: rgba(255, 139, 133, 0.32);
-    --fx-info: #8fb0dc;    --fx-info-bg: rgba(143, 176, 220, 0.12);   --fx-info-line: rgba(143, 176, 220, 0.32);
+    --fx-side-divider: transparent;
+    --fx-ok: #74c79e;      --fx-ok-bg: rgba(116, 199, 158, 0.12);     --fx-ok-line: transparent;
+    --fx-warn: #e0b063;    --fx-warn-bg: rgba(224, 176, 99, 0.12);    --fx-warn-line: transparent;
+    --fx-danger: #ff8b85;  --fx-danger-bg: rgba(255, 139, 133, 0.12); --fx-danger-line: transparent;
+    --fx-info: #8fb0dc;    --fx-info-bg: rgba(143, 176, 220, 0.12);   --fx-info-line: transparent;
     --fx-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
     --fx-shadow-2: 0 1px 3px rgba(0, 0, 0, 0.45), 0 10px 28px -14px rgba(0, 0, 0, 0.7);
     --fx-shadow-3: 0 2px 8px rgba(0, 0, 0, 0.5), 0 28px 64px -20px rgba(0, 0, 0, 0.8);
@@ -746,7 +754,8 @@
   padding: 0 var(--fx-s4);
   border: 1px solid var(--fx-line-strong);
   border-radius: var(--fx-r-md);
-  background: var(--fx-surface);
+  /* 无线框：次级按钮 = 比卡片深一档的灰底（第五轮） */
+  background: var(--fx-sunken);
   color: var(--fx-ink);
   font-family: inherit;
   font-size: var(--fx-fs-sm);
@@ -762,13 +771,13 @@
 .fx-scope .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .fx-scope .btn-primary {
-  border-color: var(--fx-brand-fill);
+  border-color: transparent;
   background: var(--fx-brand-fill);
   color: var(--fx-brand-on);
   font-weight: var(--fx-fw-semi);
 }
-.fx-scope .btn-primary:hover { background: var(--fx-brand-ink); border-color: var(--fx-brand-ink); color: var(--fx-brand-on); }
-.fx-scope .btn-primary:active { background: var(--fx-brand-ink); }
+.fx-scope .btn-primary:hover { background: var(--fx-brand-fill-hover); border-color: transparent; color: var(--fx-brand-on); }
+.fx-scope .btn-primary:active { background: var(--fx-brand-fill-hover); }
 
 /* 危险：浅底深字 + 语义边框。绝不用主色铺红 —— 那等于用视觉诱导点它。 */
 .fx-scope .btn-danger {
@@ -804,7 +813,8 @@
   padding: 7px var(--fx-s3);
   border: 1px solid var(--fx-line-strong);
   border-radius: var(--fx-r-md);
-  background: var(--fx-surface);
+  /* 无线框：输入框 = 灰底，聚焦时再提亮成白底 + 双环 */
+  background: var(--fx-sunken);
   color: var(--fx-ink);
   font-family: inherit;
   font-size: var(--fx-fs-sm);
@@ -999,6 +1009,8 @@
   border: 1px solid var(--fx-line);
   border-radius: var(--fx-r-lg);
   background: var(--fx-surface);
+  /* 灰底上的白卡：靠阴影分层，不画线 */
+  box-shadow: var(--fx-shadow-1);
   overflow: hidden;
 }
 .fx-panel-head {
@@ -1127,11 +1139,11 @@
   color: var(--fx-ink-2);
   transition: background var(--fx-dur-1) var(--fx-ease);
 }
+.fx-scope .data-row:nth-child(even) { background: color-mix(in oklab, var(--fx-sunken) 42%, transparent); }
 .fx-scope .data-row:hover { background: color-mix(in oklab, var(--fx-brand-tint) 55%, transparent); }
 /* 选中行：左侧竖条 + 品牌浅底，与侧栏选中态同一套语言 */
 .fx-scope .data-row.is-selected {
   background: var(--fx-brand-tint);
-  box-shadow: inset 2px 0 0 var(--fx-brand);
 }
 /* 键盘聚焦时整行也要有明确反馈，不能只依赖背景色（WCAG 2.4.7） */
 .fx-scope .data-row:focus-within { background: color-mix(in oklab, var(--fx-brand-tint) 70%, transparent); }

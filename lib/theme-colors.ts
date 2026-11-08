@@ -28,7 +28,7 @@
  */
 
 /** 浅色主题的页面底色（= globals.css 的 `:root { --bg }`） */
-export const LIGHT_BG = "#ffffff";
+export const LIGHT_BG = "#f4f5f7";
 
 /** 深色主题的页面底色（= globals.css 的 `:root[data-theme="dark"] { --bg }`） */
 export const DARK_BG = "#0b0f14";

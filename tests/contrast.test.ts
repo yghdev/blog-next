@@ -76,6 +76,6 @@ test("最底层背景半透明时直接报错，不用猜测的兜底色", () =>
 
   // 正确用法：把真实底色补在最后一层
   const onDark = contrastFromLayers("rgb(224,176,98)", ["rgba(224, 176, 98, 0.12)", "rgb(26, 26, 25)"])!;
-  const onLight = contrastFromLayers("rgb(224,176,98)", ["rgba(224, 176, 98, 0.12)", "rgb(252, 252, 251)"])!;
+  const onLight = contrastFromLayers("rgb(224,176,98)", ["rgba(224, 176, 98, 0.12)", "rgb(255, 255, 255)"])!;
   assert.ok(onDark > onLight, "同一前景色在深底上对比度应高于浅底: dark=" + onDark + " light=" + onLight);
 });

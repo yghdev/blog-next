@@ -14,12 +14,18 @@
    * （问系统偏好），这是声明（告诉浏览器怎么画原生控件）。
    */
   color-scheme: light;
-  /* 2026-11-08 第四轮：主色调与后台统一为「大厂白」。
-     原来是暖纸（#fffefc / #f7f6f3 + 黑度文字），带一层纸黄；
-     现在页面纯白、表面纯白、灰阶中性（带一点冷），文字用近墨的深蓝黑。
-     暖纸值（#fffefc / #f7f6f3 / #faf9f7 / #fcfcfb）不得复活。 */
-  --bg: #ffffff;
-  --bg-subtle: #f4f6f8;
+  /* 2026-11-08 第五轮：前后台统一「灰底 + 白卡 + 浅绿品牌」。
+   *
+   * 三条规则（前后台完全一致）：
+   *   1. 底色是偏灰的 --bg(#f4f5f7)，卡片/表面是纯白 --card-bg(#ffffff)；
+   *      模块之间靠**底色差**分层，不再画线；
+   *   2. 所有描边令牌（--border / --border-strong / 语义 --*-border）
+   *      一律 transparent —— 取消各种线条，边界由色差承担；
+   *   3. 品牌色改浅绿：填充 #8fd3b3（配深绿字 #0b2e22），文字/链接用
+   *      同色系的深一档 #27755c（白底 5.2:1，守 AA）。
+   */
+  --bg: #f4f5f7;
+  --bg-subtle: #edeff3;
   --text-p0: #0f172a;
   --text-p1: rgba(15,23,42,.86);
   --text-p2: rgba(15,23,42,.74);
@@ -32,16 +38,22 @@
    * 都达不到 WCAG AA 的 4.5:1 —— 这些字看上去"高级"，但在户外或低亮度屏上
    * 读不出来。p3/p4 之后只保留给**纯装饰**（分隔点、图标、占位符、边框）。
    */
-  --text-meta: rgba(15,23,42,.62);
-  --border: rgba(15,23,42,.08);
-  --border-strong: rgba(15,23,42,.12);
-  /* 主色与强调色与后台同一组（--fx-brand / --fx-accent） */
-  --link: #36796b;
-  --link-hover: #2b6459;
-  --accent: #d77858;
-  --accent-soft: rgba(215,120,88,.10);
-  --bg-warm: #f7f8fa;
-  --bg-tint: rgba(54,121,107,.04);
+  --text-meta: rgba(15,23,42,.60);
+  /* 线框全部透明：模块靠底色差区分（第五轮）。仍然保留令牌名，
+     这样个别需要"隐形边框"撑尺寸的地方不用改结构。 */
+  --border: transparent;
+  --border-strong: transparent;
+  /* 品牌色（浅绿）：文字用深一档，填充用浅绿 —— 与后台 --fx-brand* 同源 */
+  --link: #27755c;
+  --link-hover: #1f6349;
+  --accent: #4fa98b;
+  --accent-soft: rgba(79,169,139,.12);
+  --brand-fill: #8fd3b3;
+  --brand-fill-hover: #7fcba7;
+  --brand-on: #0b2e22;
+  /* 页脚不再用独立色带：固定左栏是全高背景，色带会在它的那一列被切开。 */
+  --bg-warm: #f4f5f7;
+  --bg-tint: #e7f5ee;
   /*
    * 导航选中态的填充色（C-10）。
    *
@@ -49,7 +61,7 @@
    * （像张浮起来的卡片）、更不做位移。填充比 hover 的 --bg-subtle 多一点
    * 主色，才能一眼分出"当前页"和"鼠标正停在这"。
    */
-  --nav-active-bg: rgba(54,121,107,.09);
+  --nav-active-bg: #e7f5ee;
   /*
    * 侧栏悬浮按钮组（2026-11-06）：半透明深灰玻璃。
    * 浅色页面上深灰胶囊对比清楚；暗色下再压暗一点，靠描边与阴影定形。
@@ -59,7 +71,7 @@
   --dock-border: rgba(255, 255, 255, .18);
   --dock-line: rgba(255, 255, 255, .18);
   --dock-shadow: 0 8px 24px rgba(0, 0, 0, .22), 0 1px 2px rgba(0, 0, 0, .14);
-  --cat-1: #36796b;  --cat-1-bg: rgba(54,121,107,.10);
+  --cat-1: #27755c;  --cat-1-bg: #e7f5ee;
   --cat-2: #6b7fa3;  --cat-2-bg: rgba(107,127,163,.10);
   --cat-3: #a3766b;  --cat-3-bg: rgba(163,118,107,.10);
   --cat-4: #7a6ba3;  --cat-4-bg: rgba(122,107,163,.10);
@@ -68,6 +80,8 @@
   --cat-7: #a36b8a;  --cat-7-bg: rgba(163,107,138,.10);
   --code-bg: rgba(15,23,42,.05);
   --card-bg: #ffffff;
+  /* 卡片靠白底 + 极轻投影浮在灰底上，不用描边 */
+  --card-lift: 0 1px 2px rgba(15,23,42,.04), 0 1px 8px rgba(15,23,42,.03);
   --radius: 24px;
   --fs: 16px;
   /*
@@ -215,16 +229,16 @@
   /* ── 语义色（B 端规范：状态色一律「浅底深字」，不做彩虹乱配） ──
      此前 #e5484d 被硬编码在 5 个组件的行内 style 里，暗色下对比度不达标。
      收成 token 后跟随主题自动切换。 */
-  --danger: #c8393d;        --danger-bg: rgba(200,57,61,.08);   --danger-border: rgba(200,57,61,.28);
-  --ok: #1f7a52;            --ok-bg: rgba(31,122,82,.08);       --ok-border: rgba(31,122,82,.26);
-  --warn: #9a6212;          --warn-bg: rgba(154,98,18,.09);     --warn-border: rgba(154,98,18,.26);
-  --info: #3f6390;          --info-bg: rgba(63,99,144,.08);     --info-border: rgba(63,99,144,.26);
+  --danger: #c8393d;        --danger-bg: rgba(200,57,61,.09);   --danger-border: transparent;
+  --ok: #1f7a52;            --ok-bg: rgba(31,122,82,.10);       --ok-border: transparent;
+  --warn: #9a6212;          --warn-bg: rgba(154,98,18,.10);     --warn-border: transparent;
+  --info: #3f6390;          --info-bg: rgba(63,99,144,.09);     --info-border: transparent;
 
   /* ── 层次与投影（此前 --lift-1 / --lift-2 / --surface-2 只被引用、从未定义，
         导致 .article-nav-item 的 box-shadow 整条声明被浏览器丢弃）── */
-  --surface-2: #f7f8fa;
+  --surface-2: #edeff3;
   --lift-1: 0 1px 2px rgba(15,23,42,.05);
-  --lift-2: 0 6px 20px rgba(54,121,107,.10), 0 2px 6px rgba(15,23,42,.06);
+  --lift-2: 0 6px 20px rgba(79,169,139,.10), 0 2px 6px rgba(15,23,42,.06);
 
   /* 浮层与安全区 */
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -244,20 +258,20 @@
      现在与后台暗色同族：偏蓝的近黑，层次靠 #121821 / #0e141b 三个面）。 */
   --dark-bg: #0b0f14;
   --dark-bg-subtle: #121821;
-  --dark-bg-warm: #0e141b;
-  --dark-link: #6fb3a1;
-  --dark-link-hover: #8ec9b9;
-  --dark-accent: #d99372;
-  --dark-accent-soft: rgba(217,147,114,.14);
-  --dark-bg-tint: rgba(111,179,161,.07);
-  --dark-nav-active-bg: rgba(111,179,161,.14);
+  --dark-bg-warm: var(--dark-bg);   /* 与页面同色：页脚不再有色带 */
+  --dark-link: #8fd3b3;
+  --dark-link-hover: #a6e0c6;
+  --dark-accent: #6fc9a4;
+  --dark-accent-soft: rgba(111,201,164,.14);
+  --dark-bg-tint: #121821;
+  --dark-nav-active-bg: rgba(143,211,179,.16);
   --dark-dock-bg: rgba(15, 23, 42, .72);
   --dark-dock-fg: rgba(255, 255, 255, .94);
   --dark-dock-border: rgba(255, 255, 255, .14);
   --dark-dock-line: rgba(255, 255, 255, .14);
   --dark-dock-shadow: 0 8px 24px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .3);
-  --dark-cat-1: #6fb3a1;
-  --dark-cat-1-bg: rgba(111,179,161,.13);
+  --dark-cat-1: #8fd3b3;
+  --dark-cat-1-bg: rgba(143,211,179,.14);
   --dark-cat-2: #8fa3c9;
   --dark-cat-2-bg: rgba(143,163,201,.13);
   --dark-cat-3: #c99a8c;
@@ -277,8 +291,8 @@
   --dark-text-p4: rgba(230,234,241,.38);
   /* 暗色下的元信息色：约 62% ≈ 7.4:1（#0b0f14 底），同样过 AA */
   --dark-text-meta: rgba(230,234,241,.62);
-  --dark-border: rgba(230,234,241,.10);
-  --dark-border-strong: rgba(230,234,241,.15);
+  --dark-border: transparent;
+  --dark-border-strong: transparent;
   --dark-code-bg: rgba(230,234,241,.06);
   --dark-card-bg: #121821;
   --dark-fw-body: 360;
@@ -723,7 +737,7 @@ a:hover { color: var(--link-hover); }
   padding: 3px 10px;
   border-radius: 999px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--card-bg);
   color: var(--text-p2);
   font-size: .78rem;
   text-decoration: none;
@@ -735,9 +749,9 @@ a:hover { color: var(--link-hover); }
   text-decoration: none;
 }
 .search-chip.is-active {
-  border-color: var(--link);
+  /* 选中 = 浅绿底 + 深绿字，不描边（第五轮无线框） */
   color: var(--link);
-  background: color-mix(in srgb, var(--link) 8%, var(--bg));
+  background: var(--bg-tint);
 }
 .search-chip-num {
   font-size: .7rem;
@@ -796,7 +810,8 @@ a:hover { color: var(--link-hover); }
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card-bg);
-  background-image: linear-gradient(180deg, rgba(54,121,107,.012), transparent 120px);
+  /* 灰底上的白卡：轻投影分层，不画线（第五轮） */
+  box-shadow: var(--card-lift);
   position: relative;
   overflow: hidden;
   transition: border-color .2s, transform .2s, box-shadow .2s;
@@ -812,24 +827,10 @@ a:hover { color: var(--link-hover); }
 }
 .post-card:hover::before { opacity: 1; }
 .post-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: 0 4px 18px rgba(54,121,107,.07), 0 1px 3px rgba(15,23,42,.04);
+  box-shadow: 0 6px 22px rgba(15,23,42,.09), 0 1px 3px rgba(15,23,42,.05);
   text-decoration: none;
 }
-/* 卡片左侧一道渐隐的彩色竖线，hover 时显现 */
-.post-card::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 22px;
-  bottom: 22px;
-  width: 2px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, var(--link), transparent);
-  opacity: 0;
-  transition: opacity .25s;
-}
-.post-card:hover::after { opacity: .5; }
+/* 卡片左侧竖线已删除（第五轮「取消各种线条」）：hover 只靠投影加深表达 */
 
 .post-card h2 {
   font-family: var(--font-serif);
@@ -1612,7 +1613,8 @@ a:hover { color: var(--link-hover); }
   padding: 10px 13px;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
-  background: var(--bg);
+  /* 无线框：输入框靠比卡片深一档的灰底定形（第五轮） */
+  background: var(--bg-subtle);
   color: var(--text-p0);
   font-size: .92rem;
   font-family: inherit;
@@ -1636,18 +1638,19 @@ a:hover { color: var(--link-hover); }
   padding: 9px 18px;
   border-radius: 10px;
   border: 1px solid var(--border-strong);
-  background: var(--bg);
+  /* 次级按钮 = 灰底无描边；主按钮用浅绿填充（见 .btn-primary） */
+  background: var(--bg-subtle);
   color: var(--text-p0);
   font-size: .9rem; font-weight: 560;
   font-family: inherit;
   cursor: pointer;
   transition: background .15s, border-color .15s, opacity .15s;
 }
-.btn:hover { background: var(--bg-subtle); text-decoration: none; }
+.btn:hover { background: var(--bg-warm); text-decoration: none; }
 .btn-primary {
-  background: var(--text-p0); color: var(--bg); border-color: var(--text-p0);
+  background: var(--brand-fill); color: var(--brand-on); border-color: transparent;
 }
-.btn-primary:hover { opacity: .85; background: var(--text-p0); }
+.btn-primary:hover { opacity: 1; background: var(--brand-fill-hover); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .btn-sm { padding: 5px 12px; font-size: .82rem; border-radius: 8px; }
 
@@ -1754,7 +1757,7 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   padding: 5px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
-  background: var(--bg);
+  background: var(--card-bg);
   color: var(--text-p0);
   font-size: var(--fs-base); font-weight: 560;
   font-family: inherit;
@@ -2131,7 +2134,8 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   padding: 8px 11px 8px 32px;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--bg-subtle);
+  /* 灰底页面上用白底定形，不画线 */
+  background: var(--card-bg);
   color: var(--text-p0);
   font-size: .85rem;
   font-family: inherit;
@@ -2141,7 +2145,7 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 .search-box input:focus {
   outline: none;
   border-color: var(--border-strong);
-  background: var(--bg);
+  background: var(--card-bg);
   /* 铁律 2：聚焦双环 */
   box-shadow:
     inset 0 0 0 1px var(--border-strong),
@@ -2151,8 +2155,10 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
 /* 虚线大搜索框（xaoxuu 风格） */
 .search-box--dashed { margin-bottom: 26px; }
 .search-box--dashed input {
-  border: 1px dashed var(--border-strong);
-  background: transparent;
+  /* 原来靠虚线框提示"可搜索"，现在改成白底卡片式（无线框约定） */
+  border: none;
+  background: var(--card-bg);
+  box-shadow: var(--card-lift);
   border-radius: 12px;
   padding: 11px 12px 11px 34px;
   font-size: .88rem;
@@ -2463,7 +2469,7 @@ summary:focus-visible,
 .mobile-sidebar {
   width: min(84vw, 340px);
   height: 100dvh;
-  background: var(--bg);
+  background: var(--card-bg);
   padding: 0 0 calc(28px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -2488,7 +2494,7 @@ summary:focus-visible,
   letter-spacing: .06em;
   position: sticky;
   top: 0;
-  background: var(--bg);
+  background: var(--card-bg);
   z-index: var(--z-base);
 }
 .mobile-sidebar-head button {
@@ -2650,7 +2656,7 @@ summary:focus-visible,
   transition: border-color .18s, background .18s, transform .18s;
 }
 .stat-cell:hover {
-  background: var(--bg);
+  background: var(--card-bg);
   border-color: var(--border-strong);
   transform: translateY(-1px);
 }
@@ -2823,7 +2829,7 @@ summary:focus-visible,
   transition: background .18s, border-color .18s, transform .18s;
 }
 .fl-hub:hover {
-  background: var(--bg);
+  background: var(--card-bg);
   border-color: var(--border-strong);
   transform: translateY(-1px);
 }
@@ -2883,6 +2889,7 @@ summary:focus-visible,
 
 /* ── 全站页脚（备案号 / 页脚文字） ── */
 .site-footer {
+  /* 无边框、无独立色带：页脚靠留白与上面的内容分开（第五轮） */
   border-top: 1px solid var(--border);
   background: var(--bg-warm);
 }
@@ -2951,7 +2958,7 @@ summary:focus-visible,
   /* 同心圆角：外 16 = 内 10 + 内边距 6（底部按钮与面板边缘的关系） */
   border-radius: 16px;
   border: 1px solid var(--border-strong);
-  background: var(--bg);
+  background: var(--card-bg);
   box-shadow: 0 18px 48px rgba(0, 0, 0, .18), 0 2px 8px rgba(0, 0, 0, .06);
   padding: 22px 22px 16px;
   outline: none;
@@ -3035,7 +3042,7 @@ summary:focus-visible,
   max-height: 80dvh;              /* 三分屏的上限档，内容少时自然收窄 */
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: var(--card-bg);
   border-radius: 18px 18px 0 0;
   box-shadow: 0 -8px 32px rgba(0, 0, 0, .18);
   animation: sheetIn .24s var(--ease);
