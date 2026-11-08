@@ -89,3 +89,28 @@ test("C1 缓存键包含 host 与 request_uri（防串站、防查询串串味�
   assert.match(key![1], /\$host/, "缓存键必须含 host");
   assert.match(key![1], /\$request_uri/, "缓存键必须含 request_uri（含查询串）");
 });
+
+/* ---------------------- C6（2026-11-08）：可观测性与限流 ---------------------- */
+
+test("C6 访问日志带缓存状态与耗时（否则缓存上线了也看不见效果）", () => {
+  assert.match(CACHE, /log_format\s+blog_main/, "应定义 blog_main 日志格式");
+  for (const field of ["$upstream_cache_status", "$request_time", "$upstream_response_time"]) {
+    assert.ok(CACHE.includes(field), "日志格式应包含 " + field);
+  }
+  assert.match(SITE, /access_log\s+\/var\/log\/nginx\/blog\.access\.log\s+blog_main;/, "站点应使用该格式单独记日志");
+});
+
+test("C6 /api/search 在网关层限流（唯一无缓存 + 有计算的公开接口）", () => {
+  assert.match(CACHE, /limit_req_zone\s+\$binary_remote_addr\s+zone=blog_search:/, "应定义 blog_search 限流区");
+  const block = SITE.slice(SITE.indexOf("location = /api/search {"));
+  const body = block.slice(0, block.indexOf("\n    }") + 6);
+  assert.match(body, /limit_req\s+zone=blog_search/, "/api/search 应挂限流");
+  assert.match(body, /limit_req_status\s+429/, "超限应返回 429 而不是 503");
+  assert.match(body, /proxy_pass\s+http:\/\/127\.0\.0\.1:8090/, "限流后仍要正常回源");
+});
+
+test("C6 限流不能误伤普通页面（只有 /api/search 挂 limit_req）", () => {
+  // location / 是内容页，绝不能挂 limit_req —— 否则爬虫一多整站 429
+  const loc = LOC;
+  assert.doesNotMatch(loc, /limit_req/, "location / 不应限流");
+});

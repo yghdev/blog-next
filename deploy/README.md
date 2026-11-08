@@ -159,6 +159,58 @@ DATA_DIR=/var/lib/blog UPLOAD_DIR=/var/www/blog-images \
 **已知缺口**：七牛直链的图片**不会**生成变体（变体要另外上传到对象存储）。
 当前站点用的是本地存储，不受影响；切七牛前要先补这块。
 
+### 2.3 可观测性与限流（C6，2026-11-08）
+
+**访问日志**：博客单独记到 `/var/log/nginx/blog.access.log`，格式 `blog_main`
+（定义在 `/etc/nginx/conf.d/blog-cache.conf`），比默认 combined 多三个字段：
+
+```
+... "GET /p/34 HTTP/2.0" 200 52140 "-" "UA" cache=HIT rt=0.012 urt=0.008
+```
+
+| 字段 | 含义 |
+|---|---|
+| `cache=` | `$upstream_cache_status`：HIT / MISS / BYPASS / STALE / EXPIRED / `-`（不可缓存） |
+| `rt=` | `$request_time`：客户端感知的总耗时（秒） |
+| `urt=` | `$upstream_response_time`：回源耗时（秒）；HIT 时是 `-` |
+
+**一条命令看汇总**：
+
+```bash
+bash scripts/log-stats.sh                      # 读服务器上的默认路径
+bash scripts/log-stats.sh -n 5000              # 只看最近 5000 行
+bash scripts/log-stats.sh /tmp/blog.access.log # 分析拉回本地的日志
+```
+
+输出四块：缓存状态分布与命中率、响应耗时 p50/p90/p95/p99、最慢的 5 个请求、
+5xx/429 按路径聚合、请求量 Top 5。
+
+> 为什么要有这个：缓存上线后如果没人看命中率，等于"优化了但不知道有没有用"。
+> 命中率低先看 `cache=-` 的占比 —— 那多半是 `/api/*` 与 `/search`（本来就不缓存）。
+
+**限流**：`/api/search` 在网关层限流（`limit_req_zone blog_search`，
+20 次/分钟 + burst 10，超限返回 **429**）。
+
+- 为什么只限它：它是唯一"无缓存 + 有计算"的公开接口（每次查 FTS + 打分），
+  应用层没有限流。登录与埋点已有应用层限流（`lib/rate-limit.ts`）。
+- **`location /` 绝不能挂 limit_req** —— 内容页被限流意味着爬虫一多整站 429。
+  `tests/nginx-cache.test.ts` 有一条断言守着这点。
+
+**验证**：
+
+```bash
+# 日志格式生效
+tail -3 /var/log/nginx/blog.access.log | grep -o 'cache=[A-Za-z_-]* rt=[0-9.]*'
+
+# 限流生效（连打 30 次应出现 429）
+for i in $(seq 1 30); do curl -s -o /dev/null -w '%{http_code}
+' \
+  "https://blog.yghsite.cn/api/search?q=AI&n=$i"; done | sort | uniq -c
+
+# 普通页面不受影响
+for i in 1 2 3; do curl -s -o /dev/null -w '%{http_code} ' https://blog.yghsite.cn/; done
+```
+
 ---
 
 ## 三、备份
