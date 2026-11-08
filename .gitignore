@@ -32,6 +32,13 @@ blog.db-shm
 
 # 草稿不进仓库：尚未发布的内容（含服务器架构、IP 等部署细节）
 # 要发布时再手动放进 content/ 并提交。
-drafts/
+#
+# ⚠ 必须写成 `/drafts/`（锚定仓库根），不能写 `drafts/`：
+# 不带前导斜杠的模式在**任意层级**都匹配，于是 `app/api/admin/drafts/`
+# 也被一起忽略了 —— 那个目录里是自动保存接口的 route.ts，属于应用代码。
+# 后果：本地 tsc 通过（文件在磁盘上），CI 检出后文件不存在，
+# `tests/posts-api.test.ts` 的 import 直接报 "Cannot find module"。
+# 2026-11-08 定位并修复。
+/drafts/
 .tmp-review/
 .tmp-prod/
