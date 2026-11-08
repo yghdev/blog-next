@@ -6,6 +6,7 @@ import { SidebarTrigger } from "./SidebarSheet";
 import { ThemeToggle } from "./ThemeToggle";
 import { useScrollLock } from "./ui/useScrollLock";
 import { NAV_ITEMS, activeHref } from "@/lib/nav";
+import { Icon } from "./ui/Icon";
 import { SideBottomActions } from "./SideBottomActions";
 import { HubAvatar } from "./HubAvatar";
 
@@ -218,7 +219,7 @@ export function MobileNav({
                     className={"mobile-drawer-item" + (isActive ? " active" : "")}
                     aria-current={isActive ? "page" : undefined}
                   >
-                    <span className="mi" aria-hidden>{n.icon}</span>
+                    <span className="mi" aria-hidden><Icon name={n.icon} size={18} /></span>
                     {n.label}
                   </Link>
                 );
@@ -237,7 +238,7 @@ export function MobileNav({
                     >
                       {l.kind === "hub"
                         ? <HubAvatar name={l.name} url={l.url} />
-                        : <span className="mi" aria-hidden>🔗</span>}
+                        : <span className="mi" aria-hidden><Icon name="link" size={18} /></span>}
                       <span className="mobile-drawer-link-name">{l.name}</span>
                       <span className="mobile-drawer-link-out" aria-hidden>↗</span>
                     </a>

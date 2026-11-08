@@ -4,7 +4,7 @@ import { getDb, ftsAvailable } from "./db";
 import { dateKeyIn } from "./time";
 import * as visitor from "./visitor-stats";
 
-export type Stat = { label: string; value: string; icon: string };
+export type Stat = { label: string; value: string; icon: "post" | "chat" | "comment" | "clock" };
 
 /**
  * 站点统计（方案 C11，2026-10-30 改数据源）。
@@ -136,10 +136,10 @@ export function getSiteStats(): Stat[] {
   }
 
   return [
-    { label: "文章", value: String(posts), icon: "📝" },
-    { label: "说说", value: String(shuo), icon: "💬" },
-    { label: "评论", value: commentsText, icon: "🗨" },
-    { label: "运行", value: days + "天", icon: "⏳" },
+    { label: "文章", value: String(posts), icon: "post" },
+    { label: "说说", value: String(shuo), icon: "chat" },
+    { label: "评论", value: commentsText, icon: "comment" },
+    { label: "运行", value: days + "天", icon: "clock" },
   ];
 }
 

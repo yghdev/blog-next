@@ -28,8 +28,9 @@ export type NavItem = {
   href: string;
   /** 显示文案。桌面与移动共用同一套，不允许各自改词。 */
   label: string;
-  /** 图标字符（emoji）。桌面渲染在 `.nav-ico`，移动渲染在 `.mi`。 */
-  icon: string;
+  /** 图标名（components/ui/Icon.tsx 的 IconName）。桌面渲染在 `.nav-ico`，移动渲染在 `.mi`。
+   *  这里只存名字不存 SVG：本文件保持「纯数据」，服务端/客户端组件都能 import。 */
+  icon: "post" | "chat" | "archive" | "link" | "user";
 };
 
 /**
@@ -38,11 +39,11 @@ export type NavItem = {
  * 新增页面时只需在这里加一项 —— `Sidebar` 与 `MobileNav` 都会自动跟上。
  */
 export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "文章", icon: "📄" },
-  { href: "/shuoshuo", label: "说说", icon: "💬" },
-  { href: "/archives", label: "归档", icon: "🗂" },
-  { href: "/friend-links", label: "友链", icon: "🔗" },
-  { href: "/about", label: "关于", icon: "👤" },
+  { href: "/", label: "文章", icon: "post" },
+  { href: "/shuoshuo", label: "说说", icon: "chat" },
+  { href: "/archives", label: "归档", icon: "archive" },
+  { href: "/friend-links", label: "友链", icon: "link" },
+  { href: "/about", label: "关于", icon: "user" },
 ];
 
 /**

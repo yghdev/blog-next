@@ -2,6 +2,7 @@ import { listFriendLinksCached } from "@/lib/cached";
 import type { FriendLink } from "@/lib/friend-links";
 import { SidebarBlock } from "./rightbar/Blocks";
 import { HubAvatar } from "./HubAvatar";
+import { Icon } from "./ui/Icon";
 
 /**
  * 侧栏「友链 / 聚合」区块（2026-10-23，B-8 重构）。
@@ -54,7 +55,7 @@ export function LinkRow({ link }: { link: FriendLink }) {
       rel="noopener noreferrer"
       title={link.desc || link.name}
     >
-      <span className="fl-ico" aria-hidden>🔗</span>
+      <span className="fl-ico" aria-hidden><Icon name="link" size={15} /></span>
       <span className="fl-body">
         <span className="fl-name">{link.name}</span>
         {link.desc ? <span className="fl-desc">{link.desc}</span> : null}

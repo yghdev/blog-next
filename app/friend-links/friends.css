@@ -12,11 +12,12 @@
 
 .friends-page {
   /* 本页专属的强调色别名：全部派生自现有令牌，不写具体色值 */
-  --fr-accent: var(--cat-4);
-  --fr-accent-text: color-mix(in oklab, var(--cat-4) 80%, var(--text-p0));
+  /* 第七轮：强调色由紫（--cat-4）改回品牌绿，与全站一致；靛蓝仍作次级强调 */
+  --fr-accent: var(--accent);
+  --fr-accent-text: var(--link);
   --fr-indigo: var(--cat-2);
   --fr-indigo-text: color-mix(in oklab, var(--cat-2) 72%, var(--text-p0));
-  --fr-tint: color-mix(in oklab, var(--cat-4) 7%, transparent);
+  --fr-tint: var(--accent-soft);
   --fr-line: var(--border);
   --fr-line-strong: var(--border-strong);
   --fr-radius: 12px;
@@ -84,7 +85,8 @@
 
 .fr-hero-title {
   margin: 0;
-  font-family: var(--font-sans);
+  /* 第七轮：与全站标题同为衬线体（此前是唯一一处粗黑体大标题，显得像另一个站） */
+  font-family: var(--font-serif);
   /*
    * D-3（需求 6.2「标题字号在桌面端和移动端合理变化」）。
    * 上限 3.1rem(49.6px) → 2.7rem(43.2px)：两行标题从 121px 收到 105px。
@@ -93,8 +95,8 @@
    */
   font-size: clamp(1.85rem, 1.3rem + 2.2vw, 2.7rem);
   line-height: 1.22;
-  letter-spacing: -.02em;
-  font-weight: 700;
+  letter-spacing: 0;
+  font-weight: 650;
   color: var(--text-p0);
   text-wrap: balance;
 }

@@ -66,11 +66,13 @@
    * 侧栏悬浮按钮组（2026-11-06）：半透明深灰玻璃。
    * 浅色页面上深灰胶囊对比清楚；暗色下再压暗一点，靠描边与阴影定形。
    */
-  --dock-bg: rgba(32, 32, 32, .55);
-  --dock-fg: rgba(255, 255, 255, .96);
-  --dock-border: rgba(255, 255, 255, .18);
-  --dock-line: rgba(255, 255, 255, .18);
-  --dock-shadow: 0 8px 24px rgba(0, 0, 0, .22), 0 1px 2px rgba(0, 0, 0, .14);
+  /* 第七轮：浅色下由「深灰胶囊」改成白色毛玻璃 —— 深灰块是整页最重的一处颜色，
+     与柔和的灰白画布格格不入；白玻璃 + 轻投影与卡片同一语言。 */
+  --dock-bg: rgba(255, 255, 255, .82);
+  --dock-fg: rgba(15, 23, 42, .72);
+  --dock-border: rgba(15, 23, 42, .05);
+  --dock-line: rgba(15, 23, 42, .10);
+  --dock-shadow: 0 6px 20px rgba(15, 23, 42, .10), 0 1px 3px rgba(15, 23, 42, .06);
   --cat-1: #27755c;  --cat-1-bg: #e7f5ee;
   --cat-2: #6b7fa3;  --cat-2-bg: rgba(107,127,163,.10);
   --cat-3: #a3766b;  --cat-3-bg: rgba(163,118,107,.10);
@@ -814,8 +816,9 @@ a:hover { color: var(--link-hover); }
   box-shadow: var(--card-lift);
   position: relative;
   overflow: hidden;
-  transition: border-color .2s, transform .2s, box-shadow .2s;
+  transition: box-shadow .2s;
 }
+.post-card h2 { transition: color .2s; }
 .post-card::before {
   content: "";
   position: absolute; inset: 0;
@@ -827,9 +830,10 @@ a:hover { color: var(--link-hover); }
 }
 .post-card:hover::before { opacity: 1; }
 .post-card:hover {
-  box-shadow: 0 6px 22px rgba(15,23,42,.09), 0 1px 3px rgba(15,23,42,.05);
+  box-shadow: 0 8px 28px rgba(15,23,42,.08), 0 1px 3px rgba(15,23,42,.04);
   text-decoration: none;
 }
+.post-card:hover h2 { color: var(--link); }
 /* 卡片左侧竖线已删除（第五轮「取消各种线条」）：hover 只靠投影加深表达 */
 
 .post-card h2 {
@@ -906,13 +910,22 @@ a:hover { color: var(--link-hover); }
   line-height: 1.45;
   scroll-margin-top: 24px;
 }
+.prose > :first-child { margin-top: 0; }
 .prose h1 { font-size: 1.55rem; margin-top: 2em; }
 .prose h2 { font-size: 1.4rem; margin-top: 2em; }
 .prose h3 { font-size: 1.15rem; margin-top: 1.7em; }
 .prose h4 { font-size: 1rem; margin-top: 1.5em; }
 .prose p { margin: 0 0 1.15em; }
-.prose ul, .prose ol { padding-left: 1.4em; margin: 0 0 1.15em; }
-.prose li { margin: .35em 0; }
+/* 列表标记（第七轮）：Tailwind preflight 把 ul/ol 的 list-style 清成了 none，
+   正文里的无序/有序列表因此「缩进了却没有圆点/序号」，读起来像一排散句。
+   这里补回，并把标记染成品牌浅绿，作为正文里唯一的轻量点缀。 */
+.prose ul, .prose ol { padding-left: 1.5em; margin: 0 0 1.15em; }
+.prose ul { list-style: disc; }
+.prose ol { list-style: decimal; }
+.prose li { margin: .35em 0; padding-left: .2em; }
+.prose li::marker { color: var(--accent); }
+.prose ol > li::marker { font-variant-numeric: tabular-nums; font-weight: 600; }
+.prose li > ul, .prose li > ol { margin: .3em 0 .3em; }
 /* 铁律 8：正文防孤字（末行不留一两个字）；标题用 balance 均分行宽。
    代码块与表格不开，否则会打乱对齐。 */
 .prose p, .prose li, .prose blockquote,
@@ -960,10 +973,13 @@ a:hover { color: var(--link-hover); }
 .empty-hint {
   overflow-wrap: anywhere;
 }
+/* 引用（第七轮）：线框取消后原来的左竖线是 transparent，引用与正文毫无区别。
+   改成浅绿底的圆角块：靠色块而不是线条表达「这是另一个声音」。 */
 .prose blockquote {
-  margin: 1.4em 0;
-  padding: .4em 0 .4em 1.1em;
-  border-left: 3px solid var(--border-strong);
+  margin: 1.5em 0;
+  padding: .85em 1.15em;
+  border-radius: 14px;
+  background: var(--bg-tint);
   color: var(--text-p2);
 }
 .prose blockquote p:last-child { margin-bottom: 0; }
@@ -1057,9 +1073,11 @@ a:hover { color: var(--link-hover); }
   color: var(--text-p0);
 }
 .prose pre {
-  background: var(--code-bg);
+  /* 第七轮：代码块是白卡（与文章卡片同语言），不再是灰底上的一块更灰的灰 */
+  background: var(--card-bg);
+  box-shadow: var(--card-lift);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: var(--space-4) 18px;
   overflow-x: auto;
   font-size: .85rem;
@@ -1069,8 +1087,14 @@ a:hover { color: var(--link-hover); }
 .prose pre code { background: none; padding: 0; font-size: inherit; }
 
 .prose table {
-  width: 100%;
+  /* 白卡贴合表格内容（display:block 的表格内部不会被撑满，width:100% 会露出一截空白卡面） */
+  width: fit-content;
+  max-width: 100%;
   border-collapse: collapse;
+  /* 第七轮：表格同为白卡；行与行靠隔行浅底分，不画格线 */
+  background: var(--card-bg);
+  box-shadow: var(--card-lift);
+  border-radius: 14px;
   font-size: .9rem;
   margin: 1.4em 0;
   display: block;
@@ -1081,7 +1105,8 @@ a:hover { color: var(--link-hover); }
   padding: 8px 12px;
   text-align: left;
 }
-.prose th { background: var(--bg-subtle); font-weight: 600; color: var(--text-p0); }
+.prose th { background: var(--bg-tint); font-weight: 600; color: var(--text-p0); }
+.prose tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--bg) 55%, transparent); }
 
 /* ── 标签 ── */
 .tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-10); }
@@ -1932,8 +1957,8 @@ dialog.lightbox img { max-width: 96vw; max-height: 96vh; border-radius: 8px; }
   cursor: pointer;
   transition: background-color .16s var(--ease), transform .12s var(--ease);
 }
-.mobile-dock-btn:hover { background: rgba(255, 255, 255, .12); }
-.mobile-dock-btn:active { background: rgba(255, 255, 255, .2); transform: scale(.94); }
+.mobile-dock-btn:hover { background: color-mix(in srgb, currentColor 8%, transparent); }
+.mobile-dock-btn:active { background: color-mix(in srgb, currentColor 14%, transparent); transform: scale(.94); }
 .mobile-dock-btn svg { display: block; }
 /* 「回到顶部」与下面动作之间的细分割线 */
 .mobile-dock-sep {
@@ -2066,7 +2091,8 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   color: var(--text-p0);
   font-weight: 600;
 }
-.mobile-drawer-item .mi { font-size: 1.1rem; width: 22px; text-align: center; }
+.mobile-drawer-item .mi { display: inline-flex; justify-content: center; width: 22px; color: var(--text-p3); }
+.mobile-drawer-item.active .mi { color: var(--link); }
 
 .mobile-drawer-foot {
   /* 2026-11-06：与桌面左栏底栏同一组图标按钮、同样的三等分等间距；
@@ -2257,10 +2283,11 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   right: 100%;
   margin-right: 10px;
   width: 20px;
-  font-size: .95rem;
+  display: inline-flex;
+  justify-content: center;
   line-height: 1;
-  text-align: center;
-  opacity: .55;
+  color: var(--text-p3);
+  opacity: 1;
   flex-shrink: 0;
   transition: opacity .16s var(--ease);
 }
@@ -2272,14 +2299,15 @@ body:has(.mobile-sidebar-mask) .mobile-dock {
   overflow-wrap: anywhere;
 }
 .nav-item:hover { background: var(--bg-subtle); color: var(--text-p0); }
-.nav-item:hover .nav-ico { opacity: .9; }
+.nav-item:hover .nav-ico { color: var(--text-p1); }
 /* 选中态：只有填充色。规则写在 hover 之后，保证悬停到当前项时填充不被盖掉 */
 .nav-item.is-active {
   background: var(--nav-active-bg);
   color: var(--text-p0);
   font-weight: 600;
 }
-.nav-item.is-active .nav-ico { opacity: 1; }
+/* 选中项：图标跟着变品牌绿，是整列里唯一的彩色 */
+.nav-item.is-active .nav-ico { color: var(--link); }
 /*
  * 键盘焦点（C-10 顺带补齐）。
  *
@@ -2394,8 +2422,10 @@ summary:focus-visible,
 
 /* ── 文章页头部增强 ── */
 .article-header {
-  margin-bottom: 36px;
-  padding-bottom: 24px;
+  /* 第七轮：标题区与首个小节之间原本有 ~80px（36 + 24 + 首个 h2 的 2em 上边距），
+     像是漏了一块内容；收到 ~28px，并让正文第一个标题不再叠加上边距。 */
+  margin-bottom: 28px;
+  padding-bottom: 0;
   border-bottom: 1px solid var(--border);
 }
 .article-title {
@@ -2580,36 +2610,35 @@ summary:focus-visible,
 .rightbar {
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  /* 第七轮：每个区块自己是一张白卡，卡与卡之间 16px，不再靠留白 + 下划线分组 */
+  gap: var(--space-4);
   font-size: .84rem;
   padding-top: 6px;
 }
 
-.rb-block { display: flex; flex-direction: column; gap: 14px; }
+.rb-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* 与文章卡片同一套「灰画布 → 白卡」语言（第七轮） */
+  padding: 16px 14px 14px;
+  border-radius: 20px;
+  background: var(--card-bg);
+  box-shadow: var(--card-lift);
+}
 
-/* 区块标题：细字 + 底部短线 */
+/* 区块标题：只留一行字，下划线取消（卡片本身已经是分组边界） */
 .rb-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  position: relative;
-  padding-bottom: 10px;
-}
-.rb-head::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 1px;
-  background: linear-gradient(90deg, var(--link), transparent 70%);
-  opacity: .22;
+  padding: 0 2px;
 }
 .rb-title {
-  font-size: .7rem;
-  letter-spacing: .12em;
-  color: var(--text-meta);
-  font-weight: 600;
+  font-size: .76rem;
+  letter-spacing: .08em;
+  color: var(--text-p2);
+  font-weight: 650;
 }
 .rb-badge {
   margin-left: auto;
@@ -2649,33 +2678,16 @@ summary:focus-visible,
    * 视觉权重比正文列表还重 —— 而需求文档要求「不要让统计区域过于抢眼」。
    */
   padding: 9px 12px;
-  border-radius: 11px;
-  background: var(--bg-subtle);
-  border: 1px solid transparent;
+  border-radius: 12px;
+  /* 白卡里的格子：用画布灰定形，不再叠一层「角落色斑」（第七轮） */
+  background: var(--bg);
   overflow: hidden;
-  transition: border-color .18s, background .18s, transform .18s;
-}
-.stat-cell:hover {
-  background: var(--card-bg);
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
-}
-/* 左上角一抹极淡的青绿 */
-.stat-cell::before {
-  content: "";
-  position: absolute;
-  top: -14px;
-  right: -14px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--link);
-  opacity: .05;
 }
 .stat-ico {
-  font-size: .82rem;
-  opacity: .65;
-  margin-bottom: 1px;
+  display: inline-flex;
+  color: var(--link);
+  opacity: .8;
+  margin-bottom: 3px;
   line-height: 1;
 }
 .stat-num {
@@ -2705,11 +2717,11 @@ summary:focus-visible,
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: var(--space-1) 10px var(--space-1) var(--space-8);
+  padding: var(--space-1) 10px;
   border-radius: 8px;
   font-size: .8rem;
   color: var(--text-p2);
-  background: var(--bg-subtle);
+  background: var(--bg);
   border: 1px solid transparent;
   transition: color .16s, background .16s, border-color .16s, transform .16s;
   line-height: 1.45;
@@ -2723,9 +2735,8 @@ summary:focus-visible,
 .tag-pill .tag-num {
   font-size: .64rem;
   color: var(--text-meta);
-  margin-left: 3px;
-  padding-left: 5px;
-  border-left: 1px solid var(--border-strong);
+  margin-left: 2px;
+  opacity: .8;
   font-variant-numeric: tabular-nums;
 }
 .tag-pill:hover {
@@ -2780,12 +2791,13 @@ summary:focus-visible,
 
 .fl-ico {
   flex-shrink: 0;
-  font-size: .82rem;
+  display: inline-flex;
   line-height: 1;
-  opacity: .55;
+  color: var(--text-p3);
+  opacity: 1;
   transition: opacity .16s;
 }
-.fl-item:hover .fl-ico { opacity: .95; }
+.fl-item:hover .fl-ico { color: var(--link); }
 
 .fl-body { min-width: 0; flex: 1; }
 .fl-name {
@@ -2824,15 +2836,11 @@ summary:focus-visible,
   /* D-1（需求 4.5「卡片高度适当缩小」）：9px 11px → 8px 10px。 */
   padding: 8px 10px;
   border-radius: 11px;
-  background: var(--bg-subtle);
+  background: var(--bg);
   border: 1px solid transparent;
-  transition: background .18s, border-color .18s, transform .18s;
+  transition: background .18s;
 }
-.fl-hub:hover {
-  background: var(--card-bg);
-  border-color: var(--border-strong);
-  transform: translateY(-1px);
-}
+.fl-hub:hover { background: var(--bg-tint); }
 .fl-hub .fl-name { font-size: .8rem; }
 
 /* ── 浏览量徽标 ── */

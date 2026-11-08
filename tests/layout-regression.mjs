@@ -515,7 +515,7 @@ try {
   );
   assert.deepEqual(
     drawerLabels,
-    ["📄文章", "💬说说", "🗂归档", "🔗友链", "👤关于"],
+    ["文章", "说说", "归档", "友链", "关于"],
     "移动端抽屉标签与顺序必须与桌面一致，实际 " + JSON.stringify(drawerLabels)
   );
   const drawerActive = await page.locator(".mobile-drawer-item.active").count();
@@ -1521,10 +1521,10 @@ try {
   const DARK_KEY_TOKENS = [
     ["--bg", "#0b0f14"],
     ["--bg-subtle", "#121821"],
-    ["--bg-warm", "#0e141b"],
-    ["--link", "#6fb3a1"],
-    ["--link-hover", "#8ec9b9"],
-    ["--accent", "#d99372"],
+    ["--bg-warm", "#0b0f14"],
+    ["--link", "#8fd3b3"],
+    ["--link-hover", "#a6e0c6"],
+    ["--accent", "#6fc9a4"],
     // 注意：浏览器会把 rgba(255,255,255,.95) 规范化成 #fffffff2，
     // 所以这里只断言"不透明度接近 0.95 的白色"，不写死字符串形式。
     ["--text-p0", null],
@@ -1534,7 +1534,7 @@ try {
     ["--ok", "#6fd6a6"],
     ["--warn", "#e0b062"],
     ["--info", "#8fb3dd"],
-    ["--cat-1", "#6fb3a1"],
+    ["--cat-1", "#8fd3b3"],
     ["--cat-7", "#c98cb0"],
   ];
 
@@ -1561,6 +1561,7 @@ try {
   /** 判断一个颜色值是否是"接近白色的、alpha≈.95" */
   const isNearlyWhite95 = (v) => {
     if (/^#fffffff2$/i.test(v)) return true;                       // 规范化为 hex8
+    if (/^#e6eaf1f[4-6]$/i.test(v)) return true;                   // 第六轮：中性石墨 rgba(230,234,241,.96)
     const m = v.match(/^rgba\(255,\s*255,\s*255,\s*([0-9.]+)\)$/);
     return !!m && Math.abs(parseFloat(m[1]) - 0.95) < 0.01;
   };
@@ -1579,7 +1580,7 @@ try {
       "手动暗色下 " + token + " 应为 " + want + "，实际 " + JSON.stringify(manualDark[token])
     );
   }
-  assert.equal(manualDark.__bodyBg, "rgb(20, 20, 20)", "手动暗色下 body 背景应为 rgb(20,20,20)");
+  assert.equal(manualDark.__bodyBg, "rgb(11, 15, 20)", "手动暗色下 body 背景应为 rgb(20,20,20)");
   console.log("PASS C-2 手动暗色 15 个关键令牌解析值全部正确");
 
   // 系统偏好暗色（无 data-theme）必须解析出**完全相同**的值
@@ -2206,9 +2207,9 @@ try {
     const grid = document.querySelector(".fr-grid");
     const cards = [...document.querySelectorAll(".fr-grid a.fr-card")];
     const heights = cards.map((c) => Math.round(c.getBoundingClientRect().height));
-    const cols = grid
-      ? getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length
-      : 0;
+    // 栅格化（2026-11-08）后 .fr-grid 是 12 条轨道，轨道数不再等于「视觉列数」；
+    // 改数卡片左边缘有几个不同的位置（容差 2px），这才是用户看到的列数。
+    const cols = new Set(cards.map((c) => Math.round(c.getBoundingClientRect().left / 2))).size;
     return {
       heroHeight: hero ? Math.round(hero.getBoundingClientRect().height) : null,
       titleSize: parseFloat(getComputedStyle(document.querySelector(".fr-hero-title")).fontSize),
@@ -2291,7 +2292,7 @@ try {
     const grid = document.querySelector(".fr-grid");
     const cards = [...document.querySelectorAll(".fr-grid a.fr-card")];
     return {
-      cols: getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length,
+      cols: new Set(cards.map((el) => Math.round(el.getBoundingClientRect().left / 2))).size,
       cardW: Math.round(cards[0].getBoundingClientRect().width),
       gridW: Math.round(grid.getBoundingClientRect().width),
       overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,

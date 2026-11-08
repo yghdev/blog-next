@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SideBottomActions } from "./SideBottomActions";
 import { NAV_ITEMS, activeHref } from "@/lib/nav";
+import { Icon } from "./ui/Icon";
 
 /**
  * 桌面端左侧栏 —— 居中大头像 + 衬线站名 + 图标导航（C-10 重做选中态）
@@ -60,7 +61,7 @@ export function Sidebar({
               {/* 图标 + 文字作为一组，但**文字本身**居中：图标绝对定位到文字左侧，
                   不参与居中计算（2026-11-06 用户要求「菜单文字居中」）。 */}
               <span className="nav-label">
-                <span className="nav-ico" aria-hidden>{n.icon}</span>
+                <span className="nav-ico" aria-hidden><Icon name={n.icon} size={18} /></span>
                 <span className="nav-txt">{n.label}</span>
               </span>
             </Link>
