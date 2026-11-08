@@ -39,8 +39,10 @@ test("F9 封面：eager + high 优先级 + 有尺寸时输出 width/height", () 
   assert.match(src, /className="article-cover"/);
   assert.match(src, /loading="eager"/, "封面是 LCP 元素，不能 lazy");
   assert.match(src, /fetchPriority="high"/, "封面应高优先级");
-  assert.match(src, /coverSize/, "应使用 media 表查到的尺寸");
+  // C3（2026-11-08）：coverSize 改名为 coverMeta（多了 variants），断言跟着改
+  assert.match(src, /coverMeta/, "应使用 media 表查到的尺寸与变体");
   assert.match(src, /getMediaSizeCached/, "尺寸走缓存读取");
+  assert.match(src, /coverSrcset/, "封面也要有 srcset（C3）");
 
   const css = read("app/globals.css");
   const block = css.slice(css.indexOf(".article-cover {"));

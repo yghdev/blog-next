@@ -3,7 +3,7 @@ import { TAGS } from "./posts";
 import * as posts from "./posts";
 import * as stats from "./site-stats";
 import { listVisibleFriendLinks } from "./friend-links";
-import { mediaSizeByPath } from "./media-size";
+import { mediaMetaByPath, mediaMetaByPaths } from "./media-size";
 import type { Settings } from "./settings";
 
 /**
@@ -152,8 +152,21 @@ export const getPageViewsCached = unstable_cache(
  * 挂在 TAGS.posts 下：换封面必然伴随文章保存，跟着一起失效就够了。
  */
 export const getMediaSizeCached = unstable_cache(
-  async (mediaPath: string) => mediaSizeByPath(mediaPath),
+  async (mediaPath: string) => mediaMetaByPath(mediaPath),
   ["media:size"],
+  { revalidate: TTL, tags: [TAGS.posts] }
+);
+
+/**
+ * 正文图片的批量元信息（C3，2026-11-08）。
+ *
+ * 入参是**换行拼接的路径串**而不是数组：`unstable_cache` 的 key 由参数决定，
+ * 数组会按 JSON 序列化（能用但 key 很长）；拼成字符串更省，也避免
+ * "同一组路径不同顺序 = 两份缓存"。
+ */
+export const getMediaMetaCached = unstable_cache(
+  async (pathsKey: string) => mediaMetaByPaths(pathsKey.split("\n").filter(Boolean)),
+  ["media:meta"],
   { revalidate: TTL, tags: [TAGS.posts] }
 );
 

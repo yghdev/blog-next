@@ -103,6 +103,62 @@ nginx -t && systemctl reload nginx
 模块）。发布后访客最多看到 30 秒旧内容；站主带 cookie 会 bypass，看到实时内容。
 验收标准是「发布后 60 秒内可见」，30s TTL 满足。
 
+### 2.2 媒体管线（C3，2026-11-08）
+
+上传图片时除了原图，还会生成 **640 / 960 / 1280 三档 WebP**，正文与封面
+用 `srcset` + `sizes` 让浏览器自己挑。手机拿 640 那档，桌面拿 1280 那档。
+
+实测收益（2026-11-08，存量 22 张图）：`mimo3.png` 原图 1971KB →
+640w **16KB** / 1280w **45KB**；`image1.png` 1094KB → 640w 9KB / 1280w 25KB。
+变体文件总量约 1MB，原图 12MB。
+
+**文件位置**：与原图同目录，命名 `<原名>-<宽度>.webp`
+（`/images/2026/09/a.png` → `/images/2026/09/a-640.webp`）。
+nginx 的 `/images/` 是 `alias /var/www/blog-images/`，变体自动可访问，**不需要改 nginx**。
+
+**数据库**：`media.variants`（迁移 `0016_media_variants`），JSON：
+`{"640":"/images/…-640.webp","960":…,"1280":…}`。
+
+**存量补生成**（上传接口只处理新图）：
+
+```bash
+# 先 dry-run 看会做什么
+DATA_DIR=/var/lib/blog UPLOAD_DIR=/var/www/blog-images \
+  node --experimental-strip-types scripts/gen-variants.mjs
+
+# 确认后真正生成（写文件 + 更新 media.variants）
+DATA_DIR=/var/lib/blog UPLOAD_DIR=/var/www/blog-images \
+  node --experimental-strip-types scripts/gen-variants.mjs --apply
+```
+
+脚本幂等：已有 `variants` 的行跳过，`--force` 才重算。
+
+**内存边界（重要，别随手放宽）**：
+
+| 约束 | 值 | 原因 |
+|---|---|---|
+| 源文件上限 | 4MB | 实测一张 2MB PNG 生成三档时进程峰值 RSS ≈ 154MB（Node 基线 57MB + libvips 解码 ≈ 100MB）。blog.service 的 MemoryHigh 是 300M、常驻约 90MB，8MB 的大图会把峰值推到 250MB+，逼近软上限 |
+| 输入像素上限 | 2500 万 | 挡解压炸弹（20000×20000 的 PNG 解出来是 1.6GB） |
+| 并发 | 串行 | 三档并行会让峰值内存翻三倍 |
+| GIF | 跳过 | 转 WebP 会丢动画，"动图不动了"比"图大一点"严重 |
+
+变体生成失败**不影响上传**：原图才是事实，变体只是优化项。
+
+**对象存储 / CDN 评估（结论：暂不引入）**
+
+| 方案 | 成本 | 收益 | 结论 |
+|---|---|---|---|
+| 现状：本地磁盘 + nginx | 0 | 12MB 图片、单机单地域 | **保持** |
+| 七牛（代码已支持，`lib/storage.ts`） | 存储几元/月 + 流量 | 全球 CDN、省服务器带宽 | 暂不启用：当前流量远未到瓶颈，多一套密钥/备份/迁移成本 |
+| 对象存储 + 图片处理（七牛/阿里云 OSS 的 `?imageView2`） | 同上 | 免去自己生成变体 | 暂不启用：本地 sharp 已经够用，且不依赖外部服务可用性 |
+
+**什么时候该重新评估**：图片总量超过 200MB、或月流量超过服务器带宽的 50%、
+或需要多地域访问。届时优先考虑"对象存储 + 保留本地兜底"（代码里
+`lib/storage.ts` 的七牛分支已经写好，配好 AK/SK 即可切换，失败会自动退回本地）。
+
+**已知缺口**：七牛直链的图片**不会**生成变体（变体要另外上传到对象存储）。
+当前站点用的是本地存储，不受影响；切七牛前要先补这块。
+
 ---
 
 ## 三、备份

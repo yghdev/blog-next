@@ -9,6 +9,7 @@ import {
   MAX_UPLOAD_BYTES, MAX_VIDEO_BYTES, DAILY_UPLOAD_LIMIT, DAILY_VIDEO_LIMIT,
 } from "@/lib/upload";
 import { uploadToStorage, readStorageConfig } from "@/lib/storage";
+import { generateVariants, shouldGenerateVariants, type Variants } from "@/lib/image-variants";
 import { isConfigured } from "@/lib/qiniu";
 
 export const dynamic = "force-dynamic";
@@ -160,9 +161,28 @@ export const POST = handle(async (req: NextRequest) => {
     publicPath = await writeLocal(buf, detected.ext);
   }
 
+  /**
+   * ⑤ 生成 WebP 变体（C3，2026-11-08）。
+   *
+   * 放在写库之前：变体路径要一起入库，否则渲染时查不到。
+   * 失败**不影响上传** —— 变体是优化项，原图才是事实；生成失败只是少一个
+   * srcset 候选，不该让用户以为"图传不上去"。
+   *
+   * 只处理本地 `/images/` 路径：七牛直链的变体要另外上传到对象存储，
+   * 见 deploy/README 的「媒体管线」一节。
+   */
+  let variants: Variants = {};
+  if (!isVideo && shouldGenerateVariants(publicPath, detected.mime)) {
+    variants = await generateVariants(buf, publicPath, UPLOAD_DIR, size?.width ?? null);
+  }
+
   db.prepare(
-    "INSERT INTO media (path, filename, mime, size, width, height, sha256) VALUES (?, ?, ?, ?, ?, ?, ?)"
-  ).run(publicPath, path.basename(publicPath), detected.mime, buf.length, size?.width ?? null, size?.height ?? null, digest);
+    "INSERT INTO media (path, filename, mime, size, width, height, sha256, variants) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+  ).run(
+    publicPath, path.basename(publicPath), detected.mime, buf.length,
+    size?.width ?? null, size?.height ?? null, digest,
+    Object.keys(variants).length > 0 ? JSON.stringify(variants) : ""
+  );
 
   logAudit({
     action: "upload.create",
@@ -179,6 +199,7 @@ export const POST = handle(async (req: NextRequest) => {
   return NextResponse.json({
     ok: true, url: publicPath, mime: detected.mime, kind: isVideo ? "video" : "image",
     width: size?.width, height: size?.height,
+    variants,
     storage: storageKey ? "qiniu" : "local",
   });
 });

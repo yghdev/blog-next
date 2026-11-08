@@ -672,6 +672,25 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    name: "0016_media_variants",
+    up: (db) => {
+      /**
+       * 媒体变体（C3，2026-11-08）。
+       *
+       * 存 JSON：`{"640":"/images/2026/11/xxx-640.webp","960":…,"1280":…}`。
+       *
+       * 为什么不用单独的 media_variants 表：变体是"这张图的派生物"，
+       * 生命周期与主记录完全一致（一起创建、一起删除），拆表只会多一次
+       * JOIN 和一套级联删除逻辑，换不来任何查询能力 —— 渲染时永远是
+       * "按 path 取这张图的全部变体"，JSON 一列就够。
+       *
+       * 默认空串而不是 NULL：老代码读出来直接 JSON.parse，空串走 catch
+       * 返回 {}，不用到处判 null。
+       */
+      addColumn(db, "media", "variants", "TEXT NOT NULL DEFAULT ''");
+    },
+  },
 ];
 
 export function currentVersion(db: Database.Database): string | null {

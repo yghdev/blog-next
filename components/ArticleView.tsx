@@ -6,9 +6,11 @@ import { formatDate, toIso } from "./PostCard";
 import {
   decodeSlug, prevNextPost, parseJsonArray, readingTime, makeExcerpt, postHref,
 } from "@/lib/posts";
-import { getPageViewsCached, getMediaSizeCached, relatedPostsCached } from "@/lib/cached";
+import { getPageViewsCached, getMediaSizeCached, getMediaMetaCached, relatedPostsCached } from "@/lib/cached";
 import { getSettings } from "@/lib/settings";
 import { renderMarkdown } from "@/lib/markdown";
+import { decorateProseImages, extractImagePaths } from "@/lib/prose-images";
+import { buildSrcset } from "@/lib/image-variants";
 import { CommentSection } from "./CommentSection";
 import { Lightbox } from "./Lightbox";
 import { ArticleToc } from "./ArticleToc";
@@ -96,8 +98,15 @@ export async function ArticleView({ doc }: { doc: Post }) {
   const pageViews = await getPageViewsCached(legacyPageKey(doc), doc.id);
   const settings = getSettings();
   const isPost = doc.type === "post";
-  // F9：封面尺寸用于 <img width/height> 预留空间（查不到就是 null，不猜比例）
-  const coverSize = doc.cover ? await getMediaSizeCached(doc.cover) : null;
+  // F9/C3：封面尺寸 + 变体（查不到就是 null，不猜比例）
+  const coverMeta = doc.cover ? await getMediaSizeCached(doc.cover) : null;
+  const coverSrcset = doc.cover && coverMeta ? buildSrcset(doc.cover, coverMeta.variants) : "";
+  // C3：正文图片的宽高与变体 —— 一次批量查完，再注入到 HTML 上
+  const imgPaths = extractImagePaths(html);
+  const imgMeta = imgPaths.length > 0
+    ? new Map(await getMediaMetaCached(imgPaths.join("\n")))
+    : new Map();
+  const proseHtml = decorateProseImages(html, imgMeta);
   // F11：相关文章只在文章页取（页面没有"相关"语义）
   const related = isPost ? await relatedPostsCached(doc.id, 3) : [];
 
@@ -158,11 +167,13 @@ export async function ArticleView({ doc }: { doc: Post }) {
               loading="eager"
               decoding="async"
               fetchPriority="high"
-              {...(coverSize ? { width: coverSize.width, height: coverSize.height } : {})}
+              {...(coverMeta?.width ? { width: coverMeta.width } : {})}
+              {...(coverMeta?.height ? { height: coverMeta.height } : {})}
+              {...(coverSrcset ? { srcSet: coverSrcset, sizes: "(max-width: 820px) 100vw, 672px" } : {})}
             />
           ) : null}
 
-          <div className="prose" dangerouslySetInnerHTML={{ __html: html }} />
+          <div className="prose" dangerouslySetInnerHTML={{ __html: proseHtml }} />
         </article>
 
         {/* F11：作者卡 + 相关文章 + 订阅入口（只对文章渲染） */}
