@@ -272,6 +272,72 @@ function pruneForeignPlatformArtifacts() {
 pruneForeignPlatformArtifacts();
 
 /**
+ * 出包自检（2026-11-08，从 WSL 迁到 Windows 之后加）。
+ *
+ * 背景：pruneForeignPlatformArtifacts() 的假设是「构建机就是 linux x64」，它会**主动剔除**
+ * win32 原生包。可一旦构建机真的是 Windows，node_modules 里只有 win32 的 —— 剔完就是空的：
+ *   1) better_sqlite3.node 是 PE（MZ），服务器第一行 require 就崩；
+ *   2) @img/sharp-linux-x64 不存在，图片上传与变体生成全 500。
+ * 而本函数之前的行为只是打一行「缺少依赖（未安装）」的 **警告** 然后照常 exit 0 ——
+ * 本地看起来一切正常，问题留到线上才炸（deploy.sh 探活失败回滚，表现为「发布莫名其妙失败」）。
+ *
+ * 所以这里做硬校验：产物里每个 *.node 必须是 ELF，linux sharp 的两个包必须在。
+ * 本机想用 dist 做预览、且清楚后果时，可设 ALLOW_FOREIGN_ARTIFACT=1 跳过本检查。
+ */
+function assertLinuxNativeArtifacts() {
+  const problems = [];
+  const ELF = Buffer.from([0x7f, 0x45, 0x4c, 0x46]);
+
+  const nodeFiles = [];
+  const collect = (dir) => {
+    let ents;
+    try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) collect(p);
+      else if (e.name.endsWith(".node")) nodeFiles.push(p);
+    }
+  };
+  collect(OUT);
+
+  for (const f of nodeFiles) {
+    const head = Buffer.alloc(4);
+    try {
+      const fd = fs.openSync(f, "r");
+      fs.readSync(fd, head, 0, 4, 0);
+      fs.closeSync(fd);
+    } catch {
+      problems.push("读不到 " + f.replace(ROOT + path.sep, ""));
+      continue;
+    }
+    if (!head.equals(ELF)) problems.push("不是 ELF（" + head.toString("hex") + "）：" + f.replace(ROOT + path.sep, ""));
+  }
+
+  for (const pkg of ["@img/sharp-linux-x64", "@img/sharp-libvips-linux-x64"]) {
+    if (!fs.existsSync(path.join(OUT, "node_modules", pkg))) problems.push("缺少 " + pkg);
+  }
+
+  if (problems.length === 0) {
+    console.log("原生依赖自检通过：" + nodeFiles.length + " 个 .node 全是 ELF，linux sharp 齐备");
+    return;
+  }
+
+  console.error("");
+  console.error("!! 产物里的原生依赖不是 linux 的（构建机平台：" + process.platform + "）：");
+  for (const p of problems) console.error("   - " + p);
+  console.error("   这份 dist 部署到服务器会全站 500。正确做法：node scripts/release-linux.mjs（在 Docker / linux 里构建）");
+  if (process.env.ALLOW_FOREIGN_ARTIFACT === "1") {
+    console.warn("   ALLOW_FOREIGN_ARTIFACT=1 → 已跳过（这份产物只能在本机跑）");
+    console.warn("");
+    return;
+  }
+  console.error("   仅本机预览且清楚后果时，用 ALLOW_FOREIGN_ARTIFACT=1 跳过本检查");
+  process.exit(1);
+}
+
+assertLinuxNativeArtifacts();
+
+/**
  * 打版本戳：产出 dist/.build-info.json，供运行期 healthz 读取。
  * 顺序无所谓（读的是 git 状态而非产物），放最后让日志更清楚。
  */

@@ -9,6 +9,16 @@ import {
 } from "../lib/image-variants.ts";
 
 /**
+ * 关掉 libvips 的文件缓存（2026-11-08，Windows 实测）。
+ *
+ * 下面「真实生成」用例在 finally 里 rmSync 整个临时目录。libvips 默认会缓存它读过的
+ * 文件句柄，而 **Windows 不允许删除仍被打开的文件** —— 于是 rmSync 抛 EPERM，
+ * 用例红在清理阶段而不是断言阶段。maxRetries 也救不了（句柄会一直占着）。
+ * 设 files: 0 只关文件缓存，不影响内存缓存与转换结果。
+ */
+sharp.cache({ files: 0 });
+
+/**
  * 图片变体（C3，2026-11-08）。
  *
  * 这一组覆盖三件事：

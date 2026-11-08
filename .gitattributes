@@ -1,0 +1,45 @@
+# 换行统一（2026-11-08 从 WSL 迁到 Windows 后补）
+#
+# 起因：Git for Windows 的系统级 gitconfig 是 core.autocrlf=true，checkout 会把文本文件
+# 换成 CRLF。而仓库里有必须在 bash / systemd / nginx 里执行的文本 ——
+# .sh 变 CRLF 后实测三种死法：
+#   1) bash -n            -> syntax error near unexpected token $'do\r'
+#   2) bash release.sh    -> set: pipefail: invalid option name
+#   3) ./release.sh       -> env: $'bash\r': No such file or directory
+#
+# 这里显式声明：仓库里存 LF，工作区也用 LF（Windows 也不例外）。
+# 配套：本仓库还设了 core.autocrlf=false、core.fileMode=false（见 .git/config）。
+* text=auto eol=lf
+
+# 必须在 bash / systemd / nginx / Node 里直接执行的文本，钉死 LF
+*.sh       text eol=lf
+*.bash     text eol=lf
+*.mjs      text eol=lf
+*.ts       text eol=lf
+*.tsx      text eol=lf
+*.jsx      text eol=lf
+*.css      text eol=lf
+*.service  text eol=lf
+*.timer    text eol=lf
+*.path     text eol=lf
+*.conf     text eol=lf
+*.yml      text eol=lf
+*.yaml     text eol=lf
+*.md       text eol=lf
+*.json     text eol=lf
+
+# 二进制：不要做换行转换，也不要当作文本 diff
+*.png      binary
+*.jpg      binary
+*.jpeg     binary
+*.webp     binary
+*.gif      binary
+*.ico      binary
+*.woff     binary
+*.woff2    binary
+*.ttf      binary
+*.pdf      binary
+*.gz       binary
+*.zip      binary
+*.tar      binary
+*.node     binary
