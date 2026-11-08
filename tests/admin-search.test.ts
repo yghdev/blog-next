@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { isolatedDataDir } from "./helpers/isolated-db.ts";
 
@@ -13,6 +13,19 @@ import { isolatedDataDir } from "./helpers/isolated-db.ts";
 
 const isolated = isolatedDataDir("admin-search-");
 process.env.DATA_DIR = isolated.dir;
+/**
+ * 必须显式回收：isolatedDataDir() 只创建、不注册 after 钩子。
+ * 少了这一行，每跑一次 .tmp-tests 就留下一个 admin-search-* 目录
+ * （2026-11-08 实测已积到 252 个、.tmp-tests 总共 85MB）。
+ *
+ * 顺序不能反：**先 closeDb() 再 cleanup()**。Windows 不允许删除仍被打开的
+ * 文件，better-sqlite3 没关库时 rmSync 会抛 EPERM（Linux 上删得掉，所以这个
+ * 坑只在 Windows 暴露）。
+ */
+after(() => {
+  dbMod.closeDb();
+  isolated.cleanup();
+});
 const dbMod = await import("../lib/db.ts");
 const searchMod = await import("../lib/admin-search.ts");
 
