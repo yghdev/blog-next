@@ -49,10 +49,23 @@ const artalkOrigin = originOf(ARTALK_SRC);
 
 const allowedOrigins = [...new Set([artalkOrigin, ...EXTRA_ORIGINS].filter(Boolean))];
 
+/**
+ * Artalk 的表情包清单从 jsDelivr 拉（默认配置，artalk.yml 里没覆盖）。
+ *
+ * 2026-11-08 切 enforce 时实测到的唯一一条违规：
+ *   Connecting to 'https://cdn.jsdelivr.net/gh/ArtalkJS/Emoticons/grps/default.json'
+ *   violates ... "connect-src 'self' https://artalk.yghsite.cn"
+ *
+ * 不修的话表情选择器是空的（评论本身还能发，所以很容易被当成"表情包没了"）。
+ * 只放行这一个 CDN 的 connect，不放行 script —— 表情图片走 img-src 的
+ * `https:` 通配，不需要额外开口子。
+ */
+const ARTALK_EMOTICON_CDN = "https://cdn.jsdelivr.net";
+
 export function buildCsp(extra: { scriptSrc?: string[]; styleSrc?: string[] } = {}) {
   const scriptSrc = ["'self'", "'unsafe-inline'", ...allowedOrigins, ...(extra.scriptSrc ?? [])];
   const styleSrc = ["'self'", "'unsafe-inline'", ...allowedOrigins, ...(extra.styleSrc ?? [])];
-  const connectSrc = ["'self'", ...allowedOrigins];
+  const connectSrc = ["'self'", ...allowedOrigins, ARTALK_EMOTICON_CDN];
   return [
     "default-src 'self'",
     "script-src " + scriptSrc.join(" "),
