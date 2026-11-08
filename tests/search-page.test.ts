@@ -91,8 +91,26 @@ test("P0-6 计数用 total（不是 hits.length），被截断时写 N+", () => 
   assert.match(src, /searchPosts\(/, "应调用 searchPosts");
   assert.match(src, /total/, "计数必须用 total");
   assert.match(src, /capped/, "候选被截断时要能写 N+");
-  assert.match(src, /显示前/, "total 大于本页条数时要说明只显示了前 N 条");
+  // C2（2026-11-08）：分页取代了原来的「显示前 N 条」—— 现在由页码说明位置
+  assert.match(src, /pageCount/, "多页时要显示总页数");
+  assert.match(src, /第 \{page\} \/ \{pageCount\} 页/, "多页时要显示「第 X / Y 页」");
   assert.doesNotMatch(src, /"找到 " \+ hits\.length \+ " 篇"/, "不得再把本页条数说成总数");
+});
+
+test("C2 分页：每页 10 条，页码越界由 searchPosts 夹回有效范围", () => {
+  const src = read("app/search/page.tsx");
+  assert.match(src, /const PAGE_SIZE = 10/, "每页 10 条");
+  assert.match(src, /page: pageParam/, "页码要传给 searchPosts");
+  assert.match(src, /pageCount > 1/, "只有一页时不渲染分页控件");
+});
+
+test("C2 筛选：标签同时匹配分类与标签，年份按 YYYY", () => {
+  const src = read("app/search/page.tsx");
+  assert.match(src, /searchFacets/, "筛选条要用 searchFacets 的分面");
+  assert.match(src, /tag:/, "应支持 tag 参数");
+  assert.match(src, /year:/, "应支持 year 参数");
+  assert.match(src, /search-chip/, "筛选条用 chip 样式");
+  assert.match(src, /清除筛选/, "带筛选且无结果时要给清除出口");
 });
 
 test("P0-6 高亮：页面把命中词传给卡片，卡片用 <mark> 渲染", () => {

@@ -1,5 +1,5 @@
 import { getDb, ftsAvailable } from "./db";
-import { plainText } from "./posts";
+import { parseJsonArray, plainText } from "./posts";
 import { dateKeyIn } from "./time";
 import { highlightTerms, scoreHit, snippetAround } from "./highlight";
 
@@ -30,6 +30,34 @@ export type SearchResult = {
    * 界面据此显示提示，告诉用户为什么结果变少了。
    */
   titleOnly: boolean;
+  /** 当前页（1 起）。越界会被夹到 [1, pageCount] */
+  page: number;
+  /** 每页条数 */
+  pageSize: number;
+  /** 总页数（至少 1，空结果也算 1 页） */
+  pageCount: number;
+};
+
+/** 搜索选项（C2，2026-11-08） */
+export type SearchOptions = {
+  limit?: number;
+  /** 页码，1 起 */
+  page?: number;
+  /**
+   * 标签筛选：**同时匹配 categories 与 tags**。
+   *
+   * 为什么不分开：对读者来说"AI"（分类）和"deepseek"（标签）都是"这篇讲什么"，
+   * 分成两个下拉只会让人先想"这算分类还是标签"。数据层仍分开存，只是筛选时并集。
+   */
+  tag?: string;
+  /** 年份筛选：YYYY */
+  year?: string;
+};
+
+/** 筛选用的分面（标签并集 + 年份），供搜索页渲染筛选条 */
+export type SearchFacets = {
+  tags: { name: string; count: number }[];
+  years: { year: string; count: number }[];
 };
 
 /** trigram 分词的最短查询长度：少于 3 个字符无法匹配（实测结论） */
@@ -62,11 +90,13 @@ type Row = {
   slug: string;
   content: string;
   categories: string;
+  /** 标签筛选（C2）要按 tags 过滤，所以候选查询必须把它带出来 */
+  tags: string;
   published_at: string | null;
   created_at: string;
 };
 
-const COLUMNS = "p.id, p.title, p.slug, p.content, p.categories, p.published_at, p.created_at";
+const COLUMNS = "p.id, p.title, p.slug, p.content, p.categories, p.tags, p.published_at, p.created_at";
 const ALIVE = "p.type = 'post' AND p.status = 'published' AND p.deleted_at IS NULL";
 
 /**
@@ -127,10 +157,10 @@ function safeCats(s: string): string[] {
  *
  * 返回值仍只含摘要，不回传整篇正文（原实现单篇最大 13,871 B）。
  */
-export function searchPosts(raw: string, opts: { limit?: number } = {}): SearchResult {
+export function searchPosts(raw: string, opts: SearchOptions = {}): SearchResult {
   const q = raw.trim().replace(/\s+/g, " ");
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 50);
-  if (!q) return { hits: [], mode: "like", total: 0, capped: false, titleOnly: false };
+  if (!q) return { hits: [], mode: "like", total: 0, capped: false, titleOnly: false, page: 1, pageSize: limit, pageCount: 1 };
 
   const terms = highlightTerms(q);
   // 单字查询只在标题里匹配（见 SearchResult.titleOnly 的说明）
@@ -173,8 +203,34 @@ export function searchPosts(raw: string, opts: { limit?: number } = {}): SearchR
     return at < bt ? 1 : at > bt ? -1 : 0;
   });
 
+  // ── 筛选（C2）────────────────────────────────────────────────
+  // 在 JS 里过滤而不是塞进 SQL：候选上限 300、本站几十篇，过滤成本可以忽略；
+  // 塞进 SQL 反而要让 likeCandidates / ftsCandidates 各写一份条件，容易漂移。
+  const tag = (opts.tag ?? "").trim().toLowerCase();
+  const year = (opts.year ?? "").trim();
+  const filtered = scored.filter(({ row }) => {
+    if (tag) {
+      const cats = parseJsonArray(row.categories).map((x) => x.toLowerCase());
+      const tags = parseJsonArray(row.tags).map((x) => x.toLowerCase());
+      if (!cats.includes(tag) && !tags.includes(tag)) return false;
+    }
+    if (year) {
+      const d = row.published_at || row.created_at;
+      if (!d || !d.startsWith(year)) return false;
+    }
+    return true;
+  });
+
+  // ── 分页（C2）────────────────────────────────────────────────
+  const total = filtered.length;
+  const pageCount = Math.max(1, Math.ceil(total / limit));
+  // 越界页码夹回有效范围：用户手改 URL 或删了筛选条件后旧页码会失效，
+  // 直接 404 或空白页都不如"回到最后一页"
+  const page = Math.min(Math.max(Math.trunc(opts.page ?? 1) || 1, 1), pageCount);
+  const start = (page - 1) * limit;
+
   return {
-    hits: scored.slice(0, limit).map(({ row, body }) => ({
+    hits: filtered.slice(start, start + limit).map(({ row, body }) => ({
       id: row.id,
       title: row.title,
       slug: row.slug,
@@ -183,9 +239,52 @@ export function searchPosts(raw: string, opts: { limit?: number } = {}): SearchR
       categories: safeCats(row.categories),
     })),
     mode,
-    total: scored.length,
+    total,
     capped,
     titleOnly,
+    page,
+    pageSize: limit,
+    pageCount,
+  };
+}
+
+/**
+ * 搜索页的筛选分面（C2，2026-11-08）。
+ *
+ * 标签取 categories ∪ tags 的并集（与 searchPosts 的筛选口径一致），
+ * 年份取 published_at 的前 4 位。只统计已发布、未删除的文章。
+ *
+ * 为什么不做缓存：全表几十行、一次遍历，比 `unstable_cache` 的序列化开销还便宜；
+ * 而且筛选条必须跟内容实时一致（刚发的文章要立刻能筛到）。
+ */
+export function searchFacets(): SearchFacets {
+  const rows = getDb().prepare(
+    "SELECT categories, tags, published_at, created_at FROM posts " +
+    "WHERE type = 'post' AND status = 'published' AND deleted_at IS NULL"
+  ).all() as { categories: string; tags: string; published_at: string | null; created_at: string }[];
+
+  const tagCount = new Map<string, number>();
+  const yearCount = new Map<string, number>();
+  for (const r of rows) {
+    // 同一篇里分类和标签重名只算一次（否则计数会虚高）
+    const names = new Set([...parseJsonArray(r.categories), ...parseJsonArray(r.tags)]);
+    for (const n of names) {
+      const name = n.trim();
+      if (!name) continue;
+      tagCount.set(name, (tagCount.get(name) || 0) + 1);
+    }
+    const d = r.published_at || r.created_at;
+    const y = d ? d.slice(0, 4) : "";
+    if (/^\d{4}$/.test(y)) yearCount.set(y, (yearCount.get(y) || 0) + 1);
+  }
+
+  return {
+    tags: [...tagCount.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([name, count]) => ({ name, count })),
+    years: [...yearCount.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([year, count]) => ({ year, count })),
   };
 }
 

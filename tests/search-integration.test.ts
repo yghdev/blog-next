@@ -103,13 +103,21 @@ test("浏览量来自 hits 表 + 历史基线，渲染路径不请求外部服�
 /* ---------- P0-6（2026-11-07）：2 字词 / 相关性排序 / 计数 / 摘要 ---------- */
 
 /** 插一篇已发布文章（走 posts 表的 FTS 触发器，索引自动更新） */
-function insertPost(opts: { slug: string; title: string; content: string; at?: string }) {
+function insertPost(opts: {
+  slug: string; title: string; content: string; at?: string;
+  /** C2：筛选测试需要分类/标签 */
+  categories?: string[]; tags?: string[];
+}) {
   const db = dbMod.getDb();
   const at = opts.at ?? timeMod.nowIso();
   db.prepare(
-    "INSERT INTO posts (type, slug, title, content, status, published_at, created_at, updated_at) " +
-    "VALUES ('post', ?, ?, ?, 'published', ?, ?, ?)"
-  ).run(opts.slug, opts.title, opts.content, at, at, at);
+    "INSERT INTO posts (type, slug, title, content, categories, tags, status, published_at, created_at, updated_at) " +
+    "VALUES ('post', ?, ?, ?, ?, ?, 'published', ?, ?, ?)"
+  ).run(
+    opts.slug, opts.title, opts.content,
+    JSON.stringify(opts.categories ?? []), JSON.stringify(opts.tags ?? []),
+    at, at, at
+  );
 }
 
 test("P0-6：2 字查询（LIKE 兜底）也按相关性排序，标题命中在前", () => {
@@ -199,6 +207,97 @@ test("两字及以上查询不受 titleOnly 影响（正文命中仍算）", () 
   const r = searchMod.searchPosts("视频", { limit: 10 });
   assert.equal(r.titleOnly, false, "两字查询不是 titleOnly");
   assert.ok(r.hits.some((h) => h.slug === "p2c-body"), "两字查询仍应命中正文");
+});
+
+/* ------------------------- C2（2026-11-08）：分页 / 筛选 ------------------------- */
+
+test("C2 分页：total 是筛选后的总数，page/pageCount 正确，越界页码夹回最后一页", () => {
+  // 造 25 篇都命中 PAGEMARK 的文章
+  for (let i = 0; i < 25; i++) {
+    insertPost({
+      slug: "c2-page-" + i,
+      title: "分页测试 " + i + " PAGEMARK",
+      content: "PAGEMARK 正文",
+      at: "2026-03-0" + ((i % 9) + 1) + " 00:00:00",
+    });
+  }
+
+  const p1 = searchMod.searchPosts("PAGEMARK", { limit: 10, page: 1 });
+  assert.equal(p1.total, 25, "total 是命中总数，不是本页条数");
+  assert.equal(p1.pageCount, 3, "25 条 / 每页 10 = 3 页");
+  assert.equal(p1.hits.length, 10, "第 1 页 10 条");
+  assert.equal(p1.page, 1);
+
+  const p3 = searchMod.searchPosts("PAGEMARK", { limit: 10, page: 3 });
+  assert.equal(p3.hits.length, 5, "第 3 页 5 条");
+  assert.equal(p3.page, 3);
+
+  // 越界：手改 URL 到第 99 页，应夹回最后一页而不是空白
+  const p99 = searchMod.searchPosts("PAGEMARK", { limit: 10, page: 99 });
+  assert.equal(p99.page, 3, "越界页码夹回最后一页");
+  assert.equal(p99.hits.length, 5);
+
+  // 第 1 页与第 2 页不能有重复
+  const p2 = searchMod.searchPosts("PAGEMARK", { limit: 10, page: 2 });
+  const ids1 = new Set(p1.hits.map((h) => h.id));
+  assert.equal(p2.hits.some((h) => ids1.has(h.id)), false, "相邻页不得重复");
+});
+
+test("C2 筛选：tag 同时匹配分类与标签", () => {
+  insertPost({ slug: "c2-cat", title: "分类命中 FILTERMARK", content: "x", categories: ["AI"], tags: ["其它"] });
+  insertPost({ slug: "c2-tag", title: "标签命中 FILTERMARK", content: "x", categories: ["生活"], tags: ["deepseek"] });
+  insertPost({ slug: "c2-none", title: "都不命中 FILTERMARK", content: "x", categories: ["生活"], tags: ["随笔"] });
+
+  const byCat = searchMod.searchPosts("FILTERMARK", { tag: "AI" });
+  assert.deepEqual(byCat.hits.map((h) => h.slug), ["c2-cat"], "按分类筛选");
+
+  const byTag = searchMod.searchPosts("FILTERMARK", { tag: "deepseek" });
+  assert.deepEqual(byTag.hits.map((h) => h.slug), ["c2-tag"], "按标签筛选");
+
+  const none = searchMod.searchPosts("FILTERMARK", { tag: "不存在" });
+  assert.equal(none.total, 0, "不存在的标签应 0 条");
+});
+
+test("C2 筛选：year 按发布年份", () => {
+  insertPost({ slug: "c2-y2026", title: "年份命中 YEARMARK", content: "x", at: "2026-05-01 00:00:00" });
+  insertPost({ slug: "c2-y2025", title: "年份命中 YEARMARK", content: "x", at: "2025-05-01 00:00:00" });
+
+  const y2026 = searchMod.searchPosts("YEARMARK", { year: "2026" });
+  assert.deepEqual(y2026.hits.map((h) => h.slug), ["c2-y2026"], "2026 只出 2026 的");
+  const y2025 = searchMod.searchPosts("YEARMARK", { year: "2025" });
+  assert.deepEqual(y2025.hits.map((h) => h.slug), ["c2-y2025"], "2025 只出 2025 的");
+});
+
+test("C2 筛选 + 分页组合：total 是筛选后的数量", () => {
+  for (let i = 0; i < 12; i++) {
+    insertPost({
+      slug: "c2-combo-" + i,
+      title: "组合测试 COMBO",
+      content: "x",
+      categories: ["组合"],
+      at: "2026-06-01 00:00:00",
+    });
+  }
+  const r = searchMod.searchPosts("COMBO", { limit: 10, page: 1, tag: "组合" });
+  assert.equal(r.total, 12, "筛选后的总数");
+  assert.equal(r.pageCount, 2, "12 条 / 每页 10 = 2 页");
+  assert.equal(r.hits.length, 10);
+});
+
+test("C2 分面：标签取分类∪标签并去重计数，年份按发布年", () => {
+  const f = searchMod.searchFacets();
+  const names = f.tags.map((t) => t.name);
+  assert.ok(names.includes("AI"), "分面应含分类 AI");
+  assert.ok(names.includes("deepseek"), "分面应含标签 deepseek");
+  assert.ok(names.includes("组合"), "分面应含分类 组合");
+  // 同一篇里分类与标签重名只算一次：c2-cat 的 categories=AI、tags=其它，不重名；
+  // 这里用「组合」验证计数 = 12（12 篇各一次），而不是 24
+  const combo = f.tags.find((t) => t.name === "组合");
+  assert.equal(combo?.count, 12, "同一篇里重名只算一次");
+  assert.ok(f.years.some((y) => y.year === "2026"), "分面应含 2026");
+  // 年份倒序
+  const ys = f.years.map((y) => y.year);
+  assert.deepEqual([...ys].sort((a, b) => b.localeCompare(a)), ys, "年份应倒序");
 });
 
 test("cleanup", () => {

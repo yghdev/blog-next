@@ -680,6 +680,62 @@ a:hover { color: var(--link-hover); }
 }
 
 /*
+ * 搜索筛选条（C2，2026-11-08）。
+ *
+ * 用链接而不是 <select>：SSR 优先、不依赖 JS，浏览器前进/后退也能正确还原。
+ * 选中态用主色描边 + 淡底，而不是只改字色 —— 只改字色在暗色下几乎看不出来。
+ */
+.search-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+.search-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.search-filter-label {
+  font-size: .78rem;
+  color: var(--text-meta);
+  min-width: 2.5em;
+}
+.search-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-p2);
+  font-size: .78rem;
+  text-decoration: none;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.search-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-p0);
+  text-decoration: none;
+}
+.search-chip.is-active {
+  border-color: var(--link);
+  color: var(--link);
+  background: color-mix(in srgb, var(--link) 8%, var(--bg));
+}
+.search-chip-num {
+  font-size: .7rem;
+  color: var(--text-meta);
+}
+.search-chip.is-active .search-chip-num { color: inherit; }
+
+/*
  * 搜索命中高亮（P0-6，2026-11-07）。
  *
  * 背景用主色低透明度混合，而不是 <mark> 的浏览器默认亮黄：

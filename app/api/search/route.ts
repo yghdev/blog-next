@@ -13,13 +13,30 @@ export const dynamic = "force-dynamic";
  *
  * 单字查询（2026-11-07）：额外回 `titleOnly`。单字只在标题里匹配，
  * 调用方据此提示用户"结果变少是规则，不是搜索坏了"。
+ *
+ * C2（2026-11-08）：支持 `page` / `tag` / `year`，并回 `page` / `pageSize` /
+ * `pageCount`。分页参数与搜索页完全同一套（都走 lib/search.ts），
+ * 不会出现"页面第 2 页、接口第 1 页"这种漂移。
  */
 export async function GET(req: NextRequest) {
-  const q = (req.nextUrl.searchParams.get("q") || "").trim();
-  if (!q) return NextResponse.json({ hits: [], mode: "like", total: 0, capped: false, titleOnly: false, terms: [] });
-  const { hits, mode, total, capped, titleOnly } = searchPosts(q, { limit: 20 });
+  const sp = req.nextUrl.searchParams;
+  const q = (sp.get("q") || "").trim();
+  const tag = (sp.get("tag") || "").trim();
+  const year = (sp.get("year") || "").trim();
+  const page = Number(sp.get("page") || "1");
+
+  if (!q) {
+    return NextResponse.json({
+      hits: [], mode: "like", total: 0, capped: false, titleOnly: false,
+      page: 1, pageSize: 20, pageCount: 1, terms: [],
+    });
+  }
+
+  const { hits, mode, total, capped, titleOnly, page: cur, pageSize, pageCount } =
+    searchPosts(q, { limit: 20, page, tag, year });
+
   return NextResponse.json(
-    { hits, mode, total, capped, titleOnly, terms: highlightTerms(q) },
+    { hits, mode, total, capped, titleOnly, page: cur, pageSize, pageCount, terms: highlightTerms(q) },
     { headers: { "Cache-Control": "no-store" } }
   );
 }
