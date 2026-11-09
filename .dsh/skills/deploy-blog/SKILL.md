@@ -58,6 +58,25 @@ bash .dsh/skills/deploy-blog/scripts/smoke-remote.sh
 **紧急热修**（明知测试没跑全）：`--skip-verify --deploy`，但**不允许**在脏工作区上跑
 （那是版本漂移的主要来源）。
 
+## 一·五、耗时（2026-11-09 实测，Windows + Docker Desktop）
+
+一条命令的正常路径，冷热差三倍 —— **构建缓存是唯一值得优化的环节**：
+
+| 环节 | 改前 | 改后 | 说明 |
+| --- | --- | --- | --- |
+| docker 构建（npm ci + next build + build:dist + tar） | 3.5–5 min | **44s**（热）/ 65s（冷卷） | 工作区 `blog-next-build-work` 卷持久化：lock 没变就跳过 npm ci，`.next/cache` 走增量 |
+| scp 106 MB 产物 | 60–90s | 不变 | 已 gzip，压缩无收益；想更快只能上 rsync 增量（未做） |
+| deploy.sh（备份 + 解包 + 切软链 + 探活） | 35–40s | 不变 | 备份占 30s，是安全成本，不建议省 |
+| verify-deploy + verify-assets | 15–20s | 不变 | |
+
+也就是「改完 → 线上」约 **2.5–3 分钟**。如果这句话对不上，通常是这三件事之一：
+跑了一遍全量浏览器套件（每组 1–3 分钟）、在等隔离冒烟、或者构建卷被 `--clean` 清了。
+
+- 一键：`npm run ship`（= `node scripts/release-linux.mjs --deploy`）
+- 只出包：`npm run ship:build`
+- 怀疑缓存导致怪产物：`npm run ship:clean`（删卷，回到完全冷构建）
+- 卷占空间：`docker system df` 看 `blog-next-build-work`
+
 ## 二、每一步在防什么（做手工操作时也要照着做）
 
 ### 1. 预检

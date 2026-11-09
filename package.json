@@ -39,7 +39,10 @@
     "test:cmdk": "node tests/command-palette-browser.mjs",
     "test:layout": "node tests/layout-regression.mjs",
     "test:motion": "node tests/reduced-motion.mjs",
-    "test:grid": "node tests/grid-alignment.mjs"
+    "test:grid": "node tests/grid-alignment.mjs",
+    "ship": "node scripts/release-linux.mjs --deploy",
+    "ship:build": "node scripts/release-linux.mjs",
+    "ship:clean": "node scripts/release-linux.mjs --clean"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
