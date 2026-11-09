@@ -46,9 +46,26 @@ function check(name, ok, detail = "") {
   console.log((ok ? "PASS " : "FAIL ") + name + (detail ? " — " + detail : ""));
 }
 
+/**
+ * 超时策略（2026-11-09 修「冒烟卡住」）。
+ *
+ * 原来所有 goto 都用 `waitUntil: "networkidle"`。这个条件在**本地隔离实例**上
+ * 是不可满足的：页面会挂线上 Artalk（只放行生产域名，在 127.0.0.1 上一直重试）、
+ * 编辑器还有自动保存的轮询 —— 于是"网络永久不静默"，goto 只能等 Playwright
+ * 的默认 30s 导航超时，每个页面一次，整条冒烟能拖到十几分钟，看起来就是卡死。
+ *
+ * 现在改成两层：
+ *   1. **导航只等 domcontentloaded**（DOM 就绪，服务端渲染的内容已经在了）；
+ *   2. 需要"页面真的画好了"的地方，**显式等具体元素**（waitForSelector）。
+ *      等元素比等网络更准：它直接说明"我要断言的东西已经存在"。
+ * 再加一条全局上限 20s，任何单步都不会无限期挂着。
+ */
+const NAV_TIMEOUT = 20000;
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 const page = await context.newPage();
+context.setDefaultTimeout(NAV_TIMEOUT);
+context.setDefaultNavigationTimeout(NAV_TIMEOUT);
 const consoleErrors = [];
 page.on("console", (m) => { if (m.type() === "error") consoleErrors.push(m.text()); });
 page.on("pageerror", (e) => consoleErrors.push("pageerror: " + e.message));
@@ -101,10 +118,12 @@ try {
    *   - 卡片与版式全部是服务端渲染，没有 JS 也能量真实布局，反而更干净。
    */
   const noJs = await browser.newContext({ javaScriptEnabled: false });
+  noJs.setDefaultNavigationTimeout(NAV_TIMEOUT);
   const noJsPage = await noJs.newPage();
   const friendsLayout = await (async () => {
     await noJsPage.setViewportSize({ width: 375, height: 780 });
-    await noJsPage.goto(BASE + "/friend-links", { waitUntil: "networkidle" });
+    await noJsPage.goto(BASE + "/friend-links", { waitUntil: "domcontentloaded" });
+    await noJsPage.waitForSelector(".fr-grid .fr-card", { timeout: NAV_TIMEOUT });
     return noJsPage.evaluate(() => ({
       sw: document.documentElement.scrollWidth,
       cw: document.documentElement.clientWidth,
@@ -155,7 +174,9 @@ try {
   postId = createdBody.id;
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  const editorResp = await page.goto(BASE + "/admin/edit/" + postId, { waitUntil: "networkidle" });
+  const editorResp = await page.goto(BASE + "/admin/edit/" + postId, { waitUntil: "domcontentloaded" });
+  // 等编辑器真正挂载（标题输入框出现），而不是等网络静默 —— 自动保存的轮询永远不会静默
+  await page.waitForSelector(".editor-title-input", { timeout: NAV_TIMEOUT }).catch(() => {});
   check("编辑页 200", editorResp?.status() === 200, String(editorResp?.status()));
 
   const shape = await page.evaluate(() => ({

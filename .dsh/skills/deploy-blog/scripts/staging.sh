@@ -91,6 +91,19 @@ JS
     ( cd "$ROOT" && sudo -u blog /usr/bin/node "$TMP/mkadmin.mjs" "$TMP/blog.db" "$USERNAME" "$PW" ) \
       || die "临时管理员写入失败"
 
+    # 冒烟环境关掉评论（2026-11-09）。
+    # 前端会挂线上 Artalk（它只放行生产域名），在 127.0.0.1 上必然 CORS 报错 +
+    # 无限重试 —— 以前冒烟「等网络静默」卡住的主因之一。这里改的是**数据库副本**，
+    # 生产库不受影响；冒烟本来也不测评论渲染（评论走独立 Artalk，不在本次发布范围）。
+    cat > "$TMP/nocomment.mjs" <<'JS'
+import Database from "/opt/blog/current/node_modules/better-sqlite3/lib/index.js";
+const db = new Database(process.argv[2]);
+db.prepare("INSERT INTO settings (key, value) VALUES ('comment_enabled', '0') ON CONFLICT(key) DO UPDATE SET value = '0'").run();
+db.close();
+JS
+    ( cd "$ROOT" && sudo -u blog /usr/bin/node "$TMP/nocomment.mjs" "$TMP/blog.db" ) \
+      || die "关闭副本评论失败"
+
     # 起进程：临时 systemd unit，端口只绑回环，数据目录指向副本。
     # 用 unit 而不是 `sudo ... &`：见文件头第 6 条（ssh 会挂住 / 孤儿进程）。
     systemd-run --unit="$UNIT" --uid=blog --gid=blog --working-directory="$ROOT" \

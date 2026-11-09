@@ -62,10 +62,32 @@ curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$TUNNEL_PORT/api/healthz" 
 
 echo "== 3/4 跑冒烟 =="
 cd "$ROOT"
+# node 定位（2026-11-09）：在 Git Bash / WSL 里跑时，PATH 里可能根本没有 node ——
+# 之前这一步直接 "node: command not found"，整个冒烟白跑。
+# 解析顺序：NODE_BIN 显式指定 > PATH 里的 node > WSL 下 Windows 版 node。
+NODE_BIN="${NODE_BIN:-}"
+if [ -z "$NODE_BIN" ]; then
+  if command -v node >/dev/null 2>&1; then NODE_BIN="$(command -v node)"
+  elif [ -x "/mnt/c/Program Files/nodejs/node.exe" ]; then NODE_BIN="/mnt/c/Program Files/nodejs/node.exe"
+  else
+    echo "!! 找不到 node。设置 NODE_BIN=/path/to/node，或直接在 PowerShell 里跑："
+    echo "   SMOKE_BASE=... SMOKE_USER=... SMOKE_PASS=... node .dsh/skills/deploy-blog/scripts/smoke.mjs"
+    exit 2
+  fi
+fi
+echo "   node: $NODE_BIN"
+# 总上限 6 分钟：单个步骤有 20s 超时，这里兜住"万一某处仍然挂住"的情况，
+# 免得 ssh 会话一直不返回、in-process 的调用方超时先死。
+SMOKE_TIMEOUT="${SMOKE_TIMEOUT:-360}"
+if command -v timeout >/dev/null 2>&1; then
+  SMOKE_LIMIT=(timeout "$SMOKE_TIMEOUT")
+else
+  SMOKE_LIMIT=()   # macOS 默认没有 timeout；此时没有总上限，单步仍有 20s 导航超时
+fi
 SMOKE_BASE="http://127.0.0.1:$TUNNEL_PORT" \
 SMOKE_USER="${SMOKE_USER_LINE#SMOKE_USER=}" \
 SMOKE_PASS="${SMOKE_PASS_LINE#SMOKE_PASS=}" \
-  node "$SKILL_DIR/scripts/smoke.mjs"
+  "${SMOKE_LIMIT[@]}" "$NODE_BIN" "$SKILL_DIR/scripts/smoke.mjs"
 STATUS=$?
 
 echo "== 4/4 清理临时实例 =="
