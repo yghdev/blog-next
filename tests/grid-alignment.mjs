@@ -89,8 +89,16 @@ try {
   });
   assert.ok(arch.items.length >= 2, "归档应有至少 2 行（种子 3 篇）");
   assertUniform(arch.dates, "归档日期列（左缘 + 宽度）");
-  assertEdges(arch.years, arch.content[0], "归档年份标题");
-  console.log("PASS 前台归档：" + arch.dates.length + " 行日期列宽恒等（" + arch.dates[0].width.toFixed(1) + "px），年份标题与内容盒对齐");
+  /*
+   * 2026-11-09 起这三页的正文包进 .page-card（白卡）。文字的基准因此从
+   * .content 的盒子变成卡片的**内边距盒** —— 断言跟着换参照物，否则
+   * 「加了内边距」会被读成「文字错位了 32px」。基准的变更本身是设计决定，
+   * 记录在 globals.css 的 .page-card 注释里。
+   */
+  const archCard = await innerBox(page, ".page-card");
+  assert.ok(archCard, "归档页应有 .page-card");
+  assertEdges(arch.years, archCard, "归档年份标题");
+  console.log("PASS 前台归档：" + arch.dates.length + " 行日期列宽恒等（" + arch.dates[0].width.toFixed(1) + "px），年份标题与白卡内边距盒对齐");
 
   /* ── 3. 说说：同一条时间轴，同样定宽 ── */
   await open(page, server.base + "/shuoshuo");
@@ -102,7 +110,10 @@ try {
   assert.ok(shuo.items.length >= 2, "说说应有至少 2 行");
   assertUniform(shuo.stamps, "说说时间列（左缘 + 宽度）");
   assertUniform(shuo.items, "说说行");
-  console.log("PASS 前台说说：" + shuo.stamps.length + " 行时间列宽恒等（" + shuo.stamps[0].width.toFixed(1) + "px）");
+  const shuoCard = await innerBox(page, ".page-card");
+  assert.ok(shuoCard, "说说页应有 .page-card");
+  assert.ok(shuo.items.every((i) => i.left >= shuoCard.left - TOL), "说说行不应溢出白卡左缘");
+  console.log("PASS 前台说说：" + shuo.stamps.length + " 行时间列宽恒等（" + shuo.stamps[0].width.toFixed(1) + "px），行在白卡内");
 
   /* ── 4. 右栏：区块等宽、统计格等分 ── */
   await open(page, server.base + "/");
@@ -366,6 +377,23 @@ function assertUniform(items, label) {
   const rights = items.map((i) => i.right);
   assert.ok(spread(lefts) <= TOL, label + " 左边缘不一致：" + lefts.map((v) => v.toFixed(1)).join(", "));
   assert.ok(spread(rights) <= TOL, label + " 右边缘不一致：" + rights.map((v) => v.toFixed(1)).join(", "));
+}
+
+/**
+ * 取某个元素的内边距盒（去掉 border/padding 后的可用区域）。
+ * 白卡（.page-card）里的文字基准就是这个盒子，不是卡片外框。
+ */
+async function innerBox(page, sel) {
+  return page.evaluate((s) => {
+    const el = document.querySelector(s);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return {
+      left: +(r.left + parseFloat(cs.paddingLeft)).toFixed(2),
+      right: +(r.right - parseFloat(cs.paddingRight)).toFixed(2),
+    };
+  }, sel);
 }
 
 /** 一组盒子与目标盒子的左右边缘对齐 */

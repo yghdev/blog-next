@@ -567,6 +567,35 @@ a:hover { color: var(--link-hover); }
   justify-self: center;
 }
 
+/* ── 静态页白卡（第七轮·续，2026-11-09）──
+ *
+ * 归档 / 说说 / 关于三页的正文此前直接铺在灰画布上，而右边是白卡右栏 ——
+ * 1440 下看过去是「左边一片浅灰、右边一摞白块」，整页重心偏右。
+ * 这里把整块正文收进一张白卡，与文章卡片、右栏区块共用同一套
+ * 「灰画布 → 白卡」语言。
+ *
+ * 为什么包一层，而不是给 .content 直接加底色与内边距：
+ *   .content 是 12 栅格的 4–9 列，它的盒子被栅格体检当作「内容盒」基准
+ *   （归档年份标题、说说行都必须与它左右对齐）。给它加内边距，等于让那个
+ *   基准消失 —— 一次改动同时动布局和契约。包一层之后 .content 仍是纯列
+ *   容器，文字的真实基准变成卡片的**内边距盒**，测试改为对它断言。
+ *
+ * 不出现在文章页：文章正文的阅读栏宽由 --measure-prose 锁死（672px），
+ * 再套 32px 内边距会把行长压到 608px，偏离 P0-1 定的阅读宽度。
+ */
+.page-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--card-lift);
+  padding: var(--space-7) var(--space-8) var(--space-8);
+}
+@media (max-width: 820px) {
+  .page-card {
+    padding: var(--space-5) var(--space-4) var(--space-6);
+    border-radius: 18px;
+  }
+}
+
 .toc-col {
   grid-column: 10 / span 2;
 }

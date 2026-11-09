@@ -20,6 +20,7 @@ export default async function ArchivesPage() {
     <>
       <Animations />
       <SiteShell variant="three-col">
+        <div className="page-card">
         <PageHeader title="归档" />
         {groups.length === 0 ? (
           <EmptyState
@@ -54,6 +55,7 @@ export default async function ArchivesPage() {
             ))}
           </section>
         ))}
+        </div>
       </SiteShell>
     </>
   );

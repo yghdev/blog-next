@@ -59,8 +59,10 @@ export default async function AboutPage() {
 
   return (
     <SiteShell variant="three-col">
-      <PageHeader title="关于" />
-      <div className="prose" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="page-card">
+        <PageHeader title="关于" />
+        <div className="prose" dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
     </SiteShell>
   );
 }

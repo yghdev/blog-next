@@ -45,6 +45,7 @@ export default async function ShuoshuoPage() {
     <>
       <Animations />
       <SiteShell variant="three-col">
+        <div className="page-card">
         <PageHeader
           title="说说"
           en="MOMENTS / DAILY NOTES"
@@ -79,6 +80,7 @@ export default async function ShuoshuoPage() {
             })}
           </ol>
         )}
+        </div>
       </SiteShell>
     </>
   );
