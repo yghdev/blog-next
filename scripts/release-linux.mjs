@@ -30,6 +30,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ARGS = process.argv.slice(2);
 const DO_DEPLOY = ARGS.includes("--deploy");
 const ALLOW_DIRTY = ARGS.includes("--allow-dirty");
+/** --clean：删掉持久工作区，做一次完全冷构建（排查「缓存导致的怪产物」时用） */
+const CLEAN = ARGS.includes("--clean");
 const IMAGE = (ARGS.find((a) => a.startsWith("--image=")) || "--image=node:22-bookworm").slice("--image=".length);
 const HOST = process.env.DEPLOY_HOST || "aliyun-ecs";
 const BASE = process.env.DEPLOY_BASE || "https://blog.yghsite.cn";
@@ -49,18 +51,51 @@ const toDockerPath = (p) => p.replace(/\\/g, "/");
 const ROOT = cap("git", ["-C", HERE, "rev-parse", "--show-toplevel"]);
 const ARCHIVE = path.join(ROOT, "dist-upload.tar.gz");
 
-/* 容器（或本机 linux）里执行的构建脚本：POSIX sh，逐步失败即非零退出。 */
+/*
+ * 容器（或本机 linux）里执行的构建脚本：POSIX sh，逐步失败即非零退出。
+ *
+ * ## 2026-11-09：从「每次全新构建」改成「持久工作区 + 增量」
+ *
+ * 改前的实测耗时（Windows + Docker Desktop，改一行 CSS 也要走完整遍）：
+ *
+ *   npm ci        约 110–160s   ← 每次都重新下载 node_modules
+ *   next build    约  70–110s   ← 没有 .next/cache，等于冷构建
+ *   build:dist    约  20–30s
+ *   合计          约 3.5–5 分钟
+ *
+ * 现在工作区（/work/repo）挂在 docker 命名卷上，跨次保留：
+ *
+ *   · node_modules 只在 package-lock.json 的 sha256 变化时才重装
+ *     （lock 没变还 npm ci，纯属白等；npm 的 tar 解包 + 链接也要 1 分钟）
+ *   · .next/cache 保留，next build 走增量，第二次起通常 30–60s
+ *   · npm 缓存目录也留在卷里（$WORK/cache/npm），万不得已要重装时不必再走网络
+ *
+ * 换来的代价是「构建不再干净」：卷里可能有上一次的产物。这条由
+ * package-lock / 源码每次重建（除 node_modules 与 .next 之外全部删掉重铺）
+ * 兜住；next build 自己会清理 .next 的旧产物（只保留 cache）。
+ * 想要一次完全冷构建：node scripts/release-linux.mjs --clean
+ */
 const BUILD_SCRIPT = [
   "set -euo pipefail",
+  'WORK="__WORK__"',
+  'REPO="$WORK/repo"',
+  "mkdir -p \"$REPO\" \"$WORK/cache/npm\"",
   "node -v; npm -v; uname -m",
-  "command -v git >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq git >/dev/null; }",
-  "mkdir -p /work && cd /work && rm -rf repo && mkdir repo",
+  // 源码每次重铺：除 node_modules 与 .next 之外的所有条目先删掉，
+  // 避免「上一次存在、这一次删掉的页面」残留在产物里。
+  'find "$REPO" -mindepth 1 -maxdepth 1 ! -name node_modules ! -name .next -exec rm -rf {} +',
   "tar -C /src -cf - --exclude=./node_modules --exclude=./.next --exclude=./dist \\",
-  "  --exclude=./.tmp-tests --exclude=./.tmp-review --exclude=./.tmp-audit \\",
-  "  --exclude='*.tar.gz' . | tar -C repo -xf -",
-  "cd repo",
-  "echo '-- npm ci'",
-  "npm ci --no-audit --no-fund",
+  "  --exclude=./.tmp-tests --exclude=./.tmp-review --exclude=./.tmp-audit --exclude=./.buildcache \\",
+  "  --exclude='*.tar.gz' . | tar -C \"$REPO\" -xf -",
+  'cd "$REPO"',
+  "LOCK=$(sha256sum package-lock.json | cut -d' ' -f1)",
+  'if [ ! -d node_modules ] || [ "$(cat "$WORK/lockhash" 2>/dev/null || echo none)" != "$LOCK" ]; then',
+  "  echo '-- npm ci（package-lock 变了或首次构建）'",
+  '  npm ci --no-audit --no-fund --cache "$WORK/cache/npm"',
+  '  printf "%s" "$LOCK" > "$WORK/lockhash"',
+  "else",
+  "  echo '-- npm ci 跳过（package-lock 未变）'",
+  "fi",
   "echo '-- next build'",
   "npm run build",
   "echo '-- build:dist'",
@@ -101,8 +136,22 @@ if (dirty) {
 /* ── 2. 构建 ─────────────────────────────────────────────── */
 const native = process.platform === "linux" && process.env.FORCE_DOCKER !== "1";
 step("2/4 构建（" + (native ? "本机 linux" : "docker " + IMAGE) + "）");
+/**
+ * 持久构建工作区的卷名。刻意固定（不加时间戳）：跨次复用才是提速的来源。
+ * 想清空：docker volume rm blog-next-build-work，或传 --clean。
+ */
+const BUILD_VOLUME = "blog-next-build-work";
+if (CLEAN) {
+  console.log("--clean：删除持久构建工作区 " + BUILD_VOLUME);
+  try { cap("docker", ["volume", "rm", "-f", BUILD_VOLUME]); } catch { /* 卷本来就不存在 */ }
+}
+
 if (native) {
-  const script = BUILD_SCRIPT.replace(/\/out\//g, toDockerPath(ROOT) + "/");
+  const workDir = path.join(ROOT, ".buildcache", "work");
+  fs.mkdirSync(workDir, { recursive: true });
+  const script = BUILD_SCRIPT
+    .replace(/__WORK__/g, toDockerPath(workDir))
+    .replace(/\/out\//g, toDockerPath(ROOT) + "/");
   run("bash", ["-lc", script], { cwd: ROOT });
 } else {
   try { cap("docker", ["version", "--format", "{{.Server.Version}}"]); }
@@ -113,7 +162,9 @@ if (native) {
   run("docker", ["run", "--rm",
     "-v", toDockerPath(ROOT) + ":/src:ro",
     "-v", toDockerPath(outDir) + ":/out",
-    IMAGE, "bash", "-lc", BUILD_SCRIPT]);
+    "-v", BUILD_VOLUME + ":/work",
+    "-e", "NEXT_TELEMETRY_DISABLED=1",
+    IMAGE, "bash", "-lc", BUILD_SCRIPT.replace(/__WORK__/g, "/work")]);
   fs.copyFileSync(path.join(outDir, "dist-upload.tar.gz"), ARCHIVE);
   fs.rmSync(outDir, { recursive: true, force: true });
 }
